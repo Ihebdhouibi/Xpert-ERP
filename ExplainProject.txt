@@ -1,0 +1,341 @@
+PROJECT OVERVIEW
+
+We are building a modern web-based Garage Management System (GMS/DMS) for automotive repair workshops and garages.
+
+The platform must centralize and automate all business operations of the garage:
+
+* workshop operations
+* repair management
+* invoicing
+* inventory and spare parts
+* customer management (CRM)
+* finance and cash register
+* reporting and analytics
+
+The system should support:
+
+* multiple user roles
+* real-time workshop tracking
+* stock management
+* digital vehicle inspection
+* document generation
+* notifications and reminders
+* future scalability for multi-garage architecture
+
+---
+
+MAIN USER ROLES (RBAC)
+
+1. Admin
+
+The admin has permission to do everything any other user can do plus the following
+
+* system configuration
+* user management
+* permissions
+* reporting
+* backup and security
+
+2. Secretary / Reception
+
+* customer management
+* invoicing
+* cash register
+* repair order creation
+* supplier management
+* purchase orders
+
+3. Mechanic
+
+* workshop tasks
+* vehicle inspection
+* repair progress updates
+
+4. Inventory Manager / could be also secretary or mechanics
+
+* stock management
+* spare parts
+
+5. Accountant / could be also secretary or admin
+
+* financial exports
+
+---
+
+CORE MODULES
+
+1 COMMERCIAL & INVOICING MODULE
+
+* quotations
+* invoices
+* repair orders
+* delivery notes
+* warranties
+* electronic invoicing 
+* Automatic document generation / exctraction 
+* price management (price lists, margins / discount in real time, VAT calculations)
+* discount calculations
+* multi-criteria / advanced search (by invoice number, client name, car registration number)
+* customizable document templates
+
+
+2 FINANCE & CASH REGISTER MODULE
+
+* payments:
+  cash
+  card
+  bank transfer
+  cheque
+* partial payments
+* deposits
+* Automatic blocking based on outstanding amount threshold
+* cash closing
+* sales journals
+* accounting export
+
+3 SUPPLIER & PURCHASE MODULE
+
+* supplier management
+* quotation requests
+* purchase orders
+* partial receptions
+* price comparison / history
+* equivalent parts management
+
+
+4 CUSTOMER & CRM MODULE
+
+* customer profiles
+* payment history
+* debt/credit management
+* unpaid invoices
+* customer reminders
+* SMS/email notifications
+
+5 VEHICLE MANAGEMENT / INSPECTION MODULE
+
+* vehicle records
+* registration data
+* maintenance history
+* mileage tracking
+* photos and inspection reports (input data by mechanic through phone)
+    * digital checklist:
+    tires
+    brakes
+    battery
+    fluids
+    * diagnostic reports
+
+6 WORKSHOP / REPAIR ORDER MODULE
+
+* create repair orders (OR)
+* assign mechanics
+* track statuses:
+  Created -> Diagnosis -> In Repair -> Finished -> Delivered
+* attach photos/videos
+* generate PDF reports
+* mechanic comments
+* labor time tracking
+
+
+7 INVENTORY & STOCK MODULE
+
+* spare parts management
+* stock movements
+* inventory
+* reorder alerts
+* linkage between:
+  Repair Order <-> Stock <-> Delivery Notes
+* stock valuation
+
+
+8 REPORTING & ANALYTICS MODULE
+    KPIs:
+
+* revenue
+* margins
+* workshop occupancy
+* repair times
+* unpaid invoices
+* outstanding amounts
+* top customers
+* top suppliers
+* quotation conversion rates
+
+9 ADMINISTRATION & SECURITY MODULE
+
+* RBAC permissions
+* audit logs
+* backups
+* archiving
+* cloud backup
+* authentication
+* security logs
+
+10. GED / DOCUMENT MANAGEMENT
+
+* archive:
+* Extration of documents
+    registration cards
+    IDs
+    insurance documents
+    accident photos
+    repair attachments
+    Invoices notes orders
+
+---
+
+TECHNICAL REQUIREMENTS
+
+Architecture should be scalable and modular.
+
+ Performance target:
+
+* response time under 2 seconds
+
+Security:
+
+* secure authentication
+* audit logs
+* daily cloud backup 
+
+Architecture must support:
+
+* future multi-garage support
+* multi-user concurrent access
+* future mobile app integration
+
+---
+
+Development must be modular and incremental.
+
+Suggested order:
+
+1. Architecture & database design
+2. Authentication & RBAC
+3. Customer management
+4. Vehicle management
+5. Repair orders
+6. Workshop workflow
+7. Inventory
+8. Invoicing
+9. Finance
+10. Reporting dashboards
+11. Notifications
+12 Multi-garage support
+
+---
+
+IMPORTANT BUSINESS WORKFLOW
+
+Main business flow:
+
+Customer -> Vehicle Reception -> Vehicle Inspection -> Repair Order 
+-> Parts Consumption -> Repair Progress -> Invoice -> Payment -> Delivery -> History & Analytics
+---------------------
+ADDITIONAL BUSINESS WORKFLOWS & USE CASES
+* QUICK SERVICE WORKFLOW (oil change, battery replacement, tire service)
+    -> Quick diagnosis -> Immediate quotation -> Minor repair/service
+    -> Direct payment -> Invoice generation -> Vehicle delivery
+
+* DIGITAL VEHICLE INSPECTION WORKFLOW
+    -> Mechanic performs inspection using tablet/mobile -> Checklist validation
+    -> Photos/videos attached -> Detected issues recorded -> Diagnostic report generated
+    -> Quotation sent to customer -> Customer approval/refusal recorded
+
+* PARTS / INVENTORY WORKFLOW
+    -> Repair Order created -> Required parts identified -> System checks stock availability
+        -> If stock available: reserve/deduct stock
+
+        -> If stock unavailable: generate purchase request --> Supplier order created -> Parts received
+        -> Inventory updated automatically
+     -> Repair continues
+
+
+*PURCHASE & SUPPLIER WORKFLOW
+    Receptionist creates supplier quotation request
+    -> Multiple supplier responses -> Price comparison -> Supplier selection
+    -> Purchase Order generation -> Partial/full reception of parts -> Stock updated -> Supplier invoice archived
+
+
+* CUSTOMER DEBT / CREDIT WORKFLOW
+    -> Customer makes partial payment -> Remaining balance tracked -> System updates customer outstanding amount
+    -> If threshold exceeded: customer flagged
+        -> Automatic reminders sent
+    -> Payment settlement recorded
+
+* CASH REGISTER WORKFLOW
+    -> Invoice generated -> Payment received -> Payment method selected: cash/card/transfer/cheque
+    -> Receipt generated -> Daily cash closing -> Sales journal generated
+    -> Accounting export
+
+* VEHICLE HISTORY WORKFLOW
+    -> Customer vehicle returns -> System retrieves complete history: (previous repairs invoices mileage inspections)
+    -> Mechanic reviews historical problems -> Faster diagnosis and service
+    
+* CUSTOMER NOTIFICATION 
+    vehicle ready
+    unpaid invoice
+    maintenance reminder
+    technical inspection due
+    -> SMS/email notification generated
+    -> Notification logged in system
+
+* WORKSHOP PERFORMANCE WORKFLOW
+    Mechanic starts repair task
+        -> Time tracking starts
+        -> Repair progress updated
+        -> Task completed
+        -> System calculates: repair duration mechanic productivity workshop occupancy
+        
+        -> KPI dashboards updated
+
+* DOCUMENT MANAGEMENT WORKFLOW
+    Vehicle/customer documents uploaded: registration card insurance CIN/passport accident photos invoices
+        -> Documents categorized
+        -> Archived securely
+        -> Searchable from customer/vehicle profile
+
+* ADMIN & SECURITY WORKFLOW
+    Admin creates user account
+        -> Assign role and permissions
+        -> User activity logged
+        -> Sensitive actions audited
+        -> Automatic backups executed
+        -> Security alerts generated if abnormal activity detected
+
+* ANALYTICS & REPORTING WORKFLOW
+    System aggregates operational data
+        -> Dashboard updates in real time
+        -> KPIs calculated : revenue, margins, unpaid invoices, workshop occupancy, stock valuation
+        -> Export reports to PDF/Excel
+
+
+Mazel al houb other workflows we'll keep adding 
+
+
+
+
+---------------------------------------------
+
+IMPORTANT UX REQUIREMENTS
+
+The application should:
+
+* be modern and responsive
+* support tablet usage in workshop
+* allow mechanics to upload photos from phones/tablets
+* have dashboard-based navigation
+* provide real-time updates
+* support PDF generation
+* support printable documents
+
+---
+FUTURE Possible AI / ML FEATURES (OPTIONAL)
+
+* predictive maintenance 
+* repair duration estimation
+* stock prediction
+* anomaly detection
+* customer behavior analysis
+* smart quotation suggestions
