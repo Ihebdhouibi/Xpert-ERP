@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     secret_key: str  # used for signing JWT access tokens
     algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    auth_max_failed_attempts: int = 5
+    auth_lockout_minutes: int = 15
+    password_reset_expiry_minutes: int = 30
+    password_min_length: int = 8
 
     # -------------------------------------------------------------------------
     # CORS
