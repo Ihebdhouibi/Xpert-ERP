@@ -1,0 +1,979 @@
+################################################################################
+# XPERT-ERP — GITHUB ISSUES PLAN
+# Format: Each issue block starts with --- ISSUE START --- and ends with --- ISSUE END ---
+# Fields: ID, TITLE, LABELS, MILESTONE, DESCRIPTION
+# This file is intended to be parsed by a GitHub Actions workflow or script
+# to create GitHub Issues and populate a Project Board automatically.
+################################################################################
+
+
+--- ISSUE START ---
+ID: 1
+TITLE: [M0] Initialize monorepo structure and tooling
+LABELS: phase:foundations, type:chore, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Set up the monorepo layout with the following top-level folders:
+  - backend/
+  - frontend/
+  - infra/
+  - docs/
+  - projectContext/
+
+Initialize:
+  - Python 3.11.0 project with pyproject.toml, ruff, mypy, pytest configuration
+  - .gitignore covering Python, Node, IDE files
+  - README.md with project overview
+  - Branch protection rules for `main` and `stable-testing`
+
+Acceptance criteria:
+  - A developer can clone the repo and see a clean, navigable structure
+  - ruff and mypy run without error on the empty project skeleton
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 2
+TITLE: [M0] Bootstrap FastAPI application skeleton with health check
+LABELS: phase:foundations, type:feat, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Create the FastAPI application skeleton under backend/:
+  - Main application entrypoint (app/main.py)
+  - GET /api/v1/health endpoint returning status and version
+  - OpenAPI schema available at /api/v1/docs
+  - Uvicorn + Gunicorn runner configuration
+  - CORS middleware configured from CFG_ALLOWED_ORIGINS env variable
+  - Request ID middleware injecting X-Request-ID into every request/response
+  - pydantic-settings configuration loader reading from .env and environment
+
+Acceptance criteria:
+  - curl http://localhost:8000/api/v1/health returns 200 with JSON body
+  - All config values come from environment variables, no hard-coded defaults
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 3
+TITLE: [M0] Set up PostgreSQL with Docker Compose and Alembic migrations
+LABELS: phase:foundations, type:chore, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Configure local development database stack:
+  - docker-compose.yml with PostgreSQL 15+ service, Redis service, MinIO service
+  - SQLAlchemy 2.x async engine setup
+  - Alembic initialized; base migration creating audit_log table and document_sequence table
+  - Health check for DB connectivity in the FastAPI health endpoint
+  - Database seed script for development data
+
+Acceptance criteria:
+  - `docker compose up` starts all services cleanly
+  - `alembic upgrade head` runs without error on a fresh database
+  - FastAPI health endpoint reports database connectivity status
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 4
+TITLE: [M0] Implement per-component structured logging with structlog
+LABELS: phase:foundations, type:chore, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Implement the logging infrastructure as defined in projectContext/Context.md:
+  - structlog configured for JSON output
+  - Each component writes to its own rotating log file (logs/<component>.log)
+  - Log fields: timestamp, level, request_id, user_id, garage_id, component, event, data
+  - Console output for development, file output for production
+  - Log level configurable via CFG_LOG_LEVEL env variable
+  - Components covered in M0: app, db, config
+
+Acceptance criteria:
+  - Each backend module has a named logger that writes to its own file
+  - request_id is propagated from middleware to all log entries in that request
+  - No sensitive data (passwords, tokens) appears in log output
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 5
+TITLE: [M0] Bootstrap React + Vite + TypeScript frontend with base layout
+LABELS: phase:foundations, type:feat, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Initialize the frontend application under frontend/:
+  - React 18 + Vite + TypeScript 5.x
+  - React Router 6+ with a base layout component (sidebar, topbar)
+  - MUI theme configured (primary color, typography, French locale adapter)
+  - react-intl set up with French as default locale; all UI strings externalized
+  - Axios instance configured with base URL from VITE_API_BASE_URL env variable
+  - TanStack Query v5 QueryClient provider
+  - A placeholder dashboard page that calls GET /api/v1/health and displays the status
+
+Acceptance criteria:
+  - `npm run dev` starts the frontend; health check page shows API status
+  - No hard-coded API URLs; all from environment variables
+  - TypeScript strict mode enabled with no type errors
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 6
+TITLE: [M0] Configure GitHub Actions CI pipeline
+LABELS: phase:foundations, type:chore, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Create GitHub Actions workflows:
+  - Backend CI: ruff lint, mypy type-check, pytest unit tests, coverage report
+  - Frontend CI: TypeScript type-check, ESLint, Vite build
+  - Trigger: every pull request to `main`
+  - Branch protection: require green CI before merge to `main` and `stable-testing`
+
+Acceptance criteria:
+  - A PR with a lint error fails CI and cannot be merged
+  - Coverage report is uploaded as a CI artifact
+  - Both backend and frontend CI jobs run in parallel
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 7
+TITLE: [M0] Document foundations setup in docs/feature/foundations/
+LABELS: phase:foundations, type:docs, priority:medium
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+Create docs/feature/foundations/README.md covering:
+  - Prerequisites (Python 3.11.0, Node, Docker)
+  - Local setup steps (clone, docker compose up, alembic upgrade, npm install, npm run dev)
+  - How to run tests
+  - How to add a new backend module (folder structure, registration)
+  - Environment variable reference
+
+Acceptance criteria:
+  - A new developer can follow the README and have the full stack running within 1 working day
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 8
+TITLE: [M1] Implement User entity and authentication endpoints
+LABELS: phase:auth, type:feat, priority:critical
+MILESTONE: M1 - Authentication and RBAC
+DESCRIPTION:
+Implement the User entity and core auth flow:
+  - app_user table: id, garage_id, email, password_hash (Argon2id), full_name, status, failed_attempts, locked_until, created_at, updated_at, version
+  - POST /api/v1/auth/login — email + password, returns access token + refresh token
+  - POST /api/v1/auth/refresh — rotates refresh token
+  - POST /api/v1/auth/logout — revokes refresh token
+  - POST /api/v1/auth/password-reset/request — sends email with signed reset link
+  - POST /api/v1/auth/password-reset/confirm — validates token and sets new password
+  - Password policy: min length configurable (CFG_PASSWORD_MIN_LENGTH), complexity enforced
+  - Brute-force lockout: after CFG_AUTH_MAX_FAILED_ATTEMPTS, lock for CFG_AUTH_LOCKOUT_MINUTES
+  - Session idle timeout: CFG_SESSION_IDLE_TIMEOUT_MINUTES
+  - Deactivated users: refresh tokens revoked immediately; active tokens denied via Redis deny-list
+
+Acceptance criteria:
+  - Login with correct credentials returns tokens
+  - 5 failed attempts trigger lockout; locked account cannot authenticate
+  - Password reset link is single-use and time-limited (CFG_PASSWORD_RESET_EXPIRY_MINUTES)
+  - Auth events (login success, login failure, password change) written to audit_log
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 9
+TITLE: [M1] Implement Role and Permission catalog with RBAC enforcement
+LABELS: phase:auth, type:feat, priority:critical
+MILESTONE: M1 - Authentication and RBAC
+DESCRIPTION:
+Implement the full RBAC system as defined in projectContext/06_RBAC_DESIGN.md:
+  - role, permission, user_role, role_permission tables
+  - Seed roles: super_admin, admin, secretary, mechanic, inventory_manager, accountant, read_only
+  - Seed permissions catalog (all codes from 06_RBAC_DESIGN.md)
+  - FastAPI dependency for permission checking on routes
+  - Permission re-evaluated on token refresh (not only at login)
+  - Frontend: usePermission() hook and PermissionGate component
+
+Acceptance criteria:
+  - A mechanic token cannot access invoice endpoints
+  - A role change takes effect on the next token refresh
+  - All role/permission changes written to audit_log
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 10
+TITLE: [M1] Build Admin UI for user and role management
+LABELS: phase:auth, type:feat, priority:high
+MILESTONE: M1 - Authentication and RBAC
+DESCRIPTION:
+Build the admin-facing UI screens:
+  - User list with search (name, email, role)
+  - Create user form (name, email, roles, status)
+  - Edit user form (update details, assign/revoke roles, deactivate)
+  - Role list with permission details
+  - All actions behind permission gate (users.create, users.update, users.deactivate, roles.assign)
+
+Acceptance criteria:
+  - Admin creates a user; user can log in immediately
+  - Deactivating a user prevents future login within one refresh cycle
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 11
+TITLE: [M1] Implement audit log foundation
+LABELS: phase:auth, type:feat, priority:high
+MILESTONE: M1 - Authentication and RBAC
+DESCRIPTION:
+Implement the audit_log table and writer service:
+  - audit_log table: id, garage_id, user_id, timestamp, component, action, entity_type, entity_id, old_value (JSONB), new_value (JSONB), reason, request_id
+  - AuditService with a write() method callable from any module
+  - Audit entries for M1 events: login success/failure, password change, role assignment, user deactivation
+
+Acceptance criteria:
+  - Every sensitive auth action produces an immutable audit entry
+  - Audit entries cannot be updated or deleted via the API (no endpoint exists)
+  - audit.read permission gates the audit log view endpoint
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 12
+TITLE: [M2] Implement Customer entity and CRM CRUD
+LABELS: phase:crm, type:feat, priority:critical
+MILESTONE: M2 - Customer and Vehicle
+DESCRIPTION:
+Implement the Customer module as defined in projectContext/07_MODULE_BREAKDOWN.md (M.2):
+  - customer table: id, garage_id, type (individual/company), full_name, company_name, fiscal_id, email, phone, address fields, credit_limit, outstanding_balance, segment, status, loyalty_points, version, soft_delete fields
+  - customer_contact table for multiple contacts per company
+  - customer_balance_event ledger table
+  - REST endpoints: CRUD + multi-criteria search (name, phone, email, fiscal_id)
+  - Idempotency check on creation: if (phone or email) + fiscal_id matches existing record, return a merge prompt
+  - Soft delete with admin-only restore
+  - Per-entity audit on every edit and delete
+  - Search response time target: < 300ms p95
+
+Acceptance criteria:
+  - Reception creates a customer in under 1 minute using the UI
+  - Duplicate detection prompts for merge, not a silent duplicate
+  - Audit entries written for all mutations
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 13
+TITLE: [M2] Implement Vehicle entity and history view
+LABELS: phase:crm, type:feat, priority:critical
+MILESTONE: M2 - Customer and Vehicle
+DESCRIPTION:
+Implement the Vehicle module:
+  - vehicle table: id, garage_id, customer_id, registration, vin, make, model, year, fuel_type, color, mileage, technical_inspection_due, maintenance_due, status, version, soft_delete fields
+  - Search by registration or VIN
+  - Ownership transfer: previous owner stays linked to historical repair orders
+  - Re-registration tracked as alias (not new record)
+  - Vehicle history view: all repair orders, inspections, mileage progression
+  - REST endpoints: CRUD + search
+
+Acceptance criteria:
+  - A vehicle without local registration uses VIN as primary identifier
+  - Ownership change does not break historical repair order links
+  - Vehicle history loads in < 300ms p95
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 14
+TITLE: [M2] Document upload primitive (GED entry point)
+LABELS: phase:crm, type:feat, priority:medium
+MILESTONE: M2 - Customer and Vehicle
+DESCRIPTION:
+Implement the base document upload mechanism to be reused across all modules:
+  - document table: id, garage_id, owner_entity_type, owner_entity_id, category, filename, mime_type, size_bytes, storage_key, uploaded_by, uploaded_at, status
+  - Upload endpoint: POST /api/v1/documents — multipart upload to object storage (MinIO/S3)
+  - File size limit configurable (CFG_MAX_UPLOAD_SIZE_BYTES)
+  - Allowed MIME types configurable (CFG_ALLOWED_MIME_TYPES)
+  - Client-side EXIF stripping for images before upload
+  - Signed URL generation for retrieval
+
+Acceptance criteria:
+  - A 10MB PDF uploads and retrieves cleanly
+  - Files outside the allowed MIME type list are rejected at the API
+  - No sensitive storage keys are exposed to the client
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 15
+TITLE: [M3] Implement Repair Order entity and status machine
+LABELS: phase:workshop, type:feat, priority:critical
+MILESTONE: M3 - Repair Order and Workshop
+DESCRIPTION:
+Implement the Repair Order core:
+  - repair_order table: id, garage_id, customer_id, vehicle_id, opened_at, status, assigned_mechanic_id, priority, mileage_in, fuel_level_in, notes, version, soft_delete fields
+  - Status machine: created -> diagnosis -> in_repair -> finished -> delivered; optional paused_waiting_parts, paused_waiting_approval
+  - Illegal transitions return HTTP 422
+  - Concurrent status updates return HTTP 409 (version mismatch)
+  - ro_status_event table: records every transition with user, timestamp, from_status, to_status, reason
+  - ro_labor_line table: description, hours, hourly_rate, technician_id
+  - ro_part_line table: part_id, quantity, unit_price (provisional at creation, committed at in_repair)
+  - Audit on status transitions and mechanic reassignment
+
+Acceptance criteria:
+  - Attempting to move from `finished` to `diagnosis` returns 422
+  - Two concurrent status updates from different sessions: one succeeds, one gets 409
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 16
+TITLE: [M3] Implement time tracking and comments for Repair Orders
+LABELS: phase:workshop, type:feat, priority:high
+MILESTONE: M3 - Repair Order and Workshop
+DESCRIPTION:
+  - ro_time_entry table: ro_id, mechanic_id, started_at, stopped_at, duration_minutes
+  - Start/stop timer endpoints for mechanics
+  - Auto-pause on max session duration (CFG_MAX_TIME_ENTRY_DURATION_MINUTES) with audit entry
+  - Multiple mechanics per OR: each has independent time entries; total = sum
+  - ro_comment table: ro_id, author_id, body, created_at
+  - Comment CRUD endpoints
+
+Acceptance criteria:
+  - A mechanic who forgets to stop at end of day gets auto-paused at CFG_MAX_TIME_ENTRY_DURATION_MINUTES
+  - Reassigning a mechanic mid-repair does not break prior time entries
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 17
+TITLE: [M3] Build workshop kanban and tablet-facing repair view
+LABELS: phase:workshop, type:feat, priority:high
+MILESTONE: M3 - Repair Order and Workshop
+DESCRIPTION:
+  - Workshop kanban board: columns per status, cards show vehicle, customer, mechanic, priority
+  - Reception/admin can drag cards between columns (triggers status transition via API)
+  - Mechanic tablet view: my assigned repair orders list, status update button, timer start/stop, comment input, photo upload
+  - Responsive layout optimized for touch targets on tablet (min touch target 44x44px)
+
+Acceptance criteria:
+  - Mechanic can update OR status from a tablet without needing a keyboard
+  - Kanban reflects real-time status; concurrent updates from two sessions resolve cleanly
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 18
+TITLE: [M3] Repair Order PDF report generation
+LABELS: phase:workshop, type:feat, priority:medium
+MILESTONE: M3 - Repair Order and Workshop
+DESCRIPTION:
+  - Generate a PDF repair order report using WeasyPrint
+  - Template includes: garage header, customer and vehicle info, labor lines, part lines, totals, mechanic signature area
+  - Template is configurable; logo and legal mentions from CFG_*
+  - Endpoint: GET /api/v1/repair-orders/{id}/pdf
+  - PDF stored to object storage; signed URL returned
+
+Acceptance criteria:
+  - PDF renders correctly on A4 in French
+  - Logo and footer legal text are driven by configuration, not hard-coded
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 19
+TITLE: [M4] Implement Parts catalog (SKU) and category management
+LABELS: phase:inventory, type:feat, priority:critical
+MILESTONE: M4 - Inventory and Stock
+DESCRIPTION:
+  - part table: id, garage_id, sku_code, name, description, category_id, unit_of_measure, purchase_price (BIGINT cents), selling_price (BIGINT cents), supplier_hint_id, reorder_threshold, reorder_quantity, status, version
+  - part_category table: hierarchical categories
+  - part_equivalent table: many-to-many equivalents
+  - CRUD endpoints with search (name, SKU, category)
+  - All prices stored as BIGINT (minor currency units)
+
+Acceptance criteria:
+  - Creating a part with a floating-point price returns a validation error
+  - Equivalent parts link resolves bidirectionally
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 20
+TITLE: [M4] Implement stock movement engine and reservation flow
+LABELS: phase:inventory, type:feat, priority:critical
+MILESTONE: M4 - Inventory and Stock
+DESCRIPTION:
+  - stock_movement table: id, garage_id, part_id, type (in/out/adjustment/reservation/release), quantity, unit_cost, ref_type, ref_id, reason, created_by, created_at
+  - Stock level computed via materialized view or aggregation table (decision: aggregation table refreshed on each movement for consistency)
+  - Stock cannot go negative without explicit override (CFG_ALLOW_NEGATIVE_STOCK); override requires reason and produces audit entry
+  - Reservation flow: repair order reserves parts on creation; released on cancellation or completion
+  - Low-stock alert: per-SKU threshold (reorder_threshold), alert record created when stock <= threshold
+  - Stock valuation: weighted average cost method
+
+Acceptance criteria:
+  - 1,000 stock movements processed under 10s in a load test
+  - Attempting to go negative without override returns 409
+  - Reservation release is atomic with repair order cancellation
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 21
+TITLE: [M4] Implement low-stock alert view and integration with Repair Order
+LABELS: phase:inventory, type:feat, priority:high
+MILESTONE: M4 - Inventory and Stock
+DESCRIPTION:
+  - low_stock_alert table: part_id, current_quantity, threshold, suggested_supplier_id, suggested_reorder_quantity, status (open/acknowledged/resolved), created_at
+  - Alert list endpoint for inventory managers
+  - Integration with Repair Order: provisional part lines in OR trigger reservation; on `in_repair` transition, reservations become committed movements
+  - Stock valuation report endpoint (weighted average, per part, per period)
+
+Acceptance criteria:
+  - When stock hits threshold, an alert is created and visible in the inventory dashboard
+  - Provisional to committed conversion is atomic; partial failure rolls back cleanly
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 22
+TITLE: [M5] Implement document sequence service
+LABELS: phase:commercial, type:feat, priority:critical
+MILESTONE: M5 - Quotation and Invoice
+DESCRIPTION:
+  - document_sequence table: garage_id, doc_type, year, last_number (with row-level lock)
+  - DocumentSequenceService.next(garage_id, doc_type, year) — transactional, monotonic, gap-free
+  - Doc types: QUOT (quotation), INV (invoice), CRNOTE (credit note), DO (delivery order)
+  - Number format configurable (CFG_DOC_NUMBER_FORMAT, e.g. "INV-{YEAR}-{SEQ:05d}")
+  - Load test: 50 parallel number requests for the same type/year must produce 50 unique sequential numbers
+
+Acceptance criteria:
+  - Under concurrent issuance, no two documents receive the same number
+  - Number format is driven by configuration, not hard-coded
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 23
+TITLE: [M5] Implement Quotation entity with VAT and discount engine
+LABELS: phase:commercial, type:feat, priority:critical
+MILESTONE: M5 - Quotation and Invoice
+DESCRIPTION:
+  - quotation table: id, garage_id, customer_id, vehicle_id, number, status (draft/sent/approved/rejected/converted/archived), lines JSONB, total_ht, total_vat, total_ttc, discount_type, discount_value, valid_until, version
+  - quotation_line: description, quantity, unit_price_ht, vat_rate, line_total_ht, line_total_ttc, discount
+  - VAT engine: per-line VAT rates; totals computed with banker's rounding; multiple VAT rates per document aggregated
+  - Discount engine: percent or absolute, per line and per document header
+  - Status transitions: draft -> sent -> approved/rejected; approved -> converted; any -> archived
+  - Customer credit limit check on issuance (block or warn per CFG_CREDIT_LIMIT_MODE)
+  - Email quotation to customer with signed approval link (single-use, expires at CFG_QUOTATION_VALIDITY_DAYS)
+
+Acceptance criteria:
+  - VAT calculations match expected values for standard Tunisian/French VAT rates
+  - Credit limit exceeded in CFG_CREDIT_LIMIT_MODE=block returns 422
+  - Approval link is single-use; second use returns 410 Gone
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 24
+TITLE: [M5] Implement Invoice entity and conversion flows
+LABELS: phase:commercial, type:feat, priority:critical
+MILESTONE: M5 - Quotation and Invoice
+DESCRIPTION:
+  - invoice table: id, garage_id, customer_id, vehicle_id, repair_order_id, number, status (draft/issued/partially_paid/paid/overdue/cancelled), lines JSONB, total_ht, total_vat, total_ttc, paid_amount, outstanding, discount_type, discount_value, version
+  - Conversion flows: quotation -> repair order, quotation -> invoice, repair order -> invoice
+  - Status transitions with guards (e.g. cannot cancel a fully-paid, exported invoice — only via credit note)
+  - Credit note model: references original invoice, negates amount
+  - PDF generation with customizable template (logo, header, footer, legal mentions from CFG_*)
+
+Acceptance criteria:
+  - Full chain: quotation created -> sent -> approved -> converted to invoice -> PDF generated
+  - Document numbers are unique and gap-free for each type
+  - Cancelled invoice with prior payment triggers credit note creation prompt
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 25
+TITLE: [M5] Implement PDF template engine for commercial documents
+LABELS: phase:commercial, type:feat, priority:high
+MILESTONE: M5 - Quotation and Invoice
+DESCRIPTION:
+  - WeasyPrint-based PDF generation service
+  - Jinja2 HTML templates for: quotation, invoice, credit note, delivery note
+  - Template variables: garage name/address/logo, document number, customer info, line items, totals (HT/TVA/TTC), legal mentions, payment terms, footer
+  - All template content (logo path, legal text, bank details) from CFG_* configuration
+  - Templates stored under backend/templates/documents/
+
+Acceptance criteria:
+  - PDF renders correctly on A4 in French with proper VAT breakdown
+  - Logo and legal mentions change when CFG_* values are updated without code change
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 26
+TITLE: [M6] Implement Payment recording (cash, card, transfer, cheque)
+LABELS: phase:finance, type:feat, priority:critical
+MILESTONE: M6 - Finance and Cash Register
+DESCRIPTION:
+  - payment table: id, garage_id, invoice_id, cash_session_id, method (cash/card/transfer/cheque), amount (BIGINT), paid_at, reference, status, created_by
+  - POST /api/v1/payments — record payment against an invoice
+  - Invoice paid_amount and outstanding recomputed atomically on each payment
+  - Invoice status auto-updated: partially_paid when outstanding > 0, paid when outstanding = 0
+  - Partial payments fully supported
+  - Payment invariant: sum of payments per invoice must always equal paid_amount
+
+Acceptance criteria:
+  - A partial payment correctly sets status to partially_paid
+  - Two concurrent payments for the same invoice do not cause double-counting (row lock)
+  - Money invariant enforced by DB constraint and application check
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 27
+TITLE: [M6] Implement advance payment (deposit) and auto-deduction on final invoice
+LABELS: phase:finance, type:feat, priority:high
+MILESTONE: M6 - Finance and Cash Register
+DESCRIPTION:
+  - advance_payment table linked to repair_order_id: amount, method, paid_at, applied_to_invoice_id
+  - Deposit recorded before invoice is created (linked to RO)
+  - On final invoice issuance, advance is auto-deducted from outstanding
+  - Audit entry on deposit creation and application
+  - UI: record deposit on repair order; view applied deposits on invoice
+
+Acceptance criteria:
+  - Deposit recorded before invoice exists does not cause errors
+  - Auto-deduction on invoice creation leaves correct outstanding amount
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 28
+TITLE: [M6] Implement Cash Session and end-of-day closing
+LABELS: phase:finance, type:feat, priority:critical
+MILESTONE: M6 - Finance and Cash Register
+DESCRIPTION:
+  - cash_session table: id, garage_id, opened_at, opened_by_id, closed_at, closed_by_id, status (open/closed), expected_total_cash (BIGINT), counted_total_cash (BIGINT), difference (BIGINT)
+  - Only one open session per garage at a time
+  - Cash session closing UI: tally per payment method, physical count entry, difference computation
+  - Z-report PDF: daily summary by method, difference, signed-off by closer
+  - Sessions and payments within a closed session are locked (no modifications)
+  - Accounting export marks records as exported; exported records locked from modification
+
+Acceptance criteria:
+  - Cannot open a second session while one is already open
+  - Closing a session with a non-zero difference requires a reason (CFG_CASH_DIFF_REQUIRE_REASON)
+  - Once closed, no payment can be added to that session
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 29
+TITLE: [M6] Implement customer credit limit enforcement and outstanding balance tracking
+LABELS: phase:finance, type:feat, priority:high
+MILESTONE: M6 - Finance and Cash Register
+DESCRIPTION:
+  - customer.outstanding_balance maintained by customer_balance_event ledger
+  - On invoice issuance: outstanding increases by invoice total
+  - On payment: outstanding decreases by payment amount
+  - Credit limit check: on quotation/invoice issuance, compare outstanding + new total vs credit_limit
+  - CFG_CREDIT_LIMIT_MODE: warn (allow with warning) or block (reject with 422)
+  - Automatic blocking when outstanding exceeds CFG_OUTSTANDING_BLOCK_THRESHOLD
+  - Balance event types: invoice_issued, payment_received, credit_note_applied, manual_adjustment
+
+Acceptance criteria:
+  - customer.outstanding_balance stays consistent across concurrent invoice and payment operations
+  - Block mode correctly prevents new invoice issuance when limit is exceeded
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 30
+TITLE: [M6] Implement refund and credit note workflow
+LABELS: phase:finance, type:feat, priority:high
+MILESTONE: M6 - Finance and Cash Register
+DESCRIPTION:
+  - Refund flow: payment refunded -> refund_payment record created (negative amount) -> invoice outstanding updated
+  - Credit note created when: a paid invoice is cancelled, or an overpayment occurs
+  - credit_note table: references original invoice, amount, reason, status, number (from document_sequence)
+  - Credit note applied to a new invoice or refunded as cash/transfer
+  - All refund and credit operations produce audit entries
+
+Acceptance criteria:
+  - Cancelling an already-paid invoice creates a credit note, not a deletion
+  - Applying a credit note to a new invoice reduces that invoice's outstanding correctly
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 31
+TITLE: [M7] Implement Supplier entity and management
+LABELS: phase:purchasing, type:feat, priority:critical
+MILESTONE: M7 - Suppliers and Purchasing
+DESCRIPTION:
+  - supplier table: id, garage_id, name, contact info, payment_terms_days, average_delivery_days, reliability_score, status, version
+  - Supplier CRUD with search
+  - Price history: supplier_part_price table (supplier_id, part_id, unit_price, currency, effective_from, effective_to)
+  - Price comparison view: given a part, show all suppliers with latest price, delivery delay, reliability score
+
+Acceptance criteria:
+  - Price history is tracked over time; querying a historical date returns the correct price for that period
+  - Reliability score is read-only from the UI (computed from past PO performance)
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 32
+TITLE: [M7] Implement Purchase Order and reception flow
+LABELS: phase:purchasing, type:feat, priority:critical
+MILESTONE: M7 - Suppliers and Purchasing
+DESCRIPTION:
+  - purchase_order table: id, garage_id, supplier_id, status (draft/sent/partially_received/completed/cancelled), lines, total_ht, total_ttc, expected_delivery_date, version
+  - purchase_order_line: part_id, quantity_ordered, unit_price_ht, quantity_received, quantity_invoiced
+  - Reception flow: full, partial, or rejected reception; stock movement created atomically on receipt
+  - Partial reception: PO status set to partially_received; remaining quantity tracked
+  - Three-way match: flag lines where ordered != received != invoiced (beyond CFG_PO_MATCH_TOLERANCE_PERCENT)
+  - Low-stock alert -> purchase request -> PO approval flow
+
+Acceptance criteria:
+  - Reception updates stock atomically; no reception without corresponding stock movement
+  - Three-way match flags any discrepancy exceeding tolerance
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 33
+TITLE: [M7] Implement Supplier Invoice and three-way match
+LABELS: phase:purchasing, type:feat, priority:high
+MILESTONE: M7 - Suppliers and Purchasing
+DESCRIPTION:
+  - supplier_invoice table: id, garage_id, supplier_id, purchase_order_id, number, status, lines JSONB, total_ht, total_ttc, received_at, due_date, version
+  - Link supplier invoice to PO; run three-way match automatically on save
+  - Discrepancy flag on any mismatched line with visual indicator in UI
+  - Supplier invoice PDF attachment (document upload from M2)
+  - Accounting export integration (M10): supplier invoice contributes to purchases journal
+
+Acceptance criteria:
+  - A supplier invoice with quantity mismatch is flagged and blocks final status until resolved or overridden
+  - Override requires reason and produces audit entry
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 34
+TITLE: [M8] Implement notification adapter interface and email/SMS providers
+LABELS: phase:notifications, type:feat, priority:critical
+MILESTONE: M8 - Notifications and Reminders
+DESCRIPTION:
+  - NotificationAdapter interface: send(recipient, channel, template_code, context) -> DeliveryResult
+  - EmailAdapter: aiosmtplib + Jinja2 templates; SMTP config from CFG_SMTP_*
+  - SmsAdapter: provider-agnostic HTTP adapter; config from CFG_SMS_PROVIDER, CFG_SMS_*
+  - notification_log table: id, garage_id, recipient_id, channel, template_code, status (queued/sent/failed/bounced), provider_reference, sent_at, attempts, error_detail
+  - Retry logic: up to CFG_NOTIFICATION_MAX_RETRIES with exponential backoff
+  - Quiet hours: no notification sent during CFG_QUIET_HOURS_START / CFG_QUIET_HOURS_END
+
+Acceptance criteria:
+  - A failed delivery is retried up to CFG_NOTIFICATION_MAX_RETRIES; final failure is visible in log
+  - Notification scheduled inside quiet hours is delayed until quiet hours end
+  - Provider credentials are never logged
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 35
+TITLE: [M8] Implement notification templates and trigger catalog
+LABELS: phase:notifications, type:feat, priority:high
+MILESTONE: M8 - Notifications and Reminders
+DESCRIPTION:
+  - notification_template table: id, garage_id, code, channel, locale, subject, body (Jinja2), active
+  - Seed templates for all trigger types: vehicle_ready, unpaid_invoice_reminder_1/2/3, maintenance_due, technical_inspection_due, quotation_expiring, payment_received_receipt
+  - Template editor UI for admin
+  - Scheduler: APScheduler/Celery Beat jobs for each scheduled trigger
+  - Trigger conditions configurable: reminder delays via CFG_REMINDER_DELAY_1_DAYS, CFG_REMINDER_DELAY_2_DAYS, CFG_REMINDER_DELAY_3_DAYS
+
+Acceptance criteria:
+  - Admin can edit a template and preview rendered output with sample data
+  - Scheduled triggers fire within 1 minute of their due time
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 36
+TITLE: [M9] Implement digital inspection template and execution on tablet
+LABELS: phase:inspection, type:feat, priority:critical
+MILESTONE: M9 - Digital Inspection and Media
+DESCRIPTION:
+  - inspection_template table: id, garage_id, name, sections (JSONB array of section with items)
+  - inspection_item status enum: ok, attention, defective, not_applicable
+  - inspection table: id, garage_id, repair_order_id (nullable for standalone), template_id, mechanic_id, status, started_at, completed_at
+  - inspection_item_result table: inspection_id, item_id, status, notes, media_ids
+  - Offline-tolerant tablet UI: stores in IndexedDB while offline, syncs on reconnect
+  - Conflict resolution: last-write-wins per item with audit entry
+  - Standalone inspection (no OR): can be converted to a repair order later
+
+Acceptance criteria:
+  - Mechanic completes inspection on tablet with no connectivity; data syncs cleanly on reconnect
+  - Rejected customer items become archived recommendations on the vehicle record
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 37
+TITLE: [M9] Implement photo/video upload with client-side compression and EXIF stripping
+LABELS: phase:inspection, type:feat, priority:high
+MILESTONE: M9 - Digital Inspection and Media
+DESCRIPTION:
+  - Client-side image compression before upload (configurable max dimension and quality via CFG_*)
+  - EXIF metadata stripped from all images before upload (privacy requirement)
+  - Resumable chunked upload for large files (CFG_UPLOAD_CHUNK_SIZE_BYTES)
+  - ro_media table: ro_id, inspection_id, uploader_id, storage_key, mime_type, size_bytes, caption, uploaded_at
+  - Media archived to cold storage after CFG_PHOTO_ARCHIVE_AFTER_DAYS
+
+Acceptance criteria:
+  - An upload interrupted at 50% resumes cleanly from the interruption point
+  - No EXIF data (GPS, device info) in the uploaded file's metadata
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 38
+TITLE: [M9] Implement diagnostic report PDF and customer approval link
+LABELS: phase:inspection, type:feat, priority:high
+MILESTONE: M9 - Digital Inspection and Media
+DESCRIPTION:
+  - Generate inspection PDF report using WeasyPrint
+  - Report includes: vehicle info, inspection date, section summaries, item statuses, photos, mechanic name
+  - Customer approval link: signed JWT link, single-use, expires at CFG_INSPECTION_APPROVAL_EXPIRY_DAYS
+  - Customer approval page: shows inspection items with status; customer can approve or reject each item
+  - Approved items converted to repair tasks on the linked repair order
+  - Rejected items stored as archived recommendations on vehicle
+
+Acceptance criteria:
+  - Approval link used twice returns 410 Gone on second use
+  - Approved items appear as repair tasks on the OR immediately after customer action
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 39
+TITLE: [M10] Implement KPI computation service and scheduled snapshots
+LABELS: phase:reporting, type:feat, priority:critical
+MILESTONE: M10 - Reporting and Analytics
+DESCRIPTION:
+  - KPIs: revenue (global/period/mechanic), margins (per OR, per part), workshop occupancy, average repair duration, immobilization duration, unpaid invoices total, outstanding amount total, top 10 customers, top 10 suppliers, comeback rate, quotation conversion rate
+  - kpi_snapshot table: id, garage_id, snapshot_date, kpi_code, value (NUMERIC), computed_at
+  - APScheduler/Celery Beat daily snapshot job
+  - Live KPI endpoint: recomputes on demand with CFG_KPI_REFRESH_INTERVAL_SECONDS cache TTL
+  - Recompute target: < 5s at assumed data volume
+
+Acceptance criteria:
+  - Admin dashboard shows live KPIs updating every CFG_KPI_REFRESH_INTERVAL_SECONDS
+  - Daily snapshots enable trend charts over arbitrary date ranges
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 40
+TITLE: [M10] Build analytics dashboard UI
+LABELS: phase:reporting, type:feat, priority:high
+MILESTONE: M10 - Reporting and Analytics
+DESCRIPTION:
+  - Dashboard page with period selector (today, week, month, quarter, year, custom)
+  - Charts (Recharts): revenue trend, repair count trend, outstanding balance evolution, mechanic productivity
+  - KPI summary cards: revenue, outstanding, open repair orders, low-stock alerts, quotation conversion rate
+  - Export buttons: CSV and Excel for each KPI table (openpyxl)
+  - Role-gated: full dashboard for admin; restricted view for accountant (finance KPIs only)
+
+Acceptance criteria:
+  - Dashboard loads under 2s including chart data at assumed data volume
+  - CSV export is clean and importable into Excel
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 41
+TITLE: [M10] Implement accounting export (sales journal, payments journal, VAT summary)
+LABELS: phase:reporting, type:feat, priority:critical
+MILESTONE: M10 - Reporting and Analytics
+DESCRIPTION:
+  - Accounting export format: configurable (Sage, Cegid, EBP, or generic CSV via CFG_ACCOUNTING_FORMAT)
+  - Export records: sales journal (invoices), payment journal (payments), supplier purchases, VAT summary
+  - Export marks records as exported: exported invoices and payments cannot be modified (only via credit note)
+  - accounting_export table: id, garage_id, period_start, period_end, format, status (pending/completed/failed), file_storage_key, exported_by, exported_at
+  - Re-export prevention: warn if records already exported for the period
+
+Acceptance criteria:
+  - Exported file imports cleanly into target accounting software (manual verification documented)
+  - An invoice exported in January cannot be modified in February
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 42
+TITLE: [M11] Implement document categorization and object storage lifecycle
+LABELS: phase:ged, type:feat, priority:critical
+MILESTONE: M11 - Document Management and OCR
+DESCRIPTION:
+  - Extend document table with categories: registration_card, national_id, insurance, accident_photo, repair_attachment, invoice, supplier_invoice
+  - Object storage lifecycle rules: hot storage -> archive after CFG_PHOTO_ARCHIVE_AFTER_DAYS
+  - Full-text searchable metadata: Postgres tsvector index on document.filename and extracted_text
+  - Document search endpoint: filter by category, owner, date range, full-text
+  - Document list and detail UI with category filter
+
+Acceptance criteria:
+  - Documents older than CFG_PHOTO_ARCHIVE_AFTER_DAYS are moved to archive tier automatically
+  - Full-text search returns results in < 300ms at assumed document volume
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 43
+TITLE: [M11] Implement PaddleOCR pipeline for registration card and national ID
+LABELS: phase:ged, type:feat, priority:critical
+MILESTONE: M11 - Document Management and OCR
+DESCRIPTION:
+  - OcrEngine interface wrapping PaddleOCR 3.x
+  - Async pipeline: upload -> queue OCR job -> process -> extract structured fields -> store results
+  - ocr_extraction table: id, document_id, engine_version, raw_text, structured_fields (JSONB), confidence_scores (JSONB), status (pending/completed/failed/needs_review), processed_at
+  - Supported document types v1: carte grise (registration card), national ID
+  - Confidence threshold: per-field configurable (CFG_OCR_CONFIDENCE_THRESHOLD_<FIELD>)
+  - Below-threshold fields: NEVER auto-written; always require human confirmation UI
+  - Human review UI: show extracted fields with confidence; user confirms or corrects each field
+  - OCR errors logged with original image storage reference for audit
+  - Progress feedback: polling or WebSocket status update during processing
+
+Acceptance criteria:
+  - Uploading a clear carte grise pre-fills vehicle form with > 80% field accuracy
+  - A field with confidence below threshold requires manual confirmation before writing to DB
+  - Below-threshold extraction never writes automatically, regardless of confidence value
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 44
+TITLE: [M12] Implement multi-garage tenancy and row-level filtering audit
+LABELS: phase:hardening, type:feat, priority:critical
+MILESTONE: M12 - Multi-garage and Hardening
+DESCRIPTION:
+  - garage table: id, name, address, fiscal_id, currency, locale, timezone, status
+  - Tenant resolution middleware: every authenticated request resolves to one garage_id
+  - super_admin role can switch garage context
+  - Row-level filtering audit: systematically verify every query across every module filters by garage_id
+  - A missing filter on any endpoint is a critical defect — must be caught by integration tests
+  - Per-garage CFG_* configuration table
+  - Cross-garage admin reporting for super_admin only
+
+Acceptance criteria:
+  - A user from Garage A cannot see any data from Garage B via any endpoint
+  - Integration test suite explicitly verifies cross-garage isolation for every entity type
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 45
+TITLE: [M12] Performance hardening — query review, indexes, N+1 audit, caching
+LABELS: phase:hardening, type:perf, priority:high
+MILESTONE: M12 - Multi-garage and Hardening
+DESCRIPTION:
+  - Review all ORM queries for N+1 patterns; add eager loading where needed
+  - Add DB indexes for all foreign keys and common search columns identified during M0–M11
+  - Implement Redis caching for: KPI snapshots (TTL = CFG_KPI_CACHE_TTL_SECONDS), frequently read config (TTL = CFG_CONFIG_CACHE_TTL_SECONDS)
+  - Load test at 2x assumed peak (60 ROs/day throughput simulation, 50 concurrent users)
+  - Validate all performance targets from 01_SOFTWARE_CONCEPTION.md are met
+
+Acceptance criteria:
+  - All interactive endpoints < 2s p95 under 2x load
+  - No N+1 query detectable in query logs during load test
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 46
+TITLE: [M12] Security audit — OWASP ASVS L2 checklist, dependency scan, penetration smoke test
+LABELS: phase:hardening, type:security, priority:critical
+MILESTONE: M12 - Multi-garage and Hardening
+DESCRIPTION:
+  - OWASP ASVS Level 2 checklist review across all modules
+  - Dependency vulnerability scan (pip-audit, npm audit) with zero critical/high findings policy
+  - Secret scan (trufflesecurity/trufflehog or similar) on full git history
+  - Penetration smoke test: auth bypass attempts, IDOR checks, rate limiting verification, SQL injection probes, XSS checks
+  - All findings documented in docs/security/audit_<date>.md; critical findings block deployment
+
+Acceptance criteria:
+  - No critical or high CVEs in production dependencies
+  - No secrets committed to git history
+  - Auth bypass on any protected route fails
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 47
+TITLE: [M12] Backup and restore drill + operator runbook
+LABELS: phase:hardening, type:docs, priority:high
+MILESTONE: M12 - Multi-garage and Hardening
+DESCRIPTION:
+  - Configure daily automated backup: PostgreSQL dump + object storage snapshot to cloud target
+  - Point-in-time recovery configuration (7-day window)
+  - Backup restore drill: restore into clean environment, verify data integrity
+  - Document results in docs/operations/backup_restore_drill_<date>.md
+  - Operator runbook: docs/operations/runbook.md covering startup, shutdown, backup, restore, log rotation, environment variable reference, alert response
+
+Acceptance criteria:
+  - Backup restore drill completes with full data integrity verified
+  - Runbook is sufficient for an operator with no prior project knowledge to manage the system
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 48
+TITLE: [CROSS] Set up per-component logging for all modules
+LABELS: type:chore, priority:high
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+  - Each module must initialize its own structlog logger bound to its component name
+  - Logger setup utility: get_logger(component: str) returns a bound logger
+  - Logging convention enforced: every log entry must include request_id and garage_id when in a request context
+  - Log rotation: CFG_LOG_MAX_BYTES and CFG_LOG_BACKUP_COUNT
+  - Sensitive fields (password, token, card_number) redacted in all log output by a log processor
+
+Acceptance criteria:
+  - Running any API request produces log entries under logs/<component>.log for each module touched
+  - No password or token appears in any log file
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 49
+TITLE: [CROSS] Implement configuration loader and CFG_* settings catalog
+LABELS: type:chore, priority:critical
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+  - pydantic-settings BaseSettings class covering all CFG_* variables
+  - Environment-based config for infrastructure settings (DB_URL, REDIS_URL, S3_*)
+  - Database settings table for runtime-tunable values (CFG_* prefixed)
+  - Settings service: get_setting(key) with Redis cache layer (TTL = CFG_CONFIG_CACHE_TTL_SECONDS)
+  - Full CFG_* reference documented in docs/feature/foundations/config_reference.md
+
+Acceptance criteria:
+  - Changing a CFG_* value in the DB takes effect within CFG_CONFIG_CACHE_TTL_SECONDS without restart
+  - No hard-coded values anywhere in the codebase (enforced by ruff custom rule or grep CI check)
+--- ISSUE END ---
+
+
+--- ISSUE START ---
+ID: 50
+TITLE: [CROSS] Write integration test harness and coverage baseline
+LABELS: type:test, priority:high
+MILESTONE: M0 - Foundations
+DESCRIPTION:
+  - pytest-asyncio setup with async test client (httpx.AsyncClient)
+  - Test database: isolated PostgreSQL per test session with Alembic applied
+  - Factory fixtures for all core entities (user, customer, vehicle, repair_order, etc.)
+  - Coverage target: 80% on new code per PR (enforced in CI)
+  - Test report artifact uploaded to docs/tests/ on every CI run
+  - Test naming convention: test_<feature>_<scenario>_<expected_outcome>
+
+Acceptance criteria:
+  - `pytest` on a clean checkout runs all tests and reports coverage
+  - Coverage below threshold fails the CI build
+--- ISSUE END ---
