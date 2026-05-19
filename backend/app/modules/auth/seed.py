@@ -1,0 +1,237 @@
+"""Seed data for roles and the full permission catalog.
+
+Run via: alembic upgrade head  (the seed migration calls seed_all)
+Or directly: python -m app.modules.auth.seed
+"""
+from __future__ import annotations
+
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Full permission catalog — source of truth from 06_RBAC_DESIGN.md
+# ---------------------------------------------------------------------------
+
+PERMISSIONS: list[dict[str, str]] = [
+    # --- Identity / system ---
+    {"code": "system.settings.read", "resource": "system", "action": "settings.read", "description": "View garage settings"},
+    {"code": "system.settings.update", "resource": "system", "action": "settings.update", "description": "Change garage settings"},
+    {"code": "system.backup.manage", "resource": "system", "action": "backup.manage", "description": "Trigger backup, view backup status"},
+    {"code": "audit.read", "resource": "audit", "action": "read", "description": "View audit log"},
+    {"code": "users.read", "resource": "users", "action": "read", "description": "List and view users"},
+    {"code": "users.create", "resource": "users", "action": "create", "description": "Create user"},
+    {"code": "users.update", "resource": "users", "action": "update", "description": "Update user details"},
+    {"code": "users.deactivate", "resource": "users", "action": "deactivate", "description": "Disable user"},
+    {"code": "roles.read", "resource": "roles", "action": "read", "description": "View roles and permissions"},
+    {"code": "roles.assign", "resource": "roles", "action": "assign", "description": "Assign or revoke roles"},
+    {"code": "roles.manage", "resource": "roles", "action": "manage", "description": "Create or edit roles"},
+    # --- CRM ---
+    {"code": "customer.read", "resource": "customer", "action": "read", "description": "View customers"},
+    {"code": "customer.create", "resource": "customer", "action": "create", "description": "Create customer"},
+    {"code": "customer.update", "resource": "customer", "action": "update", "description": "Edit customer"},
+    {"code": "customer.delete", "resource": "customer", "action": "delete", "description": "Soft delete customer"},
+    {"code": "customer.credit_limit.update", "resource": "customer", "action": "credit_limit.update", "description": "Change credit limit"},
+    {"code": "customer.balance.read", "resource": "customer", "action": "balance.read", "description": "View ledger and outstanding"},
+    {"code": "customer.merge", "resource": "customer", "action": "merge", "description": "Merge duplicate customers"},
+    # --- Vehicle ---
+    {"code": "vehicle.read", "resource": "vehicle", "action": "read", "description": "View vehicles"},
+    {"code": "vehicle.create", "resource": "vehicle", "action": "create", "description": "Create vehicle"},
+    {"code": "vehicle.update", "resource": "vehicle", "action": "update", "description": "Edit vehicle"},
+    {"code": "vehicle.delete", "resource": "vehicle", "action": "delete", "description": "Soft delete vehicle"},
+    # --- Repair Order / Workshop ---
+    {"code": "repair_order.read", "resource": "repair_order", "action": "read", "description": "View repair orders"},
+    {"code": "repair_order.create", "resource": "repair_order", "action": "create", "description": "Create repair order"},
+    {"code": "repair_order.update", "resource": "repair_order", "action": "update", "description": "Edit repair order details"},
+    {"code": "repair_order.delete", "resource": "repair_order", "action": "delete", "description": "Soft delete repair order"},
+    {"code": "repair_order.assign", "resource": "repair_order", "action": "assign", "description": "Assign or reassign mechanic"},
+    {"code": "repair_order.transition", "resource": "repair_order", "action": "transition", "description": "Change status"},
+    {"code": "repair_order.transition.cancel", "resource": "repair_order", "action": "transition.cancel", "description": "Move to cancelled"},
+    {"code": "repair_order.line.manage", "resource": "repair_order", "action": "line.manage", "description": "Add/edit/remove labor and part lines"},
+    {"code": "repair_order.time_entry.manage", "resource": "repair_order", "action": "time_entry.manage", "description": "Start/stop time tracking"},
+    {"code": "repair_order.media.upload", "resource": "repair_order", "action": "media.upload", "description": "Attach photos and videos"},
+    {"code": "inspection.read", "resource": "inspection", "action": "read", "description": "View inspections"},
+    {"code": "inspection.execute", "resource": "inspection", "action": "execute", "description": "Perform inspection"},
+    {"code": "inspection.template.manage", "resource": "inspection", "action": "template.manage", "description": "Create or edit inspection templates"},
+    # --- Inventory ---
+    {"code": "part.read", "resource": "part", "action": "read", "description": "View parts"},
+    {"code": "part.create", "resource": "part", "action": "create", "description": "Create part"},
+    {"code": "part.update", "resource": "part", "action": "update", "description": "Edit part"},
+    {"code": "part.delete", "resource": "part", "action": "delete", "description": "Deactivate part"},
+    {"code": "stock.movement.read", "resource": "stock", "action": "movement.read", "description": "View stock movements"},
+    {"code": "stock.movement.create", "resource": "stock", "action": "movement.create", "description": "Record stock movement"},
+    {"code": "stock.movement.adjust", "resource": "stock", "action": "movement.adjust", "description": "Manual stock adjustment"},
+    {"code": "stock.reservation.manage", "resource": "stock", "action": "reservation.manage", "description": "Reserve or release stock"},
+    {"code": "stock.alert.read", "resource": "stock", "action": "alert.read", "description": "View low-stock alerts"},
+    # --- Quotation / Invoice ---
+    {"code": "quotation.read", "resource": "quotation", "action": "read", "description": "View quotations"},
+    {"code": "quotation.create", "resource": "quotation", "action": "create", "description": "Create quotation"},
+    {"code": "quotation.update", "resource": "quotation", "action": "update", "description": "Edit quotation"},
+    {"code": "quotation.send", "resource": "quotation", "action": "send", "description": "Send quotation to customer"},
+    {"code": "quotation.approve_on_behalf", "resource": "quotation", "action": "approve_on_behalf", "description": "Internally mark approved"},
+    {"code": "quotation.convert", "resource": "quotation", "action": "convert", "description": "Convert to invoice or repair order"},
+    {"code": "invoice.read", "resource": "invoice", "action": "read", "description": "View invoices"},
+    {"code": "invoice.create", "resource": "invoice", "action": "create", "description": "Create invoice"},
+    {"code": "invoice.update", "resource": "invoice", "action": "update", "description": "Edit invoice (draft only)"},
+    {"code": "invoice.issue", "resource": "invoice", "action": "issue", "description": "Issue invoice (locks document number)"},
+    {"code": "invoice.cancel", "resource": "invoice", "action": "cancel", "description": "Cancel or issue credit note"},
+    {"code": "invoice.discount.apply", "resource": "invoice", "action": "discount.apply", "description": "Apply discount above standard threshold"},
+    {"code": "invoice.credit_limit.override", "resource": "invoice", "action": "credit_limit.override", "description": "Override customer credit limit block"},
+    # --- Payment / Cash Register ---
+    {"code": "payment.read", "resource": "payment", "action": "read", "description": "View payments"},
+    {"code": "payment.record", "resource": "payment", "action": "record", "description": "Record payment"},
+    {"code": "payment.cancel", "resource": "payment", "action": "cancel", "description": "Cancel payment"},
+    {"code": "deposit.record", "resource": "deposit", "action": "record", "description": "Record deposit"},
+    {"code": "cash_session.open", "resource": "cash_session", "action": "open", "description": "Open cash session"},
+    {"code": "cash_session.close", "resource": "cash_session", "action": "close", "description": "Close cash session"},
+    {"code": "cash_session.read", "resource": "cash_session", "action": "read", "description": "View session details"},
+    {"code": "refund.execute", "resource": "refund", "action": "execute", "description": "Execute refund"},
+    # --- Supplier / Purchasing ---
+    {"code": "supplier.read", "resource": "supplier", "action": "read", "description": "View suppliers"},
+    {"code": "supplier.create", "resource": "supplier", "action": "create", "description": "Create supplier"},
+    {"code": "supplier.update", "resource": "supplier", "action": "update", "description": "Edit supplier"},
+    {"code": "purchase_request.create", "resource": "purchase_request", "action": "create", "description": "Create purchase request"},
+    {"code": "purchase_order.create", "resource": "purchase_order", "action": "create", "description": "Create purchase order"},
+    {"code": "purchase_order.approve", "resource": "purchase_order", "action": "approve", "description": "Approve purchase request/order"},
+    {"code": "purchase_order.send", "resource": "purchase_order", "action": "send", "description": "Send PO to supplier"},
+    {"code": "purchase_order.reception.record", "resource": "purchase_order", "action": "reception.record", "description": "Record reception"},
+    {"code": "supplier_invoice.record", "resource": "supplier_invoice", "action": "record", "description": "Attach supplier invoice"},
+    # --- Notifications ---
+    {"code": "notification.read", "resource": "notification", "action": "read", "description": "View delivery log"},
+    {"code": "notification.send", "resource": "notification", "action": "send", "description": "Send manual notification"},
+    {"code": "notification.template.manage", "resource": "notification", "action": "template.manage", "description": "Edit notification templates"},
+    # --- Documents / OCR ---
+    {"code": "document.read", "resource": "document", "action": "read", "description": "View document metadata"},
+    {"code": "document.download", "resource": "document", "action": "download", "description": "Download via signed URL"},
+    {"code": "document.upload", "resource": "document", "action": "upload", "description": "Upload document"},
+    {"code": "document.delete", "resource": "document", "action": "delete", "description": "Soft delete document"},
+    {"code": "ocr.execute", "resource": "ocr", "action": "execute", "description": "Run OCR on a document"},
+    {"code": "ocr.confirm", "resource": "ocr", "action": "confirm", "description": "Confirm OCR extraction and apply"},
+    # --- Reporting ---
+    {"code": "reporting.dashboard.read", "resource": "reporting", "action": "dashboard.read", "description": "KPI dashboard"},
+    {"code": "reporting.revenue.read", "resource": "reporting", "action": "revenue.read", "description": "Revenue reports"},
+    {"code": "reporting.workshop.read", "resource": "reporting", "action": "workshop.read", "description": "Workshop KPI"},
+    {"code": "reporting.inventory.read", "resource": "reporting", "action": "inventory.read", "description": "Inventory KPI"},
+    {"code": "reporting.accounting.export", "resource": "reporting", "action": "accounting.export", "description": "Accounting export"},
+]
+
+# ---------------------------------------------------------------------------
+# Role definitions (system roles — garage_id = NULL)
+# ---------------------------------------------------------------------------
+
+ROLES: list[dict[str, Any]] = [
+    {"code": "super_admin", "display_name": "Super Administrator", "is_system": True},
+    {"code": "admin", "display_name": "Administrator", "is_system": True},
+    {"code": "secretary", "display_name": "Secretary / Reception", "is_system": True},
+    {"code": "mechanic", "display_name": "Mechanic", "is_system": True},
+    {"code": "inventory_manager", "display_name": "Inventory Manager", "is_system": True},
+    {"code": "accountant", "display_name": "Accountant", "is_system": True},
+    {"code": "read_only", "display_name": "Read Only", "is_system": True},
+]
+
+# ---------------------------------------------------------------------------
+# Role-to-permission assignments (system defaults from RBAC design matrix)
+# A = grant, R = grant (read-only variant same code), O = optional (grant), - = skip
+# ---------------------------------------------------------------------------
+
+# All permissions granted to super_admin and admin
+_ALL = {p["code"] for p in PERMISSIONS}
+
+_SECRETARY = {
+    "system.settings.read",
+    "customer.read", "customer.create", "customer.update",
+    "customer.balance.read",
+    "vehicle.read", "vehicle.create", "vehicle.update",
+    "repair_order.read", "repair_order.create", "repair_order.update",
+    "repair_order.assign", "repair_order.transition",
+    "repair_order.line.manage", "repair_order.media.upload",
+    "inspection.read",
+    "part.read",
+    "stock.movement.read", "stock.alert.read",
+    "quotation.read", "quotation.create", "quotation.update",
+    "quotation.send", "quotation.approve_on_behalf", "quotation.convert",
+    "invoice.read", "invoice.create", "invoice.update", "invoice.issue",
+    "payment.read", "payment.record",
+    "deposit.record",
+    "cash_session.open", "cash_session.close", "cash_session.read",
+    "supplier.read", "supplier.create", "supplier.update",
+    "purchase_request.create",
+    "notification.read",
+    "document.read", "document.download", "document.upload",
+    "reporting.dashboard.read",
+}
+
+_MECHANIC = {
+    "customer.read",
+    "vehicle.read",
+    "repair_order.read", "repair_order.transition",
+    "repair_order.time_entry.manage", "repair_order.media.upload",
+    "inspection.read", "inspection.execute",
+    "part.read",
+    "stock.movement.read",
+    "quotation.read",
+    "invoice.read",
+    "payment.read",
+    "reporting.dashboard.read", "reporting.workshop.read",
+}
+
+_INVENTORY_MANAGER = {
+    "customer.read",
+    "vehicle.read",
+    "repair_order.read",
+    "part.read", "part.create", "part.update",
+    "stock.movement.read", "stock.movement.create", "stock.movement.adjust",
+    "stock.reservation.manage", "stock.alert.read",
+    "supplier.read", "supplier.create", "supplier.update",
+    "purchase_request.create",
+    "purchase_order.create", "purchase_order.approve",
+    "purchase_order.send", "purchase_order.reception.record",
+    "supplier_invoice.record",
+    "reporting.dashboard.read", "reporting.inventory.read",
+}
+
+_ACCOUNTANT = {
+    "system.settings.read",
+    "audit.read",
+    "customer.read", "customer.balance.read",
+    "vehicle.read",
+    "repair_order.read",
+    "part.read",
+    "stock.movement.read",
+    "quotation.read",
+    "invoice.read",
+    "payment.read",
+    "cash_session.read",
+    "supplier.read",
+    "reporting.dashboard.read", "reporting.revenue.read",
+    "reporting.workshop.read", "reporting.inventory.read",
+    "reporting.accounting.export",
+    "document.read", "document.download",
+}
+
+_READ_ONLY = {
+    "system.settings.read",
+    "audit.read",
+    "users.read",
+    "customer.read", "customer.balance.read",
+    "vehicle.read",
+    "repair_order.read",
+    "part.read",
+    "stock.movement.read", "stock.alert.read",
+    "quotation.read",
+    "invoice.read",
+    "payment.read",
+    "cash_session.read",
+    "supplier.read",
+    "reporting.dashboard.read", "reporting.revenue.read",
+    "reporting.workshop.read", "reporting.inventory.read",
+    "document.read",
+}
+
+ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "super_admin": _ALL,
+    "admin": _ALL,
+    "secretary": _SECRETARY,
+    "mechanic": _MECHANIC,
+    "inventory_manager": _INVENTORY_MANAGER,
+    "accountant": _ACCOUNTANT,
+    "read_only": _READ_ONLY,
+}
