@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import axios from 'axios'
 import {
   Box,
   Button,
@@ -39,8 +40,14 @@ export function LoginPage() {
     try {
       await login(values.email, values.password)
       navigate('/', { replace: true })
-    } catch {
-      setServerError('Email ou mot de passe incorrect.')
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setServerError('Email ou mot de passe incorrect.')
+      } else if (axios.isAxiosError(err) && !err.response) {
+        setServerError('Impossible de joindre le serveur. Vérifiez votre connexion.')
+      } else {
+        setServerError('Une erreur inattendue est survenue. Veuillez réessayer.')
+      }
     }
   }
 

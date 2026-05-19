@@ -7,6 +7,8 @@ import {
 } from 'react'
 import { apiClient } from '../lib/apiClient'
 
+const GARAGE_ID = import.meta.env.VITE_GARAGE_ID ?? '1'
+
 interface User {
   id: string
   email: string
@@ -36,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       access_token: string
       refresh_token: string
       user: User
-    }>('/auth/login', { email, password })
+    }>('/auth/login', { email, password }, { headers: { 'X-Garage-ID': GARAGE_ID } })
 
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
@@ -46,7 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiClient.post('/auth/logout')
+      const refreshToken = localStorage.getItem('refresh_token')
+      if (refreshToken) {
+        await apiClient.post('/auth/logout', { refresh_token: refreshToken })
+      }
     } finally {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
