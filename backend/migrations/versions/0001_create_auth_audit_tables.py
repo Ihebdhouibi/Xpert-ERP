@@ -71,12 +71,11 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------
-    # user_status enum
+    # user_status enum  (raw SQL so it stays inside the transaction)
     # ------------------------------------------------------------------
-    user_status = postgresql.ENUM(
-        "active", "inactive", "locked", name="user_status_enum", create_type=True
+    op.execute(
+        "CREATE TYPE IF NOT EXISTS user_status_enum AS ENUM ('active', 'inactive', 'locked')"
     )
-    user_status.create(op.get_bind(), checkfirst=True)
 
     # ------------------------------------------------------------------
     # app_user
@@ -96,7 +95,7 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.Text(), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("active", "inactive", "locked", name="user_status_enum"),
+            postgresql.ENUM("active", "inactive", "locked", name="user_status_enum", create_type=False),
             nullable=False,
             server_default="active",
         ),
