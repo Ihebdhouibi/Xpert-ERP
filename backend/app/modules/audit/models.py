@@ -4,16 +4,16 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.types import BigIntPK, JsonB
 
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     # Who performed the action (NULL for system/scheduler actions)
@@ -34,8 +34,8 @@ class AuditLog(Base):
     entity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     # Before/after snapshots (JSONB — stripped of sensitive fields by writer)
-    old_value: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # type: ignore[type-arg]
-    new_value: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # type: ignore[type-arg]
+    old_value: Mapped[Optional[dict]] = mapped_column(JsonB, nullable=True)  # type: ignore[type-arg]
+    new_value: Mapped[Optional[dict]] = mapped_column(JsonB, nullable=True)  # type: ignore[type-arg]
 
     # Human-readable reason / comment supplied by the actor
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

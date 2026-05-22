@@ -2,13 +2,32 @@
 from __future__ import annotations
 
 import asyncio
+import os
+
+# ---------------------------------------------------------------------------
+# Set required env vars BEFORE any app module is imported.
+# pydantic-settings reads os.environ at Settings() construction time.
+# DATABASE_URL uses a PG-style DSN so SQLAlchemy's module-level
+# create_async_engine() accepts pool_size / max_overflow without error;
+# tests always override get_db with their own SQLite in-memory engine.
+# ---------------------------------------------------------------------------
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/xpert_test")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only-32chars!!")
+os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9000")
+os.environ.setdefault("S3_ACCESS_KEY_ID", "testkey")
+os.environ.setdefault("S3_SECRET_ACCESS_KEY", "testsecret")
+os.environ.setdefault("S3_BUCKET_DOCUMENTS", "test-documents")
+os.environ.setdefault("S3_BUCKET_MEDIA", "test-media")
+
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.core.redis import get_redis
@@ -23,8 +42,7 @@ def event_loop_policy():
 
 
 # ---------------------------------------------------------------------------
-# In-memory-compatible test DB (SQLite async for unit tests)
-# Use the DATABASE_URL env var for integration tests against real PG
+# In-memory SQLite test DB
 # ---------------------------------------------------------------------------
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
@@ -32,7 +50,12 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine(TEST_DB_URL, echo=False)
+    engine = create_async_engine(
+        TEST_DB_URL,
+        echo=False,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -84,7 +107,10 @@ def mock_redis() -> AsyncMock:
 async def test_client(seeded_db: AsyncSession, mock_redis: AsyncMock) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
-    app.dependency_overrides[get_db] = lambda: seeded_db
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield seeded_db
+
+    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = lambda: mock_redis
 
     async with AsyncClient(

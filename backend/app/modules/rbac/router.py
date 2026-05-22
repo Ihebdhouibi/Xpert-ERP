@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -262,6 +262,7 @@ async def assign_roles(
 @router.delete(
     "/{public_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
     dependencies=[require_permission("users.deactivate")],
     summary="Soft-delete (deactivate) a user",
 )
@@ -269,7 +270,7 @@ async def deactivate_user(
     public_id: str,
     actor: AuthUser,
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     import uuid as _uuid
     from datetime import datetime, timezone
     result = await db.execute(
@@ -292,3 +293,4 @@ async def deactivate_user(
     target.deleted_at = datetime.now(tz=timezone.utc)
     target.status = "inactive"  # type: ignore[assignment]
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

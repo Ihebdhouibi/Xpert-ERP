@@ -1,7 +1,7 @@
 """RBAC FastAPI dependency — require_permission() and current_user."""
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.core.redis import get_redis
 from app.modules.auth.service import decode_token, is_token_denied
 
-_bearer = HTTPBearer(auto_error=True)
+_bearer = HTTPBearer(auto_error=False)
 
 
 class CurrentUser:
@@ -39,9 +39,15 @@ class CurrentUser:
 
 
 async def _resolve_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(_bearer)],
     redis: Redis = Depends(get_redis),
 ) -> CurrentUser:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     try:
         payload: dict[str, Any] = decode_token(token, expected_type="access")

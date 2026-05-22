@@ -17,12 +17,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
 )
-from sqlalchemy.dialects.postgresql import CITEXT, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import BigIntPK, CIText
 
 
 class UserStatus(str, enum.Enum):
@@ -34,13 +35,13 @@ class UserStatus(str, enum.Enum):
 class AppUser(Base):
     __tablename__ = "app_user"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     public_id: Mapped[uuid_lib.UUID] = mapped_column(
-        UUID(as_uuid=True), unique=True, nullable=False, default=uuid_lib.uuid4
+        Uuid(as_uuid=True), unique=True, nullable=False, default=uuid_lib.uuid4
     )
     garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
-    email: Mapped[str] = mapped_column(CITEXT, nullable=False)
+    email: Mapped[str] = mapped_column(CIText, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -91,7 +92,10 @@ class AppUser(Base):
     )
 
     user_roles: Mapped[list[UserRole]] = relationship(
-        "UserRole", back_populates="user", cascade="all, delete-orphan"
+        "UserRole",
+        foreign_keys="[UserRole.user_id]",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
     __table_args__ = (
@@ -103,7 +107,7 @@ class AppUser(Base):
 class Role(Base):
     __tablename__ = "role"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     # NULL garage_id = system-wide role; non-NULL = garage-custom role
     garage_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     code: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -127,7 +131,7 @@ class Role(Base):
 class Permission(Base):
     __tablename__ = "permission"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     resource: Mapped[str] = mapped_column(String(100), nullable=False)
