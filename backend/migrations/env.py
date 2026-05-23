@@ -27,6 +27,7 @@ from app.core.database import Base  # noqa: E402
 # Import all models so Alembic autogenerate can detect them
 import app.modules.auth.models  # noqa: F401, E402
 import app.modules.audit.models  # noqa: F401, E402
+import app.modules.customer.models  # noqa: F401, E402
 
 config = context.config
 if config.config_file_name is not None:
