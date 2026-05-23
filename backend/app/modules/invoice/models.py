@@ -113,6 +113,12 @@ class Invoice(Base):
         cascade="all, delete-orphan",
         order_by="InvoiceLine.id",
     )
+    payments: Mapped[list["Payment"]] = relationship(  # type: ignore[name-defined]
+        "Payment",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        order_by="Payment.id",
+    )
 
     __table_args__ = (
         Index("ix_invoice_garage_id", "garage_id"),
