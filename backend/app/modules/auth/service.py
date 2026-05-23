@@ -65,6 +65,7 @@ def create_access_token(
     garage_id: int,
     roles: list[str],
     permissions: list[str],
+    user_id: int = 0,
 ) -> tuple[str, int]:
     """Return (encoded_jwt, expires_in_seconds)."""
     cfg = get_settings()
@@ -72,6 +73,7 @@ def create_access_token(
     expire = _utcnow() + timedelta(seconds=expire_seconds)
     payload: dict[str, Any] = {
         "sub": subject,
+        "uid": user_id,
         "gid": garage_id,
         "roles": roles,
         "perms": permissions,
@@ -188,7 +190,7 @@ async def login(
     permissions = repo.collect_permissions(user_with_roles)
     subject = str(user.public_id)
 
-    access_token, expires_in = create_access_token(subject, garage_id, roles, permissions)
+    access_token, expires_in = create_access_token(subject, garage_id, roles, permissions, user_id=user.id)
     refresh_token, jti = create_refresh_token(subject)
 
     refresh_ttl = cfg.refresh_token_expire_days * 86400
@@ -259,7 +261,7 @@ async def refresh(
     permissions = repo.collect_permissions(user_with_roles)
 
     access_token, expires_in = create_access_token(
-        subject, user.garage_id, roles, permissions
+        subject, user.garage_id, roles, permissions, user_id=user.id
     )
     new_refresh_token, new_jti = create_refresh_token(subject)
     refresh_ttl = cfg.refresh_token_expire_days * 86400

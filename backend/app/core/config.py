@@ -85,6 +85,18 @@ class Settings(BaseSettings):
     smtp_from_address: str = ""
     smtp_from_name: str = "Xpert-ERP"
 
+    # -------------------------------------------------------------------------
+    # Document upload (CFG_* runtime tunables backed by env for now)
+    # -------------------------------------------------------------------------
+    max_upload_size_bytes: int = 10_485_760  # 10 MB
+    allowed_mime_types: list[str] = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    ]
+    signed_url_expiry_seconds: int = 3600  # 1 hour
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
