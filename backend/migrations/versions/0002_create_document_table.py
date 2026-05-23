@@ -21,25 +21,36 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # Enum types
+    # Enum types (idempotent DO blocks)
     # ------------------------------------------------------------------
     op.execute(
-        "CREATE TYPE IF NOT EXISTS document_status_enum AS ENUM ('active', 'deleted')"
-    )
-    op.execute(
         """
-        CREATE TYPE IF NOT EXISTS document_category_enum AS ENUM (
-            'registration_card', 'id_doc', 'insurance', 'accident_photo',
-            'invoice', 'supplier_invoice', 'repair_attachment', 'generic'
-        )
+        DO $$ BEGIN
+            CREATE TYPE document_status_enum AS ENUM ('active', 'deleted');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
         """
     )
     op.execute(
         """
-        CREATE TYPE IF NOT EXISTS owner_entity_type_enum AS ENUM (
-            'customer', 'vehicle', 'repair_order',
-            'invoice', 'supplier_invoice', 'generic'
-        )
+        DO $$ BEGIN
+            CREATE TYPE document_category_enum AS ENUM (
+                'registration_card', 'id_doc', 'insurance', 'accident_photo',
+                'invoice', 'supplier_invoice', 'repair_attachment', 'generic'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+        """
+    )
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE owner_entity_type_enum AS ENUM (
+                'customer', 'vehicle', 'repair_order',
+                'invoice', 'supplier_invoice', 'generic'
+            );
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
         """
     )
 

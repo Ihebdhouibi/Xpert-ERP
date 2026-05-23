@@ -20,18 +20,24 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # ------------------------------------------------------------------
-    # Enum types
+    # Enum types (idempotent DO blocks)
     # ------------------------------------------------------------------
     op.execute(
         """
-        CREATE TYPE IF NOT EXISTS fuel_type_enum AS ENUM
-        ('gasoline', 'diesel', 'hybrid', 'ev', 'lpg', 'cng')
+        DO $$ BEGIN
+            CREATE TYPE fuel_type_enum AS ENUM
+            ('gasoline', 'diesel', 'hybrid', 'ev', 'lpg', 'cng');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
         """
     )
     op.execute(
         """
-        CREATE TYPE IF NOT EXISTS vehicle_status_enum AS ENUM
-        ('active', 'inactive', 'scrapped')
+        DO $$ BEGIN
+            CREATE TYPE vehicle_status_enum AS ENUM
+            ('active', 'inactive', 'scrapped');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
         """
     )
 

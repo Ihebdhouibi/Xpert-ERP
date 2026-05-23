@@ -71,10 +71,15 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------
-    # user_status enum  (raw SQL so it stays inside the transaction)
+    # user_status enum  (idempotent DO block)
     # ------------------------------------------------------------------
     op.execute(
-        "CREATE TYPE IF NOT EXISTS user_status_enum AS ENUM ('active', 'inactive', 'locked')"
+        """
+        DO $$ BEGIN
+            CREATE TYPE user_status_enum AS ENUM ('active', 'inactive', 'locked');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+        """
     )
 
     # ------------------------------------------------------------------

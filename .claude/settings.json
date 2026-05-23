@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "PowerShell($ports = 6379, 9000, 9001; foreach \\($p in $ports\\) { $r = Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue; if \\($r\\) { \"Port $p IN USE by PID $\\($r[0].OwningProcess\\)\" } else { \"Port $p FREE\" } })",
+      "PowerShell($paths = @\\('C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe', \"$env:LOCALAPPDATA\\\\Docker\\\\Docker Desktop.exe\", \"$env:ProgramFiles\\(x86\\)\\\\Docker\\\\Docker\\\\Docker Desktop.exe\"\\); $found = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1; if \\($found\\) { \"FOUND: $found\" } else { \"NOT FOUND in standard locations\" })",
+      "PowerShell(Start-Process -FilePath 'C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe')",
+      "PowerShell(\"Launched Docker Desktop - waiting for daemon...\")",
+      "PowerShell(winget --version 2>$null)",
+      "PowerShell(winget search \"PostgreSQL.PostgreSQL\" --exact 2>$null)",
+      "PowerShell(winget search \"PostgreSQL.PostgreSQL.18\" 2>$null)",
+      "PowerShell(\"---\")",
+      "PowerShell(Get-ChildItem -Path 'd:\\\\Projects\\\\Xpert-ERP\\\\backend' -Force | Where-Object { $_.Name -match '^\\(venv|\\\\.venv|env\\)$' } | Select-Object Name, Mode)",
+      "Bash(d:/Projects/Xpert-ERP/venv/Scripts/python.exe -c \"from app.modules.customer.models import Customer, CustomerContact, CustomerBalanceEvent, CustomerType, CustomerStatus, ContactChannel; print\\('OK:', Customer.__tablename__, CustomerContact.__tablename__, CustomerBalanceEvent.__tablename__\\)\")",
+      "Bash(d:/Projects/Xpert-ERP/venv/Scripts/python.exe -c ' *)"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 """M2 - create customer, customer_contact, customer_balance_event tables.
 
-Revision ID: 0002
-Revises: 0001
+Revision ID: 0004
+Revises: 0003
 Create Date: 2026-05-23
 """
 from __future__ import annotations
@@ -13,8 +13,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers
-revision: str = "0002"
-down_revision: str | None = "0001"
+revision: str = "0004"
+down_revision: str | None = "0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
