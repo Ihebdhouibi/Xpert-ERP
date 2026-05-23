@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.repair_order.models import (
     RepairOrder,
@@ -29,7 +30,11 @@ class RepairOrderRepository:
 
     @staticmethod
     async def get_by_public_id(
-        db: AsyncSession, garage_id: int, public_id: str, include_deleted: bool = False
+        db: AsyncSession,
+        garage_id: int,
+        public_id: str,
+        include_deleted: bool = False,
+        load_relationships: bool = False,
     ) -> RepairOrder | None:
         """Get repair order by public UUID."""
         import uuid
@@ -44,6 +49,12 @@ class RepairOrderRepository:
         )
         if not include_deleted:
             stmt = stmt.where(RepairOrder.deleted_at.is_(None))
+        if load_relationships:
+            stmt = stmt.options(
+                selectinload(RepairOrder.labor_lines),
+                selectinload(RepairOrder.part_lines),
+                selectinload(RepairOrder.status_events),
+            )
         return (await db.execute(stmt)).scalar_one_or_none()
 
     @staticmethod

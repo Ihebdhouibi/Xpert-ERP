@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.repair_order.models import ROStatus
 
@@ -100,6 +100,8 @@ class ROStatusEventSummary(BaseModel):
 
 class RepairOrderSummary(BaseModel):
     """Repair order summary for list view."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: str  # public_id
     customer_id: int
     vehicle_id: Optional[int]
@@ -111,19 +113,30 @@ class RepairOrderSummary(BaseModel):
     actual_cost_minor: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
-
-    @field_validator("id", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def convert_public_id(cls, v):
-        """Convert UUID to string."""
-        return str(v) if v else v
+    def _remap_public_id(cls, data):
+        """When validating from ORM object, use public_id as id."""
+        if hasattr(data, "public_id"):
+            return {
+                "id": str(data.public_id),
+                "customer_id": data.customer_id,
+                "vehicle_id": data.vehicle_id,
+                "description": data.description,
+                "status": data.status,
+                "priority": data.priority,
+                "estimated_cost_minor": data.estimated_cost_minor,
+                "estimated_cost_currency": data.estimated_cost_currency,
+                "actual_cost_minor": data.actual_cost_minor,
+                "created_at": data.created_at,
+            }
+        return data
 
 
 class RepairOrderDetail(BaseModel):
     """Repair order full detail with line items and status history."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
     id: str  # public_id
     customer_id: int
     vehicle_id: Optional[int]
@@ -142,12 +155,27 @@ class RepairOrderDetail(BaseModel):
     part_lines: list[ROPartLineSummary] = []
     status_events: list[ROStatusEventSummary] = []
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
-
-    @field_validator("id", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def convert_public_id(cls, v):
-        """Convert UUID to string."""
-        return str(v) if v else v
+    def _remap_public_id(cls, data):
+        """When validating from ORM object, use public_id as id."""
+        if hasattr(data, "public_id"):
+            return {
+                "id": str(data.public_id),
+                "customer_id": data.customer_id,
+                "vehicle_id": data.vehicle_id,
+                "description": data.description,
+                "status": data.status,
+                "priority": data.priority,
+                "estimated_cost_minor": data.estimated_cost_minor,
+                "estimated_cost_currency": data.estimated_cost_currency,
+                "actual_cost_minor": data.actual_cost_minor,
+                "notes": data.notes,
+                "created_at": data.created_at,
+                "updated_at": data.updated_at,
+                "version": data.version,
+                "labor_lines": data.labor_lines,
+                "part_lines": data.part_lines,
+                "status_events": data.status_events,
+            }
+        return data
