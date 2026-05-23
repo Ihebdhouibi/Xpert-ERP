@@ -26,6 +26,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     logger = get_logger("app")
     logger.info("startup", version=settings.app_version, environment=settings.environment)
+
+    # Run Alembic migrations on every startup (safe — only applies pending ones)
+    try:
+        from alembic import command
+        from alembic.config import Config as AlembicConfig
+        from pathlib import Path
+
+        alembic_cfg = AlembicConfig(str(Path(__file__).parent.parent / "alembic.ini"))
+        # Use sync URL (psycopg2) for Alembic
+        sync_url = settings.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://", 1
+        )
+        alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
+        command.upgrade(alembic_cfg, "head")
+        logger.info("migrations_applied")
+    except Exception as exc:
+        logger.error("migrations_failed", error=str(exc))
+        raise
+
     yield
     await close_redis()
     logger.info("shutdown")
