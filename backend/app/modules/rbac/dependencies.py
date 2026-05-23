@@ -25,8 +25,10 @@ class CurrentUser:
         garage_id: int,
         roles: list[str],
         permissions: list[str],
+        user_id: int = 0,
     ) -> None:
         self.public_id = public_id
+        self.user_id = user_id
         self.garage_id = garage_id
         self.roles = roles
         self.permissions = permissions
@@ -68,6 +70,7 @@ async def _resolve_current_user(
 
     return CurrentUser(
         public_id=payload["sub"],
+        user_id=payload.get("uid", 0),
         garage_id=payload["gid"],
         roles=payload.get("roles", []),
         permissions=payload.get("perms", []),
