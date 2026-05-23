@@ -6,6 +6,9 @@ import { CustomersListPage } from './pages/customers/CustomersListPage'
 import { CustomerCreatePage } from './pages/customers/CustomerCreatePage'
 import { CustomerEditPage } from './pages/customers/CustomerEditPage'
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage'
+import { RepairOrdersListPage } from './pages/repair-orders/RepairOrdersListPage'
+import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePage'
+import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
 
 export const router = createBrowserRouter([
   {
@@ -49,6 +52,30 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <CustomerEditPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/repair-orders',
+    element: (
+      <ProtectedRoute>
+        <RepairOrdersListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/repair-orders/new',
+    element: (
+      <ProtectedRoute>
+        <RepairOrderCreatePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/repair-orders/:publicId',
+    element: (
+      <ProtectedRoute>
+        <RepairOrderDetailPage />
       </ProtectedRoute>
     ),
   },

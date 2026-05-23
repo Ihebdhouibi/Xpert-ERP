@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material'
 import PeopleIcon from '@mui/icons-material/People'
+import BuildIcon from '@mui/icons-material/Build'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -62,6 +63,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Rechercher et gérer
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="repair_order.read">
+          <Paper
+            component={RouterLink}
+            to="/repair-orders"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <BuildIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Ordres de réparation
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Atelier et suivi
               </Typography>
             </Box>
           </Paper>
