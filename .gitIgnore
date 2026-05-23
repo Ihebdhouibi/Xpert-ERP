@@ -1,1 +1,35 @@
+# Python
 venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Data / temp
+backend/data/
+
+# Frontend build artifacts
+frontend/tsconfig.tsbuildinfo
+frontend/dist/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Conversation exports
+projectContext/CONVERSATION_EXPORT.md
