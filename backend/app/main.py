@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     from app.modules.sequence.router import router as sequence_router
     from app.modules.quotation.router import router as quotation_router
     from app.modules.invoice.router import router as invoice_router
+    from app.modules.pdf.router import router as pdf_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(sequence_router, prefix="/api/v1")
     app.include_router(quotation_router, prefix="/api/v1")
     app.include_router(invoice_router, prefix="/api/v1")
+    app.include_router(pdf_router, prefix="/api/v1")
 
     return app
 

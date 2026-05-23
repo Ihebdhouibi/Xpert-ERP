@@ -97,6 +97,21 @@ class Settings(BaseSettings):
     ]
     signed_url_expiry_seconds: int = 3600  # 1 hour
 
+    # -------------------------------------------------------------------------
+    # PDF / Document printing (CFG_* runtime tunables)
+    # -------------------------------------------------------------------------
+    pdf_garage_name: str = "Xpert Garage"
+    pdf_garage_address: str = ""
+    pdf_garage_phone: str = ""
+    pdf_garage_email: str = ""
+    pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
+    pdf_vat_number: str = ""
+    pdf_legal_mention: str = ""
+    pdf_bank_details: str = ""
+    pdf_footer_text: str = ""
+    pdf_currency_symbol: str = "€"
+    pdf_payment_terms: str = "Paiement à 30 jours"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
