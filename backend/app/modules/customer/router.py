@@ -1,0 +1,428 @@
+"""Customer module HTTP endpoints.
+
+Wires the service layer to FastAPI. Permission gates come from the RBAC
+dependency factory. The merge-prompt 409 response is returned as a raw
+JSONResponse so the body shape matches `MergePromptResponse`.
+"""
+from __future__ import annotations
+
+from typing import Annotated, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.modules.auth.models import AppUser
+from app.modules.customer import repository as repo, service as svc
+from app.modules.customer.models import (
+    Customer,
+    CustomerBalanceEvent,
+    CustomerContact,
+    CustomerStatus,
+    CustomerType,
+)
+from app.modules.customer.schemas import (
+    AddressSchema,
+    CreditLimitUpdateRequest,
+    CustomerBalanceEventListResponse,
+    CustomerBalanceEventSummary,
+    CustomerContactSummary,
+    CustomerCreateRequest,
+    CustomerDetail,
+    CustomerListResponse,
+    CustomerSummary,
+    CustomerUpdateRequest,
+    MergePromptResponse,
+)
+from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
+
+router = APIRouter(prefix="/customers", tags=["customers"])
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_actor_user_id(
+    db: AsyncSession, current_user_public_id: str
+) -> Optional[int]:
+    """Resolve JWT subject (public_id) → internal app_user.id for audit.
+
+    Returns None if the lookup fails so audit still writes (with NULL user_id)
+    instead of breaking the request.
+    """
+    import uuid as _uuid
+    try:
+        uid = _uuid.UUID(current_user_public_id)
+    except (ValueError, AttributeError):
+        return None
+    result = await db.execute(select(AppUser.id).where(AppUser.public_id == uid))
+    row = result.first()
+    return row[0] if row else None
+
+
+def _request_id(request: Request) -> Optional[str]:
+    return request.headers.get("X-Request-ID")
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    return request.client.host if request.client else None
+
+
+def _to_summary(c: Customer) -> CustomerSummary:
+    return CustomerSummary(
+        id=str(c.public_id),
+        garage_id=c.garage_id,
+        type=c.type,
+        full_name=c.full_name,
+        company_name=c.company_name,
+        email=c.email,
+        phone_e164=c.phone_e164,
+        status=c.status,
+        segment=c.segment,
+        credit_limit_minor=c.credit_limit_minor,
+        credit_currency=c.credit_currency,
+        outstanding_minor=c.outstanding_minor,
+        last_visit_at=c.last_visit_at,
+        created_at=c.created_at,
+    )
+
+
+def _to_detail(c: Customer) -> CustomerDetail:
+    return CustomerDetail(
+        id=str(c.public_id),
+        garage_id=c.garage_id,
+        type=c.type,
+        full_name=c.full_name,
+        company_name=c.company_name,
+        email=c.email,
+        phone_e164=c.phone_e164,
+        status=c.status,
+        segment=c.segment,
+        credit_limit_minor=c.credit_limit_minor,
+        credit_currency=c.credit_currency,
+        outstanding_minor=c.outstanding_minor,
+        last_visit_at=c.last_visit_at,
+        created_at=c.created_at,
+        fiscal_id=c.fiscal_id,
+        address=c.address,
+        loyalty_points=c.loyalty_points,
+        notes=c.notes,
+        version=c.version,
+        updated_at=c.updated_at,
+        contacts=[
+            CustomerContactSummary(
+                id=ct.id,
+                channel=ct.channel,
+                value=ct.value,
+                label=ct.label,
+                is_primary=ct.is_primary,
+            )
+            for ct in c.contacts
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Read endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "",
+    response_model=CustomerListResponse,
+    dependencies=[require_permission("customer.read")],
+    summary="List / search customers in the current garage",
+)
+async def list_customers(
+    user: AuthUser,
+    q: Optional[str] = Query(None, max_length=100, description="Free-text search across name, company, phone, email, fiscal id"),
+    status_: Optional[CustomerStatus] = Query(None, alias="status"),
+    type_: Optional[CustomerType] = Query(None, alias="type"),
+    segment: Optional[str] = Query(None, max_length=50),
+    include_deleted: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> CustomerListResponse:
+    offset = (page - 1) * page_size
+    rows = await repo.search(
+        db, user.garage_id,
+        q=q, status=status_, type_=type_, segment=segment,
+        include_deleted=include_deleted,
+        limit=page_size, offset=offset,
+    )
+    total = await repo.count_search(
+        db, user.garage_id,
+        q=q, status=status_, type_=type_, segment=segment,
+        include_deleted=include_deleted,
+    )
+    return CustomerListResponse(
+        items=[_to_summary(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/{public_id}",
+    response_model=CustomerDetail,
+    dependencies=[require_permission("customer.read")],
+    summary="Get a customer's full record including contacts",
+)
+async def get_customer(
+    public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerDetail:
+    c = await repo.get_by_public_id(
+        db, user.garage_id, public_id, with_contacts=True
+    )
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    return _to_detail(c)
+
+
+@router.get(
+    "/{public_id}/balance-events",
+    response_model=CustomerBalanceEventListResponse,
+    dependencies=[require_permission("customer.balance.read")],
+    summary="List balance ledger events for a customer",
+)
+async def list_balance_events(
+    public_id: str,
+    user: AuthUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+) -> CustomerBalanceEventListResponse:
+    c = await repo.get_by_public_id(db, user.garage_id, public_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+
+    offset = (page - 1) * page_size
+    items = await repo.list_balance_events(
+        db, c.id, limit=page_size, offset=offset
+    )
+    total = await repo.count_balance_events(db, c.id)
+    return CustomerBalanceEventListResponse(
+        items=[CustomerBalanceEventSummary.model_validate(e) for e in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mutating endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("customer.create")],
+    summary="Create a customer; returns 409 with merge prompt on duplicate match",
+    responses={
+        201: {"model": CustomerDetail},
+        409: {"model": MergePromptResponse, "description": "Duplicate detected — merge prompt"},
+    },
+)
+async def create_customer(
+    body: CustomerCreateRequest,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    result = await svc.create_customer(
+        db,
+        garage_id=user.garage_id,
+        actor_user_id=actor_id,
+        payload=body,
+        request_id=_request_id(request),
+        ip_address=_client_ip(request),
+    )
+
+    if isinstance(result, svc.DuplicateMatch):
+        # Service rolled nothing forward; just return the prompt.
+        prompt = MergePromptResponse(
+            match_reason=result.reason,  # type: ignore[arg-type]
+            existing=_to_summary(result.existing),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=prompt.model_dump(mode="json"),
+        )
+
+    await db.commit()
+    # Reload with contacts for the response.
+    fresh = await repo.get_by_public_id(
+        db, user.garage_id, str(result.public_id), with_contacts=True
+    )
+    assert fresh is not None
+    return _to_detail(fresh)
+
+
+@router.patch(
+    "/{public_id}",
+    response_model=CustomerDetail,
+    dependencies=[require_permission("customer.update")],
+    summary="Update a customer; requires the current version for optimistic locking",
+)
+async def update_customer(
+    public_id: str,
+    body: CustomerUpdateRequest,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerDetail:
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    try:
+        updated = await svc.update_customer(
+            db,
+            garage_id=user.garage_id,
+            actor_user_id=actor_id,
+            public_id=public_id,
+            payload=body,
+            request_id=_request_id(request),
+            ip_address=_client_ip(request),
+        )
+    except svc.CustomerNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    except svc.OptimisticLockError as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "stale_version",
+                "message": "Customer was modified by another user.",
+                "expected_version": e.expected,
+                "current_version": e.actual,
+            },
+        )
+    except svc.FiscalIdConflictError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "fiscal_id_taken", "message": "This fiscal_id is already in use."},
+        )
+
+    await db.commit()
+    fresh = await repo.get_by_public_id(
+        db, user.garage_id, public_id, with_contacts=True
+    )
+    assert fresh is not None
+    return _to_detail(fresh)
+
+
+@router.post(
+    "/{public_id}/credit-limit",
+    response_model=CustomerDetail,
+    dependencies=[require_permission("customer.credit_limit.update")],
+    summary="Update a customer's credit limit; requires an audit reason",
+)
+async def update_credit_limit(
+    public_id: str,
+    body: CreditLimitUpdateRequest,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerDetail:
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    try:
+        await svc.update_credit_limit(
+            db,
+            garage_id=user.garage_id,
+            actor_user_id=actor_id,
+            public_id=public_id,
+            payload=body,
+            request_id=_request_id(request),
+            ip_address=_client_ip(request),
+        )
+    except svc.CustomerNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+
+    await db.commit()
+    fresh = await repo.get_by_public_id(
+        db, user.garage_id, public_id, with_contacts=True
+    )
+    assert fresh is not None
+    return _to_detail(fresh)
+
+
+@router.delete(
+    "/{public_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    dependencies=[require_permission("customer.delete")],
+    summary="Soft-delete a customer",
+)
+async def soft_delete_customer(
+    public_id: str,
+    user: AuthUser,
+    request: Request,
+    reason: Optional[str] = Query(None, max_length=500),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    try:
+        await svc.soft_delete_customer(
+            db,
+            garage_id=user.garage_id,
+            actor_user_id=actor_id,
+            public_id=public_id,
+            reason=reason,
+            request_id=_request_id(request),
+            ip_address=_client_ip(request),
+        )
+    except svc.CustomerNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{public_id}/restore",
+    response_model=CustomerDetail,
+    dependencies=[
+        require_permission("customer.delete"),
+        require_role("admin"),
+    ],
+    summary="Restore a soft-deleted customer (admin only)",
+)
+async def restore_customer(
+    public_id: str,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerDetail:
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    try:
+        await svc.restore_customer(
+            db,
+            garage_id=user.garage_id,
+            actor_user_id=actor_id,
+            public_id=public_id,
+            request_id=_request_id(request),
+            ip_address=_client_ip(request),
+        )
+    except svc.CustomerNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    except svc.FiscalIdConflictError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "fiscal_id_taken_by_live_record",
+                "message": "Cannot restore: another live customer holds this fiscal_id.",
+            },
+        )
+
+    await db.commit()
+    fresh = await repo.get_by_public_id(
+        db, user.garage_id, public_id, with_contacts=True
+    )
+    assert fresh is not None
+    return _to_detail(fresh)

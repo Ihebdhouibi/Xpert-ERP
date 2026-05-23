@@ -61,12 +61,14 @@ def create_app() -> FastAPI:
     from app.modules.rbac.router import router as users_router
     from app.modules.documents.router import router as documents_router
     from app.modules.vehicles.router import router as vehicles_router
+    from app.modules.customer.router import router as customer_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(users_router, prefix="/api/v1")
     app.include_router(documents_router, prefix="/api/v1")
     app.include_router(vehicles_router, prefix="/api/v1")
+    app.include_router(customer_router, prefix="/api/v1")
 
     return app
 
