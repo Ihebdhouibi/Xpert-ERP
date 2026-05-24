@@ -9,6 +9,8 @@ import { CustomerDetailPage } from './pages/customers/CustomerDetailPage'
 import { RepairOrdersListPage } from './pages/repair-orders/RepairOrdersListPage'
 import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePage'
 import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
+import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
+import { TabletViewPage } from './pages/tablet/TabletViewPage'
 
 export const router = createBrowserRouter([
   {
@@ -76,6 +78,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <RepairOrderDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/workshop',
+    element: (
+      <ProtectedRoute>
+        <WorkshopKanbanPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/tablet',
+    element: (
+      <ProtectedRoute>
+        <TabletViewPage />
       </ProtectedRoute>
     ),
   },

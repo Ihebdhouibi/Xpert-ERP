@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,12 +12,15 @@ from app.modules.auth.models import AppUser
 from app.modules.repair_order.models import ROStatus
 from app.modules.repair_order.repository import RepairOrderRepository
 from app.modules.repair_order.schemas import (
+    AssignMechanicRequest,
     RepairOrderCreateRequest,
     RepairOrderDetail,
     RepairOrderSummary,
     RepairOrderUpdateRequest,
     ROLaborLineCreateRequest,
     ROPartLineCreateRequest,
+    ROPhotoListResponse,
+    ROPhotoSummary,
     StatusTransitionRequest,
 )
 from app.modules.repair_order.service import (
@@ -64,6 +67,7 @@ async def list_repair_orders(
     status: Optional[ROStatus] = None,
     customer_id: Optional[int] = None,
     vehicle_id: Optional[int] = None,
+    assigned_user_id: Optional[int] = None,
     include_deleted: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -75,6 +79,7 @@ async def list_repair_orders(
         status=status,
         customer_id=customer_id,
         vehicle_id=vehicle_id,
+        assigned_user_id=assigned_user_id,
         include_deleted=include_deleted,
         page=page,
         page_size=page_size,
@@ -336,3 +341,111 @@ async def add_part_line(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put(
+    "/{public_id}/assign",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.update")],
+)
+async def assign_mechanic(
+    public_id: str,
+    body: AssignMechanicRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Assign (or unassign) a mechanic to a repair order."""
+    ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    ro.assigned_user_id = body.user_id
+    await db.commit()
+    return await _get_detail(db, user.garage_id, public_id)
+
+
+@router.post(
+    "/{public_id}/photos",
+    response_model=ROPhotoSummary,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("repair_order.update")],
+)
+async def upload_photo(
+    public_id: str,
+    user: AuthUser,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> ROPhotoSummary:
+    """Upload a photo for a repair order (stored in S3)."""
+    import uuid as _uuid
+    from app.modules.documents.storage import upload_bytes
+    from app.core.config import get_settings
+
+    ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/heic"}
+    if file.content_type not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type: {file.content_type}",
+        )
+
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+
+    settings = get_settings()
+    storage_key = f"repair-orders/{ro.id}/photos/{_uuid.uuid4()}/{file.filename}"
+    await upload_bytes(bucket=settings.s3_bucket_media, key=storage_key, data=data, content_type=file.content_type)
+
+    actor_id = await _resolve_user_id(db, user.public_id)
+    photo = await RepairOrderRepository.add_photo(
+        db,
+        ro_id=ro.id,
+        garage_id=user.garage_id,
+        storage_key=storage_key,
+        filename=file.filename or "upload",
+        mime_type=file.content_type,
+        size_bytes=len(data),
+        uploaded_by_user_id=actor_id,
+    )
+    await db.commit()
+    await db.refresh(photo)
+
+    from app.modules.documents.storage import generate_presigned_url
+    url = await generate_presigned_url(bucket=settings.s3_bucket_media, key=storage_key, expiry_seconds=3600)
+    result = ROPhotoSummary.model_validate(photo)
+    result.url = url
+    return result
+
+
+@router.get(
+    "/{public_id}/photos",
+    response_model=ROPhotoListResponse,
+    dependencies=[require_permission("repair_order.read")],
+)
+async def list_photos(
+    public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> ROPhotoListResponse:
+    """List all photos for a repair order with presigned download URLs."""
+    from app.modules.documents.storage import generate_presigned_url
+    from app.core.config import get_settings
+
+    ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+
+    settings = get_settings()
+    photos = await RepairOrderRepository.list_photos(db, ro.id)
+
+    items: list[ROPhotoSummary] = []
+    for p in photos:
+        url = await generate_presigned_url(settings.s3_bucket_media, p.storage_key)
+        summary = ROPhotoSummary.model_validate(p)
+        summary.url = url
+        items.append(summary)
+
+    return ROPhotoListResponse(items=items, total=len(items))

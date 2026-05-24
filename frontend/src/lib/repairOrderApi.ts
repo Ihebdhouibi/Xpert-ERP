@@ -44,6 +44,7 @@ export interface RepairOrderSummary {
   estimated_cost_minor: number | null
   estimated_cost_currency: string | null
   actual_cost_minor: number
+  assigned_user_id: number | null
   created_at: string
 }
 
@@ -51,6 +52,7 @@ export interface RepairOrderDetail extends RepairOrderSummary {
   notes: string | null
   updated_at: string
   version: number
+  assigned_user_id: number | null
   labor_lines: ROLaborLine[]
   part_lines: ROPartLine[]
   status_events: ROStatusEvent[]
@@ -146,11 +148,28 @@ export interface CommentListResponse {
   total: number
 }
 
+export interface ROPhotoSummary {
+  id: number
+  ro_id: number
+  uploaded_by_user_id: number | null
+  filename: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
+  url: string
+}
+
+export interface ROPhotoListResponse {
+  items: ROPhotoSummary[]
+  total: number
+}
+
 export const repairOrderApi = {
   list(params?: {
     status?: ROStatus
     customer_id?: number
     vehicle_id?: number
+    assigned_user_id?: number
     include_deleted?: boolean
     page?: number
     page_size?: number
@@ -253,5 +272,25 @@ export const repairOrderApi = {
     return apiClient
       .delete(`/repair-orders/${publicId}/comments/${commentId}`)
       .then(() => undefined)
+  },
+
+  assignMechanic(publicId: string, userId: number | null): Promise<RepairOrderDetail> {
+    return apiClient
+      .put(`/repair-orders/${publicId}/assign`, { user_id: userId })
+      .then((r) => r.data)
+  },
+
+  uploadPhoto(publicId: string, file: File): Promise<ROPhotoSummary> {
+    const form = new FormData()
+    form.append('file', file)
+    return apiClient
+      .post(`/repair-orders/${publicId}/photos`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+
+  listPhotos(publicId: string): Promise<ROPhotoListResponse> {
+    return apiClient.get(`/repair-orders/${publicId}/photos`).then((r) => r.data)
   },
 }

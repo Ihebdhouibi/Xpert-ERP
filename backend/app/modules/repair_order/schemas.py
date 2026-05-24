@@ -98,6 +98,11 @@ class ROStatusEventSummary(BaseModel):
         from_attributes = True
 
 
+class AssignMechanicRequest(BaseModel):
+    """Request to assign (or unassign) a mechanic to a repair order."""
+    user_id: Optional[int] = Field(None, gt=0)
+
+
 class RepairOrderSummary(BaseModel):
     """Repair order summary for list view."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -111,6 +116,7 @@ class RepairOrderSummary(BaseModel):
     estimated_cost_minor: Optional[int]
     estimated_cost_currency: Optional[str]
     actual_cost_minor: int
+    assigned_user_id: Optional[int]
     created_at: datetime
 
     @model_validator(mode="before")
@@ -128,6 +134,7 @@ class RepairOrderSummary(BaseModel):
                 "estimated_cost_minor": data.estimated_cost_minor,
                 "estimated_cost_currency": data.estimated_cost_currency,
                 "actual_cost_minor": data.actual_cost_minor,
+                "assigned_user_id": data.assigned_user_id,
                 "created_at": data.created_at,
             }
         return data
@@ -146,6 +153,7 @@ class RepairOrderDetail(BaseModel):
     estimated_cost_minor: Optional[int]
     estimated_cost_currency: Optional[str]
     actual_cost_minor: int
+    assigned_user_id: Optional[int]
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -170,6 +178,7 @@ class RepairOrderDetail(BaseModel):
                 "estimated_cost_minor": data.estimated_cost_minor,
                 "estimated_cost_currency": data.estimated_cost_currency,
                 "actual_cost_minor": data.actual_cost_minor,
+                "assigned_user_id": data.assigned_user_id,
                 "notes": data.notes,
                 "created_at": data.created_at,
                 "updated_at": data.updated_at,
@@ -179,3 +188,22 @@ class RepairOrderDetail(BaseModel):
                 "status_events": data.status_events,
             }
         return data
+
+
+class ROPhotoSummary(BaseModel):
+    """Photo summary with a presigned download URL."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ro_id: int
+    uploaded_by_user_id: Optional[int]
+    filename: str
+    mime_type: str
+    size_bytes: int
+    created_at: datetime
+    url: str = ""  # populated by the router after presigned URL generation
+
+
+class ROPhotoListResponse(BaseModel):
+    items: list[ROPhotoSummary]
+    total: int

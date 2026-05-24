@@ -8,6 +8,8 @@ import {
 } from '@mui/material'
 import PeopleIcon from '@mui/icons-material/People'
 import BuildIcon from '@mui/icons-material/Build'
+import ViewKanbanIcon from '@mui/icons-material/ViewKanban'
+import TabletIcon from '@mui/icons-material/Tablet'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -89,6 +91,58 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Atelier et suivi
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="repair_order.transition">
+          <Paper
+            component={RouterLink}
+            to="/workshop"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <ViewKanbanIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Kanban atelier
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Vue d'ensemble statuts
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="repair_order.update">
+          <Paper
+            component={RouterLink}
+            to="/tablet"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <TabletIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Vue mécanicien
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Tablette & pointage
               </Typography>
             </Box>
           </Paper>

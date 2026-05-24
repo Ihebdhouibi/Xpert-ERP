@@ -97,6 +97,9 @@ class RepairOrder(Base):
     updated_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
     )
+    assigned_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     labor_lines: Mapped[list[ROLaborLine]] = relationship(
@@ -204,4 +207,31 @@ class ROStatusEvent(Base):
     __table_args__ = (
         Index("ix_ro_status_event_ro_id", "ro_id"),
         Index("ix_ro_status_event_ro_occurred", "ro_id", "occurred_at"),
+    )
+
+
+class ROPhoto(Base):
+    __tablename__ = "ro_photo"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    ro_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("repair_order.id", ondelete="CASCADE"), nullable=False
+    )
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+    )
+
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(127), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_ro_photo_ro_id", "ro_id"),
+        Index("ix_ro_photo_garage_ro", "garage_id", "ro_id"),
     )

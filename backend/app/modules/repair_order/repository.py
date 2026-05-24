@@ -8,6 +8,7 @@ from app.modules.repair_order.models import (
     RepairOrder,
     ROLaborLine,
     ROPartLine,
+    ROPhoto,
     ROStatus,
     ROStatusEvent,
 )
@@ -64,32 +65,27 @@ class RepairOrderRepository:
         status: ROStatus | None = None,
         customer_id: int | None = None,
         vehicle_id: int | None = None,
+        assigned_user_id: int | None = None,
         include_deleted: bool = False,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[RepairOrder], int]:
         """List repair orders with optional filters and pagination."""
-        stmt = select(RepairOrder).where(RepairOrder.garage_id == garage_id)
+        def _apply_filters(s):
+            if not include_deleted:
+                s = s.where(RepairOrder.deleted_at.is_(None))
+            if status:
+                s = s.where(RepairOrder.status == status)
+            if customer_id:
+                s = s.where(RepairOrder.customer_id == customer_id)
+            if vehicle_id:
+                s = s.where(RepairOrder.vehicle_id == vehicle_id)
+            if assigned_user_id is not None:
+                s = s.where(RepairOrder.assigned_user_id == assigned_user_id)
+            return s
 
-        if not include_deleted:
-            stmt = stmt.where(RepairOrder.deleted_at.is_(None))
-        if status:
-            stmt = stmt.where(RepairOrder.status == status)
-        if customer_id:
-            stmt = stmt.where(RepairOrder.customer_id == customer_id)
-        if vehicle_id:
-            stmt = stmt.where(RepairOrder.vehicle_id == vehicle_id)
-
-        # Count total
-        count_stmt = select(RepairOrder).where(RepairOrder.garage_id == garage_id)
-        if not include_deleted:
-            count_stmt = count_stmt.where(RepairOrder.deleted_at.is_(None))
-        if status:
-            count_stmt = count_stmt.where(RepairOrder.status == status)
-        if customer_id:
-            count_stmt = count_stmt.where(RepairOrder.customer_id == customer_id)
-        if vehicle_id:
-            count_stmt = count_stmt.where(RepairOrder.vehicle_id == vehicle_id)
+        stmt = _apply_filters(select(RepairOrder).where(RepairOrder.garage_id == garage_id))
+        count_stmt = _apply_filters(select(RepairOrder).where(RepairOrder.garage_id == garage_id))
 
         from sqlalchemy import func
 
@@ -232,3 +228,33 @@ class RepairOrderRepository:
         db.add(event)
         await db.flush()
         return event
+
+    @staticmethod
+    async def add_photo(
+        db: AsyncSession,
+        ro_id: int,
+        garage_id: int,
+        storage_key: str,
+        filename: str,
+        mime_type: str,
+        size_bytes: int,
+        uploaded_by_user_id: int | None = None,
+    ) -> ROPhoto:
+        photo = ROPhoto(
+            ro_id=ro_id,
+            garage_id=garage_id,
+            storage_key=storage_key,
+            filename=filename,
+            mime_type=mime_type,
+            size_bytes=size_bytes,
+            uploaded_by_user_id=uploaded_by_user_id,
+        )
+        db.add(photo)
+        await db.flush()
+        await db.refresh(photo)
+        return photo
+
+    @staticmethod
+    async def list_photos(db: AsyncSession, ro_id: int) -> list[ROPhoto]:
+        stmt = select(ROPhoto).where(ROPhoto.ro_id == ro_id).order_by(ROPhoto.created_at.asc())
+        return list((await db.execute(stmt)).scalars().all())
