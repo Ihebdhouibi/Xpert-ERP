@@ -421,6 +421,35 @@ async def upload_photo(
 
 
 @router.get(
+    "/{public_id}/pdf",
+    dependencies=[require_permission("repair_order.read")],
+)
+async def get_pdf_report(
+    public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate and return a presigned URL to the repair order PDF report."""
+    from app.core.config import get_settings
+    from app.modules.repair_order.pdf_service import generate_pdf, upload_pdf_and_sign
+
+    ro = await RepairOrderRepository.get_by_public_id(
+        db, user.garage_id, public_id, load_relationships=True
+    )
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+
+    settings = get_settings()
+    try:
+        pdf_bytes = await generate_pdf(db, ro, settings)
+        url = await upload_pdf_and_sign(pdf_bytes, ro, settings)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")
+
+    return {"url": url, "expires_in": settings.signed_url_expiry_seconds}
+
+
+@router.get(
     "/{public_id}/photos",
     response_model=ROPhotoListResponse,
     dependencies=[require_permission("repair_order.read")],

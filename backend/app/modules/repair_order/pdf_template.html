@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* ---- Page setup ---- */
+  @page {
+    size: A4;
+    margin: 18mm 16mm 22mm 16mm;
+    @bottom-center {
+      content: "{{ cfg.cfg_legal_footer }}";
+      font-size: 7.5pt;
+      color: #666;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-size: 7.5pt;
+      color: #666;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #1a1a1a;
+    line-height: 1.45;
+  }
+
+  /* ---- Header ---- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2.5px solid #1565c0;
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  .header-logo img {
+    max-height: 60px;
+    max-width: 160px;
+  }
+  .header-logo .no-logo {
+    font-size: 18pt;
+    font-weight: bold;
+    color: #1565c0;
+  }
+  .header-garage {
+    text-align: right;
+    font-size: 8.5pt;
+    color: #444;
+  }
+  .header-garage .garage-name {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #1a1a1a;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  /* ---- Title band ---- */
+  .doc-title {
+    background: #1565c0;
+    color: white;
+    text-align: center;
+    font-size: 13pt;
+    font-weight: bold;
+    padding: 5px 0;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+  }
+  .doc-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+    color: #555;
+    margin-bottom: 14px;
+  }
+  .doc-meta span { margin-right: 16px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 8pt;
+    background: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #90caf9;
+  }
+  .badge-urgent { background: #fce4ec; color: #b71c1c; border-color: #ef9a9a; }
+  .badge-high   { background: #fff3e0; color: #e65100; border-color: #ffcc80; }
+
+  /* ---- Info grid ---- */
+  .info-grid {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .info-box {
+    flex: 1;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .info-box-title {
+    background: #f5f5f5;
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #555;
+    padding: 4px 8px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  .info-box-body { padding: 7px 8px; font-size: 8.5pt; }
+  .info-row { margin-bottom: 3px; }
+  .info-label { color: #777; font-size: 7.5pt; display: block; }
+  .info-value { font-weight: 500; }
+
+  /* ---- Description ---- */
+  .description-box {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    font-size: 8.5pt;
+  }
+  .description-box .section-label {
+    font-size: 7.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #777;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  /* ---- Tables ---- */
+  .section-title {
+    font-size: 9pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #1565c0;
+    border-bottom: 1.5px solid #1565c0;
+    padding-bottom: 3px;
+    margin-bottom: 6px;
+    margin-top: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 8px;
+  }
+  thead th {
+    background: #1565c0;
+    color: white;
+    padding: 4px 7px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8pt;
+  }
+  thead th.num { text-align: right; }
+  tbody tr:nth-child(even) { background: #f9fbff; }
+  tbody td { padding: 4px 7px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .empty-row td { color: #aaa; font-style: italic; text-align: center; }
+
+  /* ---- Totals ---- */
+  .totals-wrapper { display: flex; justify-content: flex-end; margin-top: 4px; margin-bottom: 16px; }
+  .totals-table { width: 260px; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; }
+  .totals-table td { padding: 4px 10px; font-size: 8.5pt; }
+  .totals-table tr:nth-child(even) { background: #f5f5f5; }
+  .totals-table .grand-total td {
+    background: #1565c0;
+    color: white;
+    font-weight: bold;
+    font-size: 9.5pt;
+  }
+  .totals-table td.t-label { color: #555; }
+  .totals-table td.t-value { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ---- Signature area ---- */
+  .signature-section {
+    margin-top: 20px;
+    display: flex;
+    gap: 20px;
+  }
+  .signature-box {
+    flex: 1;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px 10px;
+    min-height: 80px;
+  }
+  .signature-box .sig-label {
+    font-size: 7.5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #777;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .signature-box .sig-name {
+    font-size: 8.5pt;
+    margin-bottom: 30px;
+  }
+  .sig-line {
+    border-bottom: 1px solid #aaa;
+    margin-top: 4px;
+  }
+  .sig-date-label { font-size: 7.5pt; color: #aaa; margin-top: 4px; }
+
+  /* ---- Notes ---- */
+  .notes-box {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: 14px;
+    font-size: 8.5pt;
+    white-space: pre-wrap;
+    page-break-inside: avoid;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ HEADER -->
+<div class="header">
+  <div class="header-logo">
+    {% if cfg.cfg_logo_url %}
+      <img src="{{ cfg.cfg_logo_url }}" alt="Logo">
+    {% else %}
+      <span class="no-logo">{{ cfg.cfg_garage_name }}</span>
+    {% endif %}
+  </div>
+  <div class="header-garage">
+    <span class="garage-name">{{ cfg.cfg_garage_name }}</span>
+    {% if cfg.cfg_garage_address %}<span>{{ cfg.cfg_garage_address }}</span><br>{% endif %}
+    {% if cfg.cfg_garage_phone %}<span>Tél : {{ cfg.cfg_garage_phone }}</span><br>{% endif %}
+    {% if cfg.cfg_garage_email %}<span>{{ cfg.cfg_garage_email }}</span>{% endif %}
+  </div>
+</div>
+
+<!-- ============================================================ TITLE -->
+<div class="doc-title">ORDRE DE RÉPARATION</div>
+
+<div class="doc-meta">
+  <div>
+    <span><strong>N°</strong> {{ ro.id|upper }}</span>
+    <span><strong>Date :</strong> {{ ro.created_at.strftime('%d/%m/%Y') }}</span>
+    {% if ro.updated_at %}<span><strong>Mise à jour :</strong> {{ ro.updated_at.strftime('%d/%m/%Y') }}</span>{% endif %}
+  </div>
+  <div>
+    <span class="badge {% if ro.priority == 'urgent' %}badge-urgent{% elif ro.priority == 'high' %}badge-high{% endif %}">
+      Statut : {{ status_label }}
+    </span>
+    {% if ro.priority and ro.priority != 'normal' %}
+      <span class="badge {% if ro.priority == 'urgent' %}badge-urgent{% elif ro.priority == 'high' %}badge-high{% endif %}">
+        Priorité : {{ ro.priority|capitalize }}
+      </span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ============================================================ INFO GRID -->
+<div class="info-grid">
+  <!-- Customer -->
+  <div class="info-box">
+    <div class="info-box-title">Client</div>
+    <div class="info-box-body">
+      {% if customer %}
+        <div class="info-row">
+          <span class="info-label">Nom</span>
+          <span class="info-value">{{ customer.full_name }}</span>
+        </div>
+        {% if customer.phone_e164 %}
+        <div class="info-row">
+          <span class="info-label">Téléphone</span>
+          <span class="info-value">{{ customer.phone_e164 }}</span>
+        </div>
+        {% endif %}
+        {% if customer.address %}
+        <div class="info-row">
+          <span class="info-label">Adresse</span>
+          <span class="info-value">
+            {{ customer.address.get('street', '') }}
+            {% if customer.address.get('city') %}, {{ customer.address['city'] }}{% endif %}
+            {% if customer.address.get('postal_code') %} {{ customer.address['postal_code'] }}{% endif %}
+          </span>
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="info-row"><span class="info-label">Réf. client</span><span class="info-value">#{{ ro.customer_id }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Vehicle -->
+  <div class="info-box">
+    <div class="info-box-title">Véhicule</div>
+    <div class="info-box-body">
+      {% if vehicle %}
+        <div class="info-row">
+          <span class="info-label">Immatriculation</span>
+          <span class="info-value">{{ vehicle.registration or '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Marque / Modèle</span>
+          <span class="info-value">{{ vehicle.make }} {{ vehicle.model }}</span>
+        </div>
+        {% if vehicle.year %}<div class="info-row"><span class="info-label">Année</span><span class="info-value">{{ vehicle.year }}</span></div>{% endif %}
+        {% if vehicle.vin %}<div class="info-row"><span class="info-label">VIN</span><span class="info-value" style="font-size:7.5pt">{{ vehicle.vin }}</span></div>{% endif %}
+      {% elif ro.vehicle_id %}
+        <div class="info-row"><span class="info-label">Réf. véhicule</span><span class="info-value">#{{ ro.vehicle_id }}</span></div>
+      {% else %}
+        <div class="info-row"><span class="info-value" style="color:#aaa">Aucun véhicule associé</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Costs -->
+  <div class="info-box">
+    <div class="info-box-title">Finances</div>
+    <div class="info-box-body">
+      <div class="info-row">
+        <span class="info-label">Coût estimé</span>
+        <span class="info-value">{{ estimated_cost }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Coût réel</span>
+        <span class="info-value">{{ actual_cost }}</span>
+      </div>
+      {% if ro.assigned_user_id %}
+      <div class="info-row">
+        <span class="info-label">Mécanicien</span>
+        <span class="info-value">{{ mechanic_name }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ DESCRIPTION -->
+{% if ro.description %}
+<div class="description-box">
+  <span class="section-label">Description des travaux</span>
+  {{ ro.description }}
+</div>
+{% endif %}
+
+<!-- ============================================================ LABOR LINES -->
+<div class="section-title">Main d'œuvre</div>
+<table>
+  <thead>
+    <tr>
+      <th>Type d'intervention</th>
+      <th class="num">Durée (min)</th>
+      <th class="num">Taux ({{ currency }})</th>
+      <th class="num">Montant ({{ currency }})</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in ro.labor_lines %}
+    <tr>
+      <td>{{ line.labor_type }}</td>
+      <td class="num">{{ line.duration_minutes }}</td>
+      <td class="num">{{ (line.rate_minor / 100) | round(2) }}</td>
+      <td class="num">{{ (line.amount_minor / 100) | round(2) }}</td>
+    </tr>
+    {% else %}
+    <tr class="empty-row"><td colspan="4">Aucune ligne de main d'œuvre</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ============================================================ PART LINES -->
+<div class="section-title">Pièces et fournitures</div>
+<table>
+  <thead>
+    <tr>
+      <th>Désignation</th>
+      <th class="num">Qté</th>
+      <th class="num">Prix unit. ({{ currency }})</th>
+      <th class="num">Montant ({{ currency }})</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for line in ro.part_lines %}
+    <tr>
+      <td>{{ line.part_name }}</td>
+      <td class="num">{{ line.quantity }}</td>
+      <td class="num">{{ (line.unit_cost_minor / 100) | round(2) }}</td>
+      <td class="num">{{ (line.amount_minor / 100) | round(2) }}</td>
+    </tr>
+    {% else %}
+    <tr class="empty-row"><td colspan="4">Aucune pièce renseignée</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- ============================================================ TOTALS -->
+<div class="totals-wrapper">
+  <table class="totals-table">
+    <tr>
+      <td class="t-label">Main d'œuvre</td>
+      <td class="t-value">{{ labor_total }} {{ currency }}</td>
+    </tr>
+    <tr>
+      <td class="t-label">Pièces</td>
+      <td class="t-value">{{ parts_total }} {{ currency }}</td>
+    </tr>
+    <tr class="grand-total">
+      <td class="t-label">TOTAL</td>
+      <td class="t-value">{{ grand_total }} {{ currency }}</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============================================================ NOTES -->
+{% if ro.notes %}
+<div class="notes-box">
+  <span class="section-label" style="font-size:7.5pt;font-weight:bold;text-transform:uppercase;color:#777;margin-bottom:4px;display:block;">Notes internes</span>
+  {{ ro.notes }}
+</div>
+{% endif %}
+
+<!-- ============================================================ SIGNATURES -->
+<div class="signature-section">
+  <div class="signature-box">
+    <span class="sig-label">Mécanicien responsable</span>
+    <div class="sig-name">{{ mechanic_name }}</div>
+    <div class="sig-line"></div>
+    <div class="sig-date-label">Signature et date</div>
+  </div>
+  <div class="signature-box">
+    <span class="sig-label">Bon pour accord client</span>
+    <div class="sig-name">{% if customer %}{{ customer.full_name }}{% endif %}</div>
+    <div class="sig-line"></div>
+    <div class="sig-date-label">Signature et date</div>
+  </div>
+  <div class="signature-box">
+    <span class="sig-label">Visa réception / qualité</span>
+    <div class="sig-name">&nbsp;</div>
+    <div class="sig-line"></div>
+    <div class="sig-date-label">Signature et date</div>
+  </div>
+</div>
+
+</body>
+</html>

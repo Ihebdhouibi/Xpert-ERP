@@ -97,6 +97,17 @@ class Settings(BaseSettings):
     ]
     signed_url_expiry_seconds: int = 3600  # 1 hour
 
+    # -------------------------------------------------------------------------
+    # PDF / Garage branding (CFG_* — driven by configuration, not hard-coded)
+    # -------------------------------------------------------------------------
+    cfg_garage_name: str = "Xpert Garage"
+    cfg_garage_address: str = ""
+    cfg_garage_phone: str = ""
+    cfg_garage_email: str = ""
+    cfg_logo_url: str = ""          # public URL or empty (logo omitted when blank)
+    cfg_legal_footer: str = ""      # e.g. "SARL au capital de 10 000 DT — RC 12345"
+    cfg_gtk3_dll_dir: str = ""      # Windows only: path to GTK3\bin (e.g. C:\GTK3\bin)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

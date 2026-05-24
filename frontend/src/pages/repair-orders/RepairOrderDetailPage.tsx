@@ -33,6 +33,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
 import SendIcon from '@mui/icons-material/Send'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -428,6 +429,7 @@ export function RepairOrderDetailPage() {
   const queryClient = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -443,6 +445,18 @@ export function RepairOrderDetailPage() {
     } catch {
       setActionError('Erreur lors de la suppression.')
       setConfirmDelete(false)
+    }
+  }
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const { url } = await repairOrderApi.getPdfUrl(publicId)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch {
+      setActionError('Erreur lors de la génération du PDF.')
+    } finally {
+      setPdfLoading(false)
     }
   }
 
@@ -487,6 +501,16 @@ export function RepairOrderDetailPage() {
             color={STATUS_COLORS[ro.status]}
             label={STATUS_LABELS[ro.status]}
           />
+          <PermissionGate permission="repair_order.read">
+            <Button
+              startIcon={pdfLoading ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
+              onClick={handleDownloadPdf}
+              disabled={pdfLoading}
+              variant="outlined"
+            >
+              PDF
+            </Button>
+          </PermissionGate>
           <PermissionGate permission="repair_order.update">
             <Button
               startIcon={<EditIcon />}

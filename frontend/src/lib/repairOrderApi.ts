@@ -293,4 +293,8 @@ export const repairOrderApi = {
   listPhotos(publicId: string): Promise<ROPhotoListResponse> {
     return apiClient.get(`/repair-orders/${publicId}/photos`).then((r) => r.data)
   },
+
+  getPdfUrl(publicId: string): Promise<{ url: string; expires_in: number }> {
+    return apiClient.get(`/repair-orders/${publicId}/pdf`).then((r) => r.data)
+  },
 }
