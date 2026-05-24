@@ -410,12 +410,18 @@ async def cancel_invoice(
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
-    if inv.status not in (InvoiceStatus.draft, InvoiceStatus.issued):
+    if inv.status not in (
+        InvoiceStatus.draft, InvoiceStatus.issued,
+        InvoiceStatus.partial, InvoiceStatus.paid,
+    ):
         raise InvoiceStateError(f"Cannot cancel an invoice in status '{inv.status.value}'.")
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
-    was_issued = inv.status == InvoiceStatus.issued
+    was_issued = inv.status in (
+        InvoiceStatus.issued, InvoiceStatus.partial, InvoiceStatus.paid
+    )
+    paid_amount = inv.paid_amount_minor or 0
 
     inv.status = InvoiceStatus.cancelled
     inv.version += 1
@@ -437,6 +443,18 @@ async def cancel_invoice(
             ref_id=inv.id,
             created_by=user_id,
         )
+
+        # Auto-issue a credit note for any amount already paid
+        if paid_amount > 0:
+            from app.modules.credit_note.service import _auto_create_and_issue_credit_note
+            await _auto_create_and_issue_credit_note(
+                db,
+                invoice_id=inv.id,
+                garage_id=garage_id,
+                total_minor=paid_amount,
+                reason="Auto-generated: invoice cancelled after payment.",
+                user_id=user_id,
+            )
 
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)

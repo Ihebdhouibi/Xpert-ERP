@@ -119,6 +119,11 @@ class Invoice(Base):
         cascade="all, delete-orphan",
         order_by="Payment.id",
     )
+    credit_notes: Mapped[list["CreditNote"]] = relationship(  # type: ignore[name-defined]
+        "CreditNote",
+        back_populates="invoice",
+        order_by="CreditNote.id",
+    )
 
     __table_args__ = (
         Index("ix_invoice_garage_id", "garage_id"),
