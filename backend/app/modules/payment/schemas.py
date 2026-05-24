@@ -27,6 +27,7 @@ class PaymentOut(BaseModel):
     paid_at: datetime
     reference: Optional[str]
     notes: Optional[str]
+    cash_session_id: Optional[int] = None
     created_by: Optional[int]
     created_at: datetime
 

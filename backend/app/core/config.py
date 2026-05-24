@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     pdf_currency_symbol: str = "€"
     pdf_payment_terms: str = "Paiement à 30 jours"
 
+    # -------------------------------------------------------------------------
+    # Cash register
+    # -------------------------------------------------------------------------
+    cash_diff_require_reason: bool = True  # require reason when closing with nonzero difference
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
