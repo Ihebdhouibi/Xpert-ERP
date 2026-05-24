@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient'
 
 export type StockMovementType = 'in' | 'out' | 'adjustment' | 'reservation' | 'release'
+export type LowStockAlertStatus = 'open' | 'acknowledged' | 'resolved'
 
 export interface StockLevel {
   part_id: number
@@ -32,8 +33,22 @@ export interface LowStockAlert {
   garage_id: number
   on_hand: number
   threshold: number
-  acknowledged: boolean
+  suggested_supplier_id: number | null
+  suggested_reorder_quantity: number | null
+  status: LowStockAlertStatus
   created_at: string
+}
+
+export interface ValuationItem {
+  part_id: number
+  on_hand: number
+  avg_cost_minor: number
+  total_value_minor: number
+}
+
+export interface ValuationReport {
+  items: ValuationItem[]
+  total_inventory_value_minor: number
 }
 
 export const MOVEMENT_LABELS: Record<StockMovementType, string> = {
@@ -42,6 +57,12 @@ export const MOVEMENT_LABELS: Record<StockMovementType, string> = {
   adjustment: 'Ajustement',
   reservation: 'Réservation',
   release: 'Libération',
+}
+
+export const ALERT_STATUS_LABELS: Record<LowStockAlertStatus, string> = {
+  open: 'Ouvert',
+  acknowledged: 'Pris en compte',
+  resolved: 'Résolu',
 }
 
 export const stockApi = {
@@ -83,11 +104,19 @@ export const stockApi = {
     return apiClient.get('/stock/movements', { params }).then((r) => r.data)
   },
 
-  listAlerts(params?: { include_acknowledged?: boolean }): Promise<LowStockAlert[]> {
+  listAlerts(params?: { status?: LowStockAlertStatus; include_resolved?: boolean }): Promise<LowStockAlert[]> {
     return apiClient.get('/stock/alerts', { params }).then((r) => r.data)
   },
 
   acknowledgeAlert(alertId: number): Promise<LowStockAlert> {
     return apiClient.post(`/stock/alerts/${alertId}/acknowledge`).then((r) => r.data)
+  },
+
+  resolveAlert(alertId: number): Promise<LowStockAlert> {
+    return apiClient.post(`/stock/alerts/${alertId}/resolve`).then((r) => r.data)
+  },
+
+  getValuation(): Promise<ValuationReport> {
+    return apiClient.get('/stock/valuation').then((r) => r.data)
   },
 }

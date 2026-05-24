@@ -6,7 +6,6 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -93,6 +92,12 @@ class StockMovement(Base):
     )
 
 
+class LowStockAlertStatus(str, enum.Enum):
+    open = "open"
+    acknowledged = "acknowledged"
+    resolved = "resolved"
+
+
 class LowStockAlert(Base):
     __tablename__ = "low_stock_alert"
 
@@ -103,7 +108,14 @@ class LowStockAlert(Base):
     )
     on_hand: Mapped[int] = mapped_column(Integer, nullable=False)
     threshold: Mapped[int] = mapped_column(Integer, nullable=False)
-    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    suggested_supplier_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    suggested_reorder_quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    status: Mapped[LowStockAlertStatus] = mapped_column(
+        Enum(LowStockAlertStatus, name="low_stock_alert_status",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=LowStockAlertStatus.open,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -111,5 +123,5 @@ class LowStockAlert(Base):
     __table_args__ = (
         Index("ix_low_stock_alert_garage", "garage_id"),
         Index("ix_low_stock_alert_part", "part_id"),
-        Index("ix_low_stock_alert_unack", "garage_id", "acknowledged"),
+        Index("ix_low_stock_alert_status", "garage_id", "status"),
     )

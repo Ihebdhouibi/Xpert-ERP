@@ -259,7 +259,14 @@ async def transition_status(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> RepairOrderDetail:
-    """Transition repair order to a new status."""
+    """Transition repair order to a new status.
+
+    When transitioning to in_repair, all pending reservations are converted
+    to committed stock-out movements atomically.
+    """
+    from app.core.config import get_settings
+    from app.modules.parts.stock_service import NegativeStockError
+    settings = get_settings()
     actor_id = await _resolve_user_id(db, user.public_id)
     try:
         await RepairOrderService.transition_status(
@@ -269,6 +276,7 @@ async def transition_status(
             public_id=public_id,
             new_status=body.new_status,
             reason=body.reason,
+            allow_negative_stock=settings.cfg_allow_negative_stock,
         )
         await db.commit()
         return await _get_detail(db, user.garage_id, public_id)
@@ -281,6 +289,16 @@ async def transition_status(
                 "code": "invalid_transition",
                 "from_status": e.from_status.value,
                 "to_status": e.to_status.value,
+            },
+        )
+    except NegativeStockError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "negative_stock_on_commit",
+                "available": e.available,
+                "requested": e.requested,
             },
         )
     except Exception as e:
@@ -333,6 +351,7 @@ async def add_part_line(
 ) -> RepairOrderDetail:
     """Add a part line to a repair order."""
     actor_id = await _resolve_user_id(db, user.public_id)
+    from app.modules.parts.stock_service import NegativeStockError
     try:
         await RepairOrderService.add_part_line(
             db,
@@ -342,11 +361,22 @@ async def add_part_line(
             part_name=body.part_name,
             quantity=body.quantity,
             unit_cost_minor=body.unit_cost_minor,
+            part_public_id=body.part_public_id,
         )
         await db.commit()
         return await _get_detail(db, user.garage_id, public_id)
     except RepairOrderNotFoundError:
         raise HTTPException(status_code=404, detail="Repair order not found")
+    except NegativeStockError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "negative_stock",
+                "available": e.available,
+                "requested": e.requested,
+            },
+        )
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

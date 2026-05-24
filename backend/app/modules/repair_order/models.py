@@ -158,6 +158,9 @@ class ROPartLine(Base):
     ro_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("repair_order.id", ondelete="CASCADE"), nullable=False
     )
+    part_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("part.id", ondelete="SET NULL"), nullable=True
+    )
 
     part_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -178,6 +181,7 @@ class ROPartLine(Base):
 
     __table_args__ = (
         Index("ix_ro_part_line_ro_id", "ro_id"),
+        Index("ix_ro_part_line_part_id", "part_id"),
     )
 
 

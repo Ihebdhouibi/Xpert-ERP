@@ -27,8 +27,16 @@ import {
 import CheckIcon from '@mui/icons-material/Check'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import AddIcon from '@mui/icons-material/Add'
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import DoneAllIcon from '@mui/icons-material/DoneAll'
 import { PermissionGate } from '../../components/auth/PermissionGate'
-import { stockApi, MOVEMENT_LABELS, type StockMovementType } from '../../lib/stockApi'
+import {
+  stockApi,
+  MOVEMENT_LABELS,
+  ALERT_STATUS_LABELS,
+  type LowStockAlertStatus,
+  type StockMovementType,
+} from '../../lib/stockApi'
 import { type PartSummary } from '../../lib/partsApi'
 
 function money(minor: number) {
@@ -196,9 +204,6 @@ function StockLevelsTab() {
                       size="small"
                       startIcon={<AddIcon />}
                       onClick={() => {
-                        // Find matching part from list — we need a part with this internal id
-                        // Since we don't have internal id in PartSummary, open a generic dialog
-                        // This is a limitation; in production, join stock_level with part
                         const fakePart = { id: `internal-${l.part_id}`, sku_code: `#${l.part_id}`, name: '', description: null, category_id: null, unit_of_measure: 'pcs', purchase_price_minor: 0, selling_price_minor: 0, supplier_hint_id: null, reorder_threshold: null, reorder_quantity: null, status: 'active' as const, version: 1, created_at: '', updated_at: '' }
                         setMovDialog(fakePart as PartSummary)
                       }}
@@ -296,6 +301,13 @@ function MovementsTab() {
 // ---------------------------------------------------------------------------
 // Alerts tab
 // ---------------------------------------------------------------------------
+
+const STATUS_COLOR: Record<LowStockAlertStatus, 'error' | 'warning' | 'default'> = {
+  open: 'error',
+  acknowledged: 'warning',
+  resolved: 'default',
+}
+
 function AlertsTab() {
   const qc = useQueryClient()
   const alertsQ = useQuery({
@@ -306,6 +318,14 @@ function AlertsTab() {
   const ackMut = useMutation({
     mutationFn: (id: number) => stockApi.acknowledgeAlert(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stock', 'alerts'] }),
+  })
+
+  const resMut = useMutation({
+    mutationFn: (id: number) => stockApi.resolveAlert(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock', 'alerts'] })
+      qc.invalidateQueries({ queryKey: ['stock', 'alerts', 'count'] })
+    },
   })
 
   const alerts = alertsQ.data ?? []
@@ -329,6 +349,8 @@ function AlertsTab() {
               <TableCell>Part ID</TableCell>
               <TableCell align="right">Stock</TableCell>
               <TableCell align="right">Seuil</TableCell>
+              <TableCell align="right">Réappro. suggéré</TableCell>
+              <TableCell>Statut</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -348,15 +370,45 @@ function AlertsTab() {
                 </TableCell>
                 <TableCell align="right">{a.threshold}</TableCell>
                 <TableCell align="right">
+                  {a.suggested_reorder_quantity != null ? (
+                    <Typography variant="caption">
+                      {a.suggested_reorder_quantity} unités
+                      {a.suggested_supplier_id != null && ` (fourn. #${a.suggested_supplier_id})`}
+                    </Typography>
+                  ) : '—'}
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    size="small"
+                    label={ALERT_STATUS_LABELS[a.status]}
+                    color={STATUS_COLOR[a.status]}
+                  />
+                </TableCell>
+                <TableCell align="right">
                   <PermissionGate permission="part.update">
-                    <Button
-                      size="small"
-                      startIcon={<CheckIcon />}
-                      onClick={() => ackMut.mutate(a.id)}
-                      disabled={ackMut.isPending}
-                    >
-                      Acquitter
-                    </Button>
+                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                      {a.status === 'open' && (
+                        <Button
+                          size="small"
+                          startIcon={<CheckIcon />}
+                          onClick={() => ackMut.mutate(a.id)}
+                          disabled={ackMut.isPending}
+                        >
+                          Acquitter
+                        </Button>
+                      )}
+                      {a.status !== 'resolved' && (
+                        <Button
+                          size="small"
+                          color="success"
+                          startIcon={<DoneAllIcon />}
+                          onClick={() => resMut.mutate(a.id)}
+                          disabled={resMut.isPending}
+                        >
+                          Résoudre
+                        </Button>
+                      )}
+                    </Stack>
                   </PermissionGate>
                 </TableCell>
               </TableRow>
@@ -364,6 +416,66 @@ function AlertsTab() {
           </TableBody>
         </Table>
       )}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Valuation tab
+// ---------------------------------------------------------------------------
+function ValuationTab() {
+  const valQ = useQuery({
+    queryKey: ['stock', 'valuation'],
+    queryFn: () => stockApi.getValuation(),
+  })
+
+  if (valQ.isLoading) {
+    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+  }
+
+  const data = valQ.data
+  if (!data) return null
+
+  return (
+    <Box>
+      <Box sx={{ p: 2, pb: 0 }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <AccountBalanceIcon color="primary" />
+          <Typography variant="h6" fontWeight={700}>
+            Valeur totale du stock : {money(data.total_inventory_value_minor)}
+          </Typography>
+        </Stack>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Part ID</TableCell>
+            <TableCell align="right">En stock</TableCell>
+            <TableCell align="right">Coût moyen</TableCell>
+            <TableCell align="right">Valeur totale</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {data.items.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                Aucun article en stock
+              </TableCell>
+            </TableRow>
+          ) : (
+            data.items.map((item) => (
+              <TableRow key={item.part_id} hover>
+                <TableCell>#{item.part_id}</TableCell>
+                <TableCell align="right">{item.on_hand}</TableCell>
+                <TableCell align="right">{money(item.avg_cost_minor)}</TableCell>
+                <TableCell align="right">
+                  <Typography fontWeight={600}>{money(item.total_value_minor)}</Typography>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </Box>
   )
 }
@@ -379,7 +491,7 @@ export function StockPage() {
     queryFn: () => stockApi.listAlerts(),
     refetchInterval: 60000,
   })
-  const alertCount = alertsQ.data?.length ?? 0
+  const alertCount = (alertsQ.data ?? []).filter((a) => a.status === 'open').length
 
   return (
     <Box p={2}>
@@ -407,11 +519,13 @@ export function StockPage() {
               </Stack>
             }
           />
+          <Tab label="Valorisation" />
         </Tabs>
         <Box sx={{ p: 0, overflow: 'auto' }}>
           {tab === 0 && <StockLevelsTab />}
           {tab === 1 && <MovementsTab />}
           {tab === 2 && <AlertsTab />}
+          {tab === 3 && <ValuationTab />}
         </Box>
       </Paper>
     </Box>

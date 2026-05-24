@@ -176,12 +176,16 @@ class StockRepository:
         part_id: int,
         on_hand: int,
         threshold: int,
+        suggested_supplier_id: Optional[int] = None,
+        suggested_reorder_quantity: Optional[int] = None,
     ) -> LowStockAlert:
         alert = LowStockAlert(
             garage_id=garage_id,
             part_id=part_id,
             on_hand=on_hand,
             threshold=threshold,
+            suggested_supplier_id=suggested_supplier_id,
+            suggested_reorder_quantity=suggested_reorder_quantity,
         )
         db.add(alert)
         await db.flush()
@@ -191,11 +195,15 @@ class StockRepository:
     async def list_alerts(
         db: AsyncSession,
         garage_id: int,
-        include_acknowledged: bool = False,
+        status: Optional[str] = None,
+        include_resolved: bool = False,
     ) -> list[LowStockAlert]:
+        from app.modules.parts.stock_models import LowStockAlertStatus
         stmt = select(LowStockAlert).where(LowStockAlert.garage_id == garage_id)
-        if not include_acknowledged:
-            stmt = stmt.where(LowStockAlert.acknowledged == False)  # noqa: E712
+        if status is not None:
+            stmt = stmt.where(LowStockAlert.status == status)
+        elif not include_resolved:
+            stmt = stmt.where(LowStockAlert.status != LowStockAlertStatus.resolved)
         stmt = stmt.order_by(LowStockAlert.created_at.desc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
@@ -214,6 +222,14 @@ class StockRepository:
 
     @staticmethod
     async def acknowledge_alert(db: AsyncSession, alert: LowStockAlert) -> LowStockAlert:
-        alert.acknowledged = True
+        from app.modules.parts.stock_models import LowStockAlertStatus
+        alert.status = LowStockAlertStatus.acknowledged
+        await db.flush()
+        return alert
+
+    @staticmethod
+    async def resolve_alert(db: AsyncSession, alert: LowStockAlert) -> LowStockAlert:
+        from app.modules.parts.stock_models import LowStockAlertStatus
+        alert.status = LowStockAlertStatus.resolved
         await db.flush()
         return alert

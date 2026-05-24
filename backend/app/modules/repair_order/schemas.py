@@ -18,6 +18,9 @@ class ROPartLineCreateRequest(BaseModel):
     part_name: str = Field(..., min_length=1, max_length=255)
     quantity: int = Field(..., gt=0)
     unit_cost_minor: int = Field(..., gt=0)
+    part_public_id: Optional[str] = Field(
+        None, description="Catalog part public_id (UUID) — enables stock reservation"
+    )
 
 
 class RepairOrderCreateRequest(BaseModel):
@@ -77,6 +80,7 @@ class ROLaborLineSummary(BaseModel):
 class ROPartLineSummary(BaseModel):
     """Part line summary in list/detail views."""
     id: int
+    part_id: Optional[int] = None
     part_name: str
     quantity: int
     unit_cost_minor: int

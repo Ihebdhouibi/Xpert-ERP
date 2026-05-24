@@ -539,7 +539,7 @@ class TestLowStockAlerts:
             headers=_auth(token),
         )
         assert resp.status_code == 200
-        assert resp.json()["acknowledged"] is True
+        assert resp.json()["status"] == "acknowledged"
 
 
 # ---------------------------------------------------------------------------
@@ -568,3 +568,268 @@ class TestLoadPerformance:
         level = await StockRepository.get_level(stock_seeded_db, 1, part_id)
         assert level.on_hand == 1000
         assert elapsed < 10.0, f"Load test too slow: {elapsed:.2f}s for 1000 movements"
+
+
+# ---------------------------------------------------------------------------
+# Alert status lifecycle (open → acknowledged → resolved)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestAlertStatusLifecycle:
+    async def _trigger_alert(self, client: AsyncClient, token: str, sku: str) -> dict:
+        part = await _create_part(client, token, sku=sku)
+        await client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 5, "unit_cost_minor": 500},
+            headers=_auth(token),
+        )
+        # Drive stock to threshold (5 → 5 == threshold)
+        await client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "out", "quantity": 1},
+            headers=_auth(token),
+        )
+        alerts = (await client.get("/api/v1/stock/alerts", headers=_auth(token))).json()
+        assert any(a["status"] == "open" for a in alerts)
+        return next(a for a in alerts if a["status"] == "open")
+
+    async def test_new_alert_has_open_status(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        alert = await self._trigger_alert(stock_client, token, sku="ST-OPEN-001")
+        assert alert["status"] == "open"
+
+    async def test_acknowledge_sets_status(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        alert = await self._trigger_alert(stock_client, token, sku="ST-ACK-001")
+        resp = await stock_client.post(
+            f"/api/v1/stock/alerts/{alert['id']}/acknowledge",
+            headers=_auth(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "acknowledged"
+
+    async def test_resolve_sets_status(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        alert = await self._trigger_alert(stock_client, token, sku="ST-RES-001")
+        resp = await stock_client.post(
+            f"/api/v1/stock/alerts/{alert['id']}/resolve",
+            headers=_auth(token),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "resolved"
+
+    async def test_resolved_excluded_from_default_list(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        alert = await self._trigger_alert(stock_client, token, sku="ST-EXCL-001")
+        await stock_client.post(
+            f"/api/v1/stock/alerts/{alert['id']}/resolve", headers=_auth(token)
+        )
+        open_alerts = (await stock_client.get(
+            "/api/v1/stock/alerts", headers=_auth(token)
+        )).json()
+        assert all(a["id"] != alert["id"] for a in open_alerts)
+
+    async def test_filter_by_status(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        await self._trigger_alert(stock_client, token, sku="ST-FILT-001")
+        resp = await stock_client.get(
+            "/api/v1/stock/alerts?status=open", headers=_auth(token)
+        )
+        assert resp.status_code == 200
+        assert all(a["status"] == "open" for a in resp.json())
+
+    async def test_alert_has_suggested_fields(self, stock_seeded_db: AsyncSession):
+        part = await _create_part_db(stock_seeded_db, sku="ST-SUGG-001")
+        part.supplier_hint_id = 42
+        part.reorder_quantity = 20
+        await stock_seeded_db.flush()
+
+        await record_movement(
+            stock_seeded_db, garage_id=1, part_id=part.id,
+            movement_type=StockMovementType.in_, quantity=5, unit_cost_minor=100,
+        )
+        await record_movement(
+            stock_seeded_db, garage_id=1, part_id=part.id,
+            movement_type=StockMovementType.out, quantity=1,
+        )
+        alerts = await StockRepository.list_alerts(stock_seeded_db, garage_id=1)
+        alert = next((a for a in alerts if a.part_id == part.id), None)
+        assert alert is not None
+        assert alert.suggested_supplier_id == 42
+        assert alert.suggested_reorder_quantity == 20
+
+
+# ---------------------------------------------------------------------------
+# Stock valuation report
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestStockValuation:
+    async def test_valuation_empty(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        resp = await stock_client.get("/api/v1/stock/valuation", headers=_auth(token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "items" in data
+        assert "total_inventory_value_minor" in data
+
+    async def test_valuation_calculates_correctly(self, stock_client: AsyncClient):
+        token = await _login(stock_client)
+        part = await _create_part(stock_client, token, sku="VAL-001")
+        await stock_client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 2000},
+            headers=_auth(token),
+        )
+        resp = await stock_client.get("/api/v1/stock/valuation", headers=_auth(token))
+        assert resp.status_code == 200
+        data = resp.json()
+        matched = next((i for i in data["items"] if i["on_hand"] == 10 and i["avg_cost_minor"] == 2000), None)
+        assert matched is not None
+        assert matched["total_value_minor"] == 20000
+
+
+# ---------------------------------------------------------------------------
+# RO stock integration: provisional reservation + in_repair commit
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestROStockIntegration:
+    async def _setup(self, client: AsyncClient, token: str, sku: str = "RO-INT-001"):
+        """Create a part with stock and return (part, ro_id)."""
+        part = await _create_part(client, token, sku=sku)
+        # Get the internal part id from stock level endpoint
+        # We need the internal integer id — create a movement first so we can read it
+        await client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            headers=_auth(token),
+        )
+        ro_id = await _create_ro(client, token)
+        return part, ro_id
+
+    async def test_add_part_line_with_part_id_creates_reservation(
+        self, stock_client: AsyncClient, stock_seeded_db: AsyncSession
+    ):
+        token = await _login(stock_client)
+        sku = "RO-RES-001"
+        part = await _create_part(stock_client, token, sku=sku)
+        # Add stock via HTTP so stock_level row is created
+        await stock_client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            headers=_auth(token),
+        )
+        ro_id = await _create_ro(stock_client, token)
+
+        # Add part line with part_id — should reserve 3 units
+        resp = await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/part-lines",
+            json={
+                "part_name": "Test Part",
+                "quantity": 3,
+                "unit_cost_minor": 500,
+                "part_public_id": part["id"],
+            },
+            headers=_auth(token),
+        )
+        assert resp.status_code == 200
+
+        level = (await stock_client.get(
+            f"/api/v1/parts/{part['id']}/stock", headers=_auth(token)
+        )).json()
+        assert level["reserved"] == 3
+        assert level["available"] == 17
+
+    async def test_in_repair_transition_commits_reservations(
+        self, stock_client: AsyncClient, stock_seeded_db: AsyncSession
+    ):
+        token = await _login(stock_client)
+        sku = "RO-COMMIT-001"
+        part = await _create_part(stock_client, token, sku=sku)
+        await stock_client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            headers=_auth(token),
+        )
+        ro_id = await _create_ro(stock_client, token)
+
+        # Add catalog-linked part line → reservation
+        await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/part-lines",
+            json={
+                "part_name": "Test Part",
+                "quantity": 5,
+                "unit_cost_minor": 500,
+                "part_public_id": part["id"],
+            },
+            headers=_auth(token),
+        )
+
+        # Transition to diagnosis first (required by state machine)
+        await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/status-transition",
+            json={"new_status": "diagnosis"},
+            headers=_auth(token),
+        )
+        # Transition to in_repair → should commit the reservation
+        resp = await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/status-transition",
+            json={"new_status": "in_repair"},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 200
+
+        level = (await stock_client.get(
+            f"/api/v1/parts/{part['id']}/stock", headers=_auth(token)
+        )).json()
+        # After commit: on_hand reduced, reserved back to 0
+        assert level["on_hand"] == 15
+        assert level["reserved"] == 0
+
+    async def test_commit_fails_if_stock_depleted(
+        self, stock_client: AsyncClient, stock_seeded_db: AsyncSession
+    ):
+        """If stock was consumed between reservation and in_repair, 409 is returned."""
+        token = await _login(stock_client)
+        sku = "RO-FAIL-001"
+        part = await _create_part(stock_client, token, sku=sku)
+        await stock_client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "in", "quantity": 5, "unit_cost_minor": 500},
+            headers=_auth(token),
+        )
+        ro_id = await _create_ro(stock_client, token)
+        # Reserve 5 units
+        await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/part-lines",
+            json={
+                "part_name": "Test Part",
+                "quantity": 5,
+                "unit_cost_minor": 500,
+                "part_public_id": part["id"],
+            },
+            headers=_auth(token),
+        )
+        # Drain stock via manual adjustment (simulating external depletion)
+        # We need to work around: reserved=5, on_hand=5, available=0
+        # The commit releases reservation first so available becomes 5, then out(5) succeeds
+        # To force failure: reduce on_hand below 5 via adjustment
+        await stock_client.post(
+            f"/api/v1/parts/{part['id']}/stock/movements",
+            json={"type": "adjustment", "quantity": -5, "reason": "External loss"},
+            headers=_auth(token),
+        )
+        # Now on_hand=0, reserved=5, available=-5 → commit should fail
+        await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/status-transition",
+            json={"new_status": "diagnosis"},
+            headers=_auth(token),
+        )
+        resp = await stock_client.post(
+            f"/api/v1/repair-orders/{ro_id}/status-transition",
+            json={"new_status": "in_repair"},
+            headers=_auth(token),
+        )
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "negative_stock_on_commit"

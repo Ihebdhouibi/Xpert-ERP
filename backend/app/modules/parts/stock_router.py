@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.modules.parts.repository import PartRepository
-from app.modules.parts.stock_models import LowStockAlert, StockLevel, StockMovement, StockMovementType
+from app.modules.parts.stock_models import LowStockAlert, LowStockAlertStatus, StockLevel, StockMovement, StockMovementType
 from app.modules.parts.stock_repository import StockRepository
 from app.modules.parts.stock_service import (
     InvalidMovementError,
@@ -110,7 +110,9 @@ class LowStockAlertResponse(BaseModel):
     garage_id: int
     on_hand: int
     threshold: int
-    acknowledged: bool
+    suggested_supplier_id: Optional[int]
+    suggested_reorder_quantity: Optional[int]
+    status: str
     created_at: str
 
     @classmethod
@@ -121,9 +123,23 @@ class LowStockAlertResponse(BaseModel):
             garage_id=alert.garage_id,
             on_hand=alert.on_hand,
             threshold=alert.threshold,
-            acknowledged=alert.acknowledged,
+            suggested_supplier_id=alert.suggested_supplier_id,
+            suggested_reorder_quantity=alert.suggested_reorder_quantity,
+            status=alert.status.value,
             created_at=alert.created_at.isoformat(),
         )
+
+
+class ValuationItemResponse(BaseModel):
+    part_id: int
+    on_hand: int
+    avg_cost_minor: int
+    total_value_minor: int
+
+
+class ValuationReportResponse(BaseModel):
+    items: list[ValuationItemResponse]
+    total_inventory_value_minor: int
 
 
 # ---------------------------------------------------------------------------
@@ -347,10 +363,11 @@ async def list_all_movements(
 async def list_alerts(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
-    include_acknowledged: bool = False,
+    status: Optional[str] = None,
+    include_resolved: bool = False,
 ) -> list[LowStockAlertResponse]:
     alerts = await StockRepository.list_alerts(
-        db, user.garage_id, include_acknowledged=include_acknowledged
+        db, user.garage_id, status=status, include_resolved=include_resolved
     )
     return [LowStockAlertResponse.from_orm(a) for a in alerts]
 
@@ -368,6 +385,52 @@ async def acknowledge_alert(
     alert = await StockRepository.get_alert(db, user.garage_id, alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
+    if alert.status == LowStockAlertStatus.resolved:
+        raise HTTPException(status_code=409, detail="Alert already resolved")
     alert = await StockRepository.acknowledge_alert(db, alert)
     await db.commit()
     return LowStockAlertResponse.from_orm(alert)
+
+
+@router.post(
+    "/stock/alerts/{alert_id}/resolve",
+    response_model=LowStockAlertResponse,
+    dependencies=[require_permission("part.update")],
+)
+async def resolve_alert(
+    alert_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> LowStockAlertResponse:
+    alert = await StockRepository.get_alert(db, user.garage_id, alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    alert = await StockRepository.resolve_alert(db, alert)
+    await db.commit()
+    return LowStockAlertResponse.from_orm(alert)
+
+
+@router.get(
+    "/stock/valuation",
+    response_model=ValuationReportResponse,
+    dependencies=[require_permission("part.read")],
+)
+async def get_stock_valuation(
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> ValuationReportResponse:
+    """Return current inventory valuation: per-part on_hand × avg_cost."""
+    levels = await StockRepository.list_levels(db, user.garage_id)
+    items = [
+        ValuationItemResponse(
+            part_id=level.part_id,
+            on_hand=level.on_hand,
+            avg_cost_minor=level.avg_cost_minor,
+            total_value_minor=level.on_hand * level.avg_cost_minor,
+        )
+        for level in levels
+    ]
+    return ValuationReportResponse(
+        items=items,
+        total_inventory_value_minor=sum(i.total_value_minor for i in items),
+    )

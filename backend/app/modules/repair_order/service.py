@@ -157,8 +157,15 @@ class RepairOrderService:
         public_id: str,
         new_status: ROStatus,
         reason: Optional[str] = None,
+        allow_negative_stock: bool = False,
     ) -> RepairOrder:
-        """Transition repair order to a new status."""
+        """Transition repair order to a new status.
+
+        When transitioning to in_repair, all pending stock reservations are
+        atomically converted to committed out movements.  If any part has
+        insufficient stock (and allow_negative_stock=False), NegativeStockError
+        is raised and the whole transition is rolled back.
+        """
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
@@ -178,6 +185,18 @@ class RepairOrderService:
         await RepairOrderRepository.add_status_event(
             db, ro.id, old_status, new_status, user_id
         )
+
+        # Commit stock reservations when work begins
+        if new_status == ROStatus.in_repair:
+            from app.modules.parts.stock_service import commit_reservations_for_ref
+            await commit_reservations_for_ref(
+                db,
+                garage_id=garage_id,
+                ref_type="repair_order",
+                ref_id=str(ro.public_id),
+                created_by_user_id=user_id,
+                allow_negative=allow_negative_stock,
+            )
 
         # Audit
         await audit(
@@ -245,16 +264,46 @@ class RepairOrderService:
         part_name: str,
         quantity: int,
         unit_cost_minor: int,
+        part_public_id: Optional[str] = None,
     ) -> RepairOrder:
-        """Add a part line and recalculate total cost."""
+        """Add a part line and recalculate total cost.
+
+        If part_public_id is provided (catalog-linked line), the UUID is
+        resolved to an internal part_id and a stock reservation is created
+        atomically in the same transaction.
+        """
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
 
+        # Resolve catalog part if given
+        resolved_part_id: Optional[int] = None
+        if part_public_id is not None:
+            from app.modules.parts.repository import PartRepository
+            part = await PartRepository.get_by_public_id(db, garage_id, part_public_id)
+            if part is None:
+                raise RepairOrderNotFoundError(f"Part {part_public_id} not found")
+            resolved_part_id = part.id
+
         amount_minor = quantity * unit_cost_minor
         await RepairOrderRepository.add_part_line(
-            db, ro.id, part_name, quantity, unit_cost_minor, amount_minor, user_id
+            db, ro.id, part_name, quantity, unit_cost_minor, amount_minor, user_id,
+            part_id=resolved_part_id,
         )
+
+        # Reserve stock for catalog-linked parts
+        if resolved_part_id is not None:
+            from app.modules.parts.stock_service import reserve_for_ref
+            await reserve_for_ref(
+                db,
+                garage_id=garage_id,
+                part_id=resolved_part_id,
+                quantity=quantity,
+                ref_type="repair_order",
+                ref_id=str(ro.public_id),
+                reason=f"Reserved for RO part line: {part_name}",
+                created_by_user_id=user_id,
+            )
 
         # Recalculate actual cost
         await _recalculate_cost(db, ro)
@@ -269,6 +318,7 @@ class RepairOrderService:
             entity_type="repair_order",
             entity_id=ro.id,
             new_value={
+                "part_id": resolved_part_id,
                 "part_name": part_name,
                 "quantity": quantity,
                 "amount_minor": amount_minor,

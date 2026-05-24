@@ -135,13 +135,22 @@ async def _maybe_create_alert(
     from app.modules.parts.models import Part
 
     result = await db.execute(
-        select(Part.reorder_threshold).where(Part.id == part_id)
+        select(
+            Part.reorder_threshold,
+            Part.supplier_hint_id,
+            Part.reorder_quantity,
+        ).where(Part.id == part_id)
     )
     row = result.first()
     if row and row[0] is not None and on_hand <= row[0]:
         await StockRepository.create_alert(
-            db, garage_id=garage_id, part_id=part_id,
-            on_hand=on_hand, threshold=row[0],
+            db,
+            garage_id=garage_id,
+            part_id=part_id,
+            on_hand=on_hand,
+            threshold=row[0],
+            suggested_supplier_id=row[1],
+            suggested_reorder_quantity=row[2],
         )
 
 
@@ -193,6 +202,53 @@ async def release_for_ref(
         reason=reason,
         created_by_user_id=created_by_user_id,
     )
+
+
+async def commit_reservations_for_ref(
+    db: AsyncSession,
+    garage_id: int,
+    ref_type: str,
+    ref_id: str,
+    created_by_user_id: Optional[int] = None,
+    allow_negative: bool = False,
+) -> list[StockMovement]:
+    """Convert net reservations into committed out movements (atomic).
+
+    Called when an RO transitions to in_repair.  For each part with a net
+    reservation: release the reservation then record an out movement in the
+    same transaction.  If any out movement would go negative (and
+    allow_negative=False), NegativeStockError is raised and the whole
+    transaction is rolled back by the caller.
+    """
+    net = await StockRepository.get_net_reserved_for_ref(
+        db, garage_id, ref_type, ref_id
+    )
+    committed: list[StockMovement] = []
+    for part_id, qty in net.items():
+        await release_for_ref(
+            db,
+            garage_id=garage_id,
+            part_id=part_id,
+            quantity=qty,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            reason="Released on in_repair commit",
+            created_by_user_id=created_by_user_id,
+        )
+        mv = await record_movement(
+            db,
+            garage_id=garage_id,
+            part_id=part_id,
+            movement_type=StockMovementType.out,
+            quantity=qty,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            reason="Committed on in_repair transition",
+            created_by_user_id=created_by_user_id,
+            allow_negative=allow_negative,
+        )
+        committed.append(mv)
+    return committed
 
 
 async def release_all_for_ref(
