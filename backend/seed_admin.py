@@ -7,9 +7,9 @@ cursor = None
 try:
     conn = psycopg2.connect(
         host='localhost',
-        database='xpert_erp_dev',
+        database='xpert_erp',
         user='xpert',
-        password='xpert'
+        password='rootadmin'
     )
     cursor = conn.cursor()
 
