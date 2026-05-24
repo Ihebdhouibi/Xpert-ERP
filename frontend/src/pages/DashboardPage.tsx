@@ -10,6 +10,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import BuildIcon from '@mui/icons-material/Build'
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban'
 import TabletIcon from '@mui/icons-material/Tablet'
+import InventoryIcon from '@mui/icons-material/Inventory'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -143,6 +144,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Tablette & pointage
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="part.read">
+          <Paper
+            component={RouterLink}
+            to="/parts"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <InventoryIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Catalogue pièces
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                SKU, catégories, équivalences
               </Typography>
             </Box>
           </Paper>

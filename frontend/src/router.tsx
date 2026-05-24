@@ -11,6 +11,7 @@ import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePa
 import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
 import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
 import { TabletViewPage } from './pages/tablet/TabletViewPage'
+import { PartsPage } from './pages/parts/PartsPage'
 
 export const router = createBrowserRouter([
   {
@@ -94,6 +95,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <TabletViewPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/parts',
+    element: (
+      <ProtectedRoute>
+        <PartsPage />
       </ProtectedRoute>
     ),
   },
