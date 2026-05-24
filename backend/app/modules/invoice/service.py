@@ -361,6 +361,16 @@ async def issue_invoice(
     inv.version += 1
     inv.updated_by = user_id
     await repo.save(db, inv)
+
+    # Auto-deduct any unapplied advance payments for this customer
+    from app.modules.advance_payment.service import apply_advances_to_invoice
+    await apply_advances_to_invoice(
+        db,
+        invoice_id=inv.id,
+        customer_id=inv.customer_id,
+        garage_id=garage_id,
+    )
+
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
     logger.info("invoice_issued", invoice_id=invoice_id, doc_number=fresh.doc_number if fresh else None)
