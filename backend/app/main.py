@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     from app.modules.vehicles.router import router as vehicles_router
     from app.modules.customer.router import router as customer_router
     from app.modules.repair_order.router import router as repair_order_router
+    from app.modules.repair_order.time_entry_router import router as time_entry_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(vehicles_router, prefix="/api/v1")
     app.include_router(customer_router, prefix="/api/v1")
     app.include_router(repair_order_router, prefix="/api/v1")
+    app.include_router(time_entry_router, prefix="/api/v1/repair-orders")
 
     return app
 

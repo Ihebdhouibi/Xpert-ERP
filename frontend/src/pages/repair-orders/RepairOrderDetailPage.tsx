@@ -14,6 +14,7 @@ import {
   DialogTitle,
   Divider,
   Grid,
+  IconButton,
   MenuItem,
   Paper,
   Select,
@@ -29,6 +30,9 @@ import {
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
+import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import StopIcon from '@mui/icons-material/Stop'
+import SendIcon from '@mui/icons-material/Send'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -36,6 +40,8 @@ import {
   ALLOWED_TRANSITIONS,
   type ROStatus,
   type RepairOrderDetail,
+  type TimeEntry,
+  type Comment,
 } from '../../lib/repairOrderApi'
 
 const STATUS_COLORS: Record<
@@ -96,7 +102,8 @@ function StatusTransitionPanel({
       const detail = (err as { response?: { data?: { detail?: unknown } } })
         ?.response?.data?.detail
       if (detail && typeof detail === 'object' && 'code' in detail) {
-        setError(`Transition invalide : ${(detail as { from_status: string; to_status: string }).from_status} → ${(detail as { from_status: string; to_status: string }).to_status}`)
+        const d = detail as unknown as { from_status?: string; to_status?: string }
+        setError(`Transition invalide : ${d.from_status ?? '?'} → ${d.to_status ?? '?'}`)
       } else {
         setError('Erreur lors du changement de statut.')
       }
@@ -147,6 +154,270 @@ function StatusTransitionPanel({
           {error}
         </Alert>
       )}
+    </Box>
+  )
+}
+
+function TimerPanel({ publicId }: { publicId: string }) {
+  const queryClient = useQueryClient()
+  const [stopNotes, setStopNotes] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const { data } = useQuery({
+    queryKey: ['time-entries', publicId],
+    queryFn: () => repairOrderApi.listTimeEntries(publicId),
+  })
+
+  const openEntry: TimeEntry | undefined = data?.items.find((e) => e.ended_at === null)
+
+  const startMutation = useMutation({
+    mutationFn: () => repairOrderApi.startTimeEntry(publicId),
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
+    },
+    onError: () => setError('Une session de pointage est déjà ouverte.'),
+  })
+
+  const stopMutation = useMutation({
+    mutationFn: () => repairOrderApi.stopTimeEntry(publicId, stopNotes || undefined),
+    onSuccess: () => {
+      setStopNotes('')
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
+    },
+    onError: () => setError('Aucune session ouverte à arrêter.'),
+  })
+
+  const totalMinutes = data?.items
+    .filter((e) => e.duration_minutes !== null)
+    .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
+
+  return (
+    <Box>
+      <Typography variant="overline" color="text.secondary">
+        Pointage du temps
+      </Typography>
+      <Stack direction="row" spacing={1} alignItems="center" mt={0.5} flexWrap="wrap">
+        {openEntry ? (
+          <>
+            <Chip
+              icon={<PlayArrowIcon />}
+              label={`En cours depuis ${new Date(openEntry.started_at).toLocaleTimeString('fr-FR')}`}
+              color="success"
+              variant="outlined"
+            />
+            <TextField
+              size="small"
+              placeholder="Note de fin (optionnel)"
+              value={stopNotes}
+              onChange={(e) => setStopNotes(e.target.value)}
+              sx={{ flex: 1, minWidth: 200 }}
+            />
+            <Button
+              variant="contained"
+              color="error"
+              size="small"
+              startIcon={<StopIcon />}
+              disabled={stopMutation.isPending}
+              onClick={() => stopMutation.mutate()}
+            >
+              Arrêter
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PlayArrowIcon />}
+            disabled={startMutation.isPending}
+            onClick={() => startMutation.mutate()}
+          >
+            Démarrer une session
+          </Button>
+        )}
+        {totalMinutes > 0 && (
+          <Typography variant="body2" color="text.secondary">
+            Total : {Math.floor(totalMinutes / 60)}h{String(totalMinutes % 60).padStart(2, '0')}
+          </Typography>
+        )}
+      </Stack>
+      {error && (
+        <Alert severity="error" sx={{ mt: 1 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+      {data && data.items.length > 0 && (
+        <Table size="small" sx={{ mt: 2 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Début</TableCell>
+              <TableCell>Fin</TableCell>
+              <TableCell align="right">Durée (min)</TableCell>
+              <TableCell>Note</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {data.items.map((e) => (
+              <TableRow key={e.id}>
+                <TableCell>{new Date(e.started_at).toLocaleString('fr-FR')}</TableCell>
+                <TableCell>
+                  {e.ended_at ? new Date(e.ended_at).toLocaleString('fr-FR') : '—'}
+                </TableCell>
+                <TableCell align="right">{e.duration_minutes ?? '—'}</TableCell>
+                <TableCell>{e.notes ?? '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Box>
+  )
+}
+
+function CommentsPanel({ publicId }: { publicId: string }) {
+  const queryClient = useQueryClient()
+  const [newBody, setNewBody] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editBody, setEditBody] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const { data } = useQuery({
+    queryKey: ['comments', publicId],
+    queryFn: () => repairOrderApi.listComments(publicId),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: () => repairOrderApi.createComment(publicId, newBody),
+    onSuccess: () => {
+      setNewBody('')
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
+    },
+    onError: () => setError('Impossible d\'ajouter le commentaire.'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (comment: Comment) =>
+      repairOrderApi.updateComment(publicId, comment.id, editBody),
+    onSuccess: () => {
+      setEditingId(null)
+      setEditBody('')
+      queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
+    },
+    onError: () => setError('Impossible de modifier le commentaire.'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (commentId: number) =>
+      repairOrderApi.deleteComment(publicId, commentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
+    },
+    onError: () => setError('Impossible de supprimer le commentaire.'),
+  })
+
+  return (
+    <Box>
+      <Typography variant="overline" color="text.secondary">
+        Commentaires
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mt: 1, mb: 1 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      <Stack spacing={1.5} mt={1}>
+        {data?.items.map((comment) => (
+          <Box key={comment.id} sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5 }}>
+            {editingId === comment.id ? (
+              <Stack direction="row" spacing={1} alignItems="flex-start">
+                <TextField
+                  size="small"
+                  multiline
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  sx={{ flex: 1 }}
+                />
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={updateMutation.isPending || !editBody.trim()}
+                  onClick={() => updateMutation.mutate(comment)}
+                >
+                  Sauvegarder
+                </Button>
+                <Button size="small" onClick={() => setEditingId(null)}>
+                  Annuler
+                </Button>
+              </Stack>
+            ) : (
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                <Box>
+                  <Typography variant="body2" whiteSpace="pre-wrap">
+                    {comment.body}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {new Date(comment.created_at).toLocaleString('fr-FR')}
+                    {comment.created_at !== comment.updated_at && ' (modifié)'}
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={0.5}>
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      setEditingId(comment.id)
+                      setEditBody(comment.body)
+                    }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate(comment.id)}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              </Stack>
+            )}
+          </Box>
+        ))}
+        {data?.items.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            Aucun commentaire.
+          </Typography>
+        )}
+      </Stack>
+
+      <Stack direction="row" spacing={1} alignItems="flex-end" mt={2}>
+        <TextField
+          size="small"
+          multiline
+          placeholder="Ajouter un commentaire..."
+          value={newBody}
+          onChange={(e) => setNewBody(e.target.value)}
+          sx={{ flex: 1 }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && newBody.trim()) {
+              createMutation.mutate()
+            }
+          }}
+        />
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<SendIcon />}
+          disabled={createMutation.isPending || !newBody.trim()}
+          onClick={() => createMutation.mutate()}
+        >
+          Envoyer
+        </Button>
+      </Stack>
     </Box>
   )
 }
@@ -372,6 +643,18 @@ export function RepairOrderDetailPage() {
             </TableBody>
           </Table>
         )}
+      </Paper>
+
+      {/* Time tracking */}
+      <PermissionGate permission="repair_order.update">
+        <Paper sx={{ p: 3, mb: 2 }}>
+          <TimerPanel publicId={publicId} />
+        </Paper>
+      </PermissionGate>
+
+      {/* Comments */}
+      <Paper sx={{ p: 3, mb: 2 }}>
+        <CommentsPanel publicId={publicId} />
       </Paper>
 
       {/* Status history */}

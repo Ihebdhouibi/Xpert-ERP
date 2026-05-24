@@ -117,6 +117,35 @@ export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   paused_approval: ['in_repair', 'diagnosis', 'created'],
 }
 
+export interface TimeEntry {
+  id: number
+  ro_id: number
+  user_id: number
+  started_at: string
+  ended_at: string | null
+  duration_minutes: number | null
+  notes: string | null
+}
+
+export interface TimeEntryListResponse {
+  items: TimeEntry[]
+  total: number
+}
+
+export interface Comment {
+  id: number
+  ro_id: number
+  user_id: number | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CommentListResponse {
+  items: Comment[]
+  total: number
+}
+
 export const repairOrderApi = {
   list(params?: {
     status?: ROStatus
@@ -182,5 +211,47 @@ export const repairOrderApi = {
     return apiClient
       .post(`/repair-orders/${publicId}/restore`)
       .then((r) => r.data)
+  },
+
+  startTimeEntry(publicId: string, notes?: string): Promise<TimeEntry> {
+    return apiClient
+      .post(`/repair-orders/${publicId}/time-entries/start`, { notes: notes ?? null })
+      .then((r) => r.data)
+  },
+
+  stopTimeEntry(publicId: string, notes?: string): Promise<TimeEntry> {
+    return apiClient
+      .post(`/repair-orders/${publicId}/time-entries/stop`, { notes: notes ?? null })
+      .then((r) => r.data)
+  },
+
+  listTimeEntries(publicId: string): Promise<TimeEntryListResponse> {
+    return apiClient
+      .get(`/repair-orders/${publicId}/time-entries`)
+      .then((r) => r.data)
+  },
+
+  createComment(publicId: string, body: string): Promise<Comment> {
+    return apiClient
+      .post(`/repair-orders/${publicId}/comments`, { body })
+      .then((r) => r.data)
+  },
+
+  listComments(publicId: string): Promise<CommentListResponse> {
+    return apiClient
+      .get(`/repair-orders/${publicId}/comments`)
+      .then((r) => r.data)
+  },
+
+  updateComment(publicId: string, commentId: number, body: string): Promise<Comment> {
+    return apiClient
+      .put(`/repair-orders/${publicId}/comments/${commentId}`, { body })
+      .then((r) => r.data)
+  },
+
+  deleteComment(publicId: string, commentId: number): Promise<void> {
+    return apiClient
+      .delete(`/repair-orders/${publicId}/comments/${commentId}`)
+      .then(() => undefined)
   },
 }
