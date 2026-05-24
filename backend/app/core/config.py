@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     cash_diff_require_reason: bool = True  # require reason when closing with nonzero difference
 
+    # -------------------------------------------------------------------------
+    # Credit limit enforcement
+    # -------------------------------------------------------------------------
+    credit_limit_mode: str = "block"   # "block" = reject; "warn" = log only
+    credit_currency: str = "EUR"       # ISO-4217 currency code used for balance events
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

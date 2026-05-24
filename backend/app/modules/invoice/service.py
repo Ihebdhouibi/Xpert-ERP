@@ -354,6 +354,14 @@ async def issue_invoice(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
+    # Credit limit check before issuing (raises CreditLimitExceededError in block mode)
+    from app.modules.customer.credit_service import check_credit_limit, post_balance_event
+    from app.core.config import get_settings
+    await check_credit_limit(
+        db, customer_id=inv.customer_id, garage_id=garage_id,
+        additional_amount_minor=inv.total_minor,
+    )
+
     seq = await seq_service.next(db, garage_id=garage_id, doc_type="INV")
     inv.doc_number = seq.formatted
     inv.status = InvoiceStatus.issued
@@ -361,6 +369,19 @@ async def issue_invoice(
     inv.version += 1
     inv.updated_by = user_id
     await repo.save(db, inv)
+
+    # Post debit to customer balance ledger (+total = customer owes more)
+    await post_balance_event(
+        db,
+        customer_id=inv.customer_id,
+        garage_id=garage_id,
+        reason="invoice_issued",
+        delta_minor=inv.total_minor,
+        currency=get_settings().credit_currency,
+        ref_type="invoice",
+        ref_id=inv.id,
+        created_by=user_id,
+    )
 
     # Auto-deduct any unapplied advance payments for this customer
     from app.modules.advance_payment.service import apply_advances_to_invoice
@@ -394,10 +415,29 @@ async def cancel_invoice(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
+    was_issued = inv.status == InvoiceStatus.issued
+
     inv.status = InvoiceStatus.cancelled
     inv.version += 1
     inv.updated_by = user_id
     await repo.save(db, inv)
+
+    # Reverse the balance debit only if the invoice had been issued
+    if was_issued:
+        from app.modules.customer.credit_service import post_balance_event
+        from app.core.config import get_settings
+        await post_balance_event(
+            db,
+            customer_id=inv.customer_id,
+            garage_id=garage_id,
+            reason="invoice_cancelled",
+            delta_minor=-inv.total_minor,
+            currency=get_settings().credit_currency,
+            ref_type="invoice",
+            ref_id=inv.id,
+            created_by=user_id,
+        )
+
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
     logger.info("invoice_cancelled", invoice_id=invoice_id)
