@@ -33,7 +33,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from alembic.config import Config as AlembicConfig
         from pathlib import Path
 
-        alembic_cfg = AlembicConfig(str(Path(__file__).parent.parent / "alembic.ini"))
+        backend_dir = Path(__file__).parent.parent
+        alembic_cfg = AlembicConfig(str(backend_dir / "alembic.ini"))
+        # Resolve script_location relative to the backend dir, not CWD
+        alembic_cfg.set_main_option("script_location", str(backend_dir / "migrations"))
         # Use sync URL (psycopg2) for Alembic
         sync_url = settings.database_url.replace(
             "postgresql+asyncpg://", "postgresql+psycopg2://", 1
