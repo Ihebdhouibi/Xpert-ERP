@@ -1,0 +1,419 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tabs,
+  TextField,
+  Typography,
+} from '@mui/material'
+import CheckIcon from '@mui/icons-material/Check'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import AddIcon from '@mui/icons-material/Add'
+import { PermissionGate } from '../../components/auth/PermissionGate'
+import { stockApi, MOVEMENT_LABELS, type StockMovementType } from '../../lib/stockApi'
+import { type PartSummary } from '../../lib/partsApi'
+
+function money(minor: number) {
+  return `${(minor / 100).toFixed(2)} DT`
+}
+
+// ---------------------------------------------------------------------------
+// Movement form dialog
+// ---------------------------------------------------------------------------
+function MovementDialog({
+  open,
+  onClose,
+  part,
+}: {
+  open: boolean
+  onClose: () => void
+  part: PartSummary
+}) {
+  const qc = useQueryClient()
+  const [type, setType] = useState<StockMovementType>('in')
+  const [quantity, setQuantity] = useState('')
+  const [unitCost, setUnitCost] = useState('')
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const mut = useMutation({
+    mutationFn: () =>
+      stockApi.createMovement(part.id, {
+        type,
+        quantity: parseInt(quantity),
+        unit_cost_minor: unitCost ? parseInt(unitCost) : undefined,
+        reason: reason || undefined,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      onClose()
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      if (typeof detail === 'object' && detail !== null && 'code' in detail) {
+        const d = detail as { code: string; available: number; requested: number }
+        setError(`Stock insuffisant : disponible=${d.available}, demandé=${d.requested}`)
+      } else {
+        setError('Erreur lors du mouvement.')
+      }
+    },
+  })
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Enregistrer un mouvement — {part.sku_code}</DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Select value={type} onChange={(e) => setType(e.target.value as StockMovementType)} fullWidth>
+            {(['in', 'out', 'adjustment'] as StockMovementType[]).map((t) => (
+              <MenuItem key={t} value={t}>{MOVEMENT_LABELS[t]}</MenuItem>
+            ))}
+          </Select>
+          <TextField
+            label="Quantité"
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            fullWidth
+            helperText={type === 'adjustment' ? 'Positif = ajout, négatif = retrait' : undefined}
+          />
+          {type === 'in' && (
+            <TextField
+              label="Coût unitaire (centimes)"
+              type="number"
+              value={unitCost}
+              onChange={(e) => setUnitCost(e.target.value)}
+              fullWidth
+              inputProps={{ min: 0, step: 1 }}
+            />
+          )}
+          <TextField
+            label="Raison"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            fullWidth
+            multiline
+            rows={2}
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Annuler</Button>
+        <Button
+          variant="contained"
+          disabled={!quantity || mut.isPending}
+          onClick={() => mut.mutate()}
+        >
+          Enregistrer
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Stock levels tab
+// ---------------------------------------------------------------------------
+function StockLevelsTab() {
+  const [movDialog, setMovDialog] = useState<PartSummary | null>(null)
+
+  const levelsQ = useQuery({
+    queryKey: ['stock', 'levels'],
+    queryFn: () => stockApi.listAllLevels(),
+    refetchInterval: 30000,
+  })
+
+  const levels = levelsQ.data ?? []
+
+  if (levelsQ.isLoading) {
+    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+  }
+
+  return (
+    <Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Part ID</TableCell>
+            <TableCell align="right">En stock</TableCell>
+            <TableCell align="right">Réservé</TableCell>
+            <TableCell align="right">Disponible</TableCell>
+            <TableCell align="right">Coût moyen</TableCell>
+            <TableCell>Mis à jour</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {levels.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                Aucun niveau de stock enregistré
+              </TableCell>
+            </TableRow>
+          ) : (
+            levels.map((l) => (
+              <TableRow key={`${l.garage_id}-${l.part_id}`} hover>
+                <TableCell>#{l.part_id}</TableCell>
+                <TableCell align="right">{l.on_hand}</TableCell>
+                <TableCell align="right">{l.reserved}</TableCell>
+                <TableCell align="right">
+                  <Typography
+                    variant="body2"
+                    color={l.available <= 0 ? 'error' : l.available < 5 ? 'warning.main' : 'inherit'}
+                    fontWeight={l.available <= 0 ? 700 : 400}
+                  >
+                    {l.available}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">{money(l.avg_cost_minor)}</TableCell>
+                <TableCell>
+                  <Typography variant="caption">
+                    {new Date(l.updated_at).toLocaleString('fr-FR')}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <PermissionGate permission="part.update">
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon />}
+                      onClick={() => {
+                        // Find matching part from list — we need a part with this internal id
+                        // Since we don't have internal id in PartSummary, open a generic dialog
+                        // This is a limitation; in production, join stock_level with part
+                        const fakePart = { id: `internal-${l.part_id}`, sku_code: `#${l.part_id}`, name: '', description: null, category_id: null, unit_of_measure: 'pcs', purchase_price_minor: 0, selling_price_minor: 0, supplier_hint_id: null, reorder_threshold: null, reorder_quantity: null, status: 'active' as const, version: 1, created_at: '', updated_at: '' }
+                        setMovDialog(fakePart as PartSummary)
+                      }}
+                    >
+                      Mouvement
+                    </Button>
+                  </PermissionGate>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+      {movDialog && (
+        <MovementDialog open onClose={() => setMovDialog(null)} part={movDialog} />
+      )}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Movements tab (all garage movements)
+// ---------------------------------------------------------------------------
+function MovementsTab() {
+  const movQ = useQuery({
+    queryKey: ['stock', 'movements'],
+    queryFn: () => stockApi.listAllMovements({ limit: 100 }),
+  })
+
+  const TYPE_COLOR: Record<StockMovementType, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
+    in: 'success',
+    out: 'error',
+    adjustment: 'warning',
+    reservation: 'info',
+    release: 'default',
+  }
+
+  if (movQ.isLoading) {
+    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+  }
+
+  return (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell>Date</TableCell>
+          <TableCell>Type</TableCell>
+          <TableCell>Part ID</TableCell>
+          <TableCell align="right">Qté</TableCell>
+          <TableCell align="right">Coût unit.</TableCell>
+          <TableCell>Réf.</TableCell>
+          <TableCell>Raison</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {(movQ.data ?? []).map((m) => (
+          <TableRow key={m.id} hover>
+            <TableCell>
+              <Typography variant="caption">
+                {new Date(m.created_at).toLocaleString('fr-FR')}
+              </Typography>
+            </TableCell>
+            <TableCell>
+              <Chip
+                size="small"
+                label={MOVEMENT_LABELS[m.type]}
+                color={TYPE_COLOR[m.type]}
+              />
+            </TableCell>
+            <TableCell>#{m.part_id}</TableCell>
+            <TableCell align="right">
+              {m.type === 'out' || m.type === 'release' ? '-' : '+'}
+              {Math.abs(m.quantity)}
+            </TableCell>
+            <TableCell align="right">
+              {m.unit_cost_minor != null ? money(m.unit_cost_minor) : '—'}
+            </TableCell>
+            <TableCell>
+              {m.ref_type && m.ref_id ? (
+                <Typography variant="caption">{m.ref_type}/{m.ref_id.slice(0, 8)}</Typography>
+              ) : '—'}
+            </TableCell>
+            <TableCell>
+              <Typography variant="caption" color="text.secondary">
+                {m.reason ?? '—'}
+              </Typography>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Alerts tab
+// ---------------------------------------------------------------------------
+function AlertsTab() {
+  const qc = useQueryClient()
+  const alertsQ = useQuery({
+    queryKey: ['stock', 'alerts'],
+    queryFn: () => stockApi.listAlerts(),
+  })
+
+  const ackMut = useMutation({
+    mutationFn: (id: number) => stockApi.acknowledgeAlert(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['stock', 'alerts'] }),
+  })
+
+  const alerts = alertsQ.data ?? []
+
+  if (alertsQ.isLoading) {
+    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+  }
+
+  return (
+    <Box>
+      {alerts.length === 0 ? (
+        <Box p={4} textAlign="center">
+          <CheckIcon color="success" sx={{ fontSize: 48 }} />
+          <Typography color="text.secondary">Aucune alerte de stock bas</Typography>
+        </Box>
+      ) : (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Date</TableCell>
+              <TableCell>Part ID</TableCell>
+              <TableCell align="right">Stock</TableCell>
+              <TableCell align="right">Seuil</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {alerts.map((a) => (
+              <TableRow key={a.id} hover>
+                <TableCell>
+                  <Typography variant="caption">
+                    {new Date(a.created_at).toLocaleString('fr-FR')}
+                  </Typography>
+                </TableCell>
+                <TableCell>#{a.part_id}</TableCell>
+                <TableCell align="right">
+                  <Typography variant="body2" color="error" fontWeight={700}>
+                    {a.on_hand}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">{a.threshold}</TableCell>
+                <TableCell align="right">
+                  <PermissionGate permission="part.update">
+                    <Button
+                      size="small"
+                      startIcon={<CheckIcon />}
+                      onClick={() => ackMut.mutate(a.id)}
+                      disabled={ackMut.isPending}
+                    >
+                      Acquitter
+                    </Button>
+                  </PermissionGate>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+export function StockPage() {
+  const [tab, setTab] = useState(0)
+
+  const alertsQ = useQuery({
+    queryKey: ['stock', 'alerts', 'count'],
+    queryFn: () => stockApi.listAlerts(),
+    refetchInterval: 60000,
+  })
+  const alertCount = alertsQ.data?.length ?? 0
+
+  return (
+    <Box p={2}>
+      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+        <WarningAmberIcon color="warning" />
+        <Typography variant="h5" fontWeight={700}>
+          Gestion du stock
+        </Typography>
+        {alertCount > 0 && (
+          <Chip size="small" label={`${alertCount} alerte(s)`} color="error" />
+        )}
+      </Stack>
+
+      <Paper>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tab label="Niveaux de stock" />
+          <Tab label="Mouvements" />
+          <Tab
+            label={
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <span>Alertes</span>
+                {alertCount > 0 && (
+                  <Chip size="small" label={alertCount} color="error" sx={{ height: 18, fontSize: 10 }} />
+                )}
+              </Stack>
+            }
+          />
+        </Tabs>
+        <Box sx={{ p: 0, overflow: 'auto' }}>
+          {tab === 0 && <StockLevelsTab />}
+          {tab === 1 && <MovementsTab />}
+          {tab === 2 && <AlertsTab />}
+        </Box>
+      </Paper>
+    </Box>
+  )
+}

@@ -11,6 +11,7 @@ import BuildIcon from '@mui/icons-material/Build'
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban'
 import TabletIcon from '@mui/icons-material/Tablet'
 import InventoryIcon from '@mui/icons-material/Inventory'
+import WarehouseIcon from '@mui/icons-material/Warehouse'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -170,6 +171,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 SKU, catégories, équivalences
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="part.read">
+          <Paper
+            component={RouterLink}
+            to="/stock"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <WarehouseIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Gestion du stock
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Mouvements et alertes
               </Typography>
             </Box>
           </Paper>

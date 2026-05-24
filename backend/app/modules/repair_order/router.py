@@ -197,11 +197,20 @@ async def delete_repair_order(
     """Soft delete a repair order."""
     actor_id = await _resolve_user_id(db, user.public_id)
     try:
-        await RepairOrderService.soft_delete_repair_order(
+        ro = await RepairOrderService.soft_delete_repair_order(
             db,
             garage_id=user.garage_id,
             user_id=actor_id or user.user_id,
             public_id=public_id,
+        )
+        # Release all stock reservations held by this RO — same transaction
+        from app.modules.parts.stock_service import release_all_for_ref
+        await release_all_for_ref(
+            db,
+            garage_id=user.garage_id,
+            ref_type="repair_order",
+            ref_id=str(ro.public_id),
+            created_by_user_id=actor_id or user.user_id,
         )
         await db.commit()
     except RepairOrderNotFoundError:

@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     cfg_logo_url: str = ""          # public URL or empty (logo omitted when blank)
     cfg_legal_footer: str = ""      # e.g. "SARL au capital de 10 000 DT — RC 12345"
     cfg_gtk3_dll_dir: str = ""      # Windows only: path to GTK3\bin (e.g. C:\GTK3\bin)
+    cfg_allow_negative_stock: bool = False  # Allow on-hand to go negative with explicit reason
 
 
 @lru_cache(maxsize=1)

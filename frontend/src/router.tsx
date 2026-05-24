@@ -12,6 +12,7 @@ import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPa
 import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
 import { TabletViewPage } from './pages/tablet/TabletViewPage'
 import { PartsPage } from './pages/parts/PartsPage'
+import { StockPage } from './pages/parts/StockPage'
 
 export const router = createBrowserRouter([
   {
@@ -103,6 +104,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <PartsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/stock',
+    element: (
+      <ProtectedRoute>
+        <StockPage />
       </ProtectedRoute>
     ),
   },
