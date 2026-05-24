@@ -57,7 +57,13 @@ class Payment(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Linked to the cash session open at the time of payment (nullable — no session required)
+    cash_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("cash_session.id", ondelete="SET NULL"), nullable=True
+    )
+
     invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="payments")  # type: ignore[name-defined]
+    cash_session: Mapped[Optional["CashSession"]] = relationship("CashSession", back_populates="payments")  # type: ignore[name-defined]
 
     __table_args__ = (
         Index("ix_payment_invoice_id", "invoice_id"),
