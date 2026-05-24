@@ -99,6 +99,21 @@ async def record_payment(
     else:
         invoice.status = InvoiceStatus.partial
 
+    # Post credit to customer balance ledger (-amount = customer owes less)
+    from app.modules.customer.credit_service import post_balance_event
+    from app.core.config import get_settings
+    await post_balance_event(
+        db,
+        customer_id=invoice.customer_id,
+        garage_id=garage_id,
+        reason="payment_received",
+        delta_minor=-request.amount_minor,
+        currency=get_settings().credit_currency,
+        ref_type="payment",
+        ref_id=payment.id,
+        created_by=user_id,
+    )
+
     await db.commit()
 
     # Re-fetch payment to get server-generated fields
