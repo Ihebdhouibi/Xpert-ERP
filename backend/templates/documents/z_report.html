@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Rapport Z — Session {{ data.session_id }}</title>
+<style>
+  @page { size: A4; margin: 20mm 15mm; }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 11pt; color: #222; }
+  h1 { font-size: 16pt; text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; font-size: 10pt; color: #555; margin-bottom: 16px; }
+  .garage-header { text-align: center; margin-bottom: 20px; }
+  .garage-header .name { font-size: 14pt; font-weight: bold; }
+  .garage-header .detail { font-size: 9pt; color: #555; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { background: #2c3e50; color: #fff; padding: 6px 10px; text-align: left; font-size: 10pt; }
+  td { padding: 5px 10px; border-bottom: 1px solid #e0e0e0; font-size: 10pt; }
+  tr:nth-child(even) td { background: #f8f9fa; }
+  .totals-row td { font-weight: bold; border-top: 2px solid #2c3e50; }
+  .diff-positive { color: #27ae60; font-weight: bold; }
+  .diff-negative { color: #e74c3c; font-weight: bold; }
+  .diff-zero { color: #555; }
+  .meta-table td:first-child { font-weight: bold; width: 200px; }
+  .footer { margin-top: 40px; display: flex; justify-content: space-between; }
+  .signature-box { border-top: 1px solid #333; width: 200px; text-align: center; padding-top: 4px; font-size: 9pt; color: #555; }
+  .section-title { font-size: 12pt; font-weight: bold; margin: 16px 0 6px; border-bottom: 1px solid #2c3e50; padding-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="garage-header">
+  {% if cfg.pdf_garage_name %}<div class="name">{{ cfg.pdf_garage_name }}</div>{% endif %}
+  {% if cfg.pdf_garage_address %}<div class="detail">{{ cfg.pdf_garage_address }}</div>{% endif %}
+  {% if cfg.pdf_garage_phone %}<div class="detail">Tél : {{ cfg.pdf_garage_phone }}</div>{% endif %}
+  {% if cfg.pdf_vat_number %}<div class="detail">TVA : {{ cfg.pdf_vat_number }}</div>{% endif %}
+</div>
+
+<h1>RAPPORT Z — CLÔTURE DE CAISSE</h1>
+<div class="subtitle">Session n° {{ data.session_id }}</div>
+
+<div class="section-title">Informations de session</div>
+<table class="meta-table">
+  <tr><td>Date d'ouverture</td><td>{{ data.opened_at.strftime('%d/%m/%Y %H:%M') }}</td></tr>
+  <tr><td>Date de clôture</td><td>{% if data.closed_at %}{{ data.closed_at.strftime('%d/%m/%Y %H:%M') }}{% else %}En cours{% endif %}</td></tr>
+  <tr><td>Ouvert par</td><td>{{ data.opened_by_id or '—' }}</td></tr>
+  <tr><td>Clôturé par</td><td>{{ data.closed_by_id or '—' }}</td></tr>
+</table>
+
+<div class="section-title">Récapitulatif par moyen de paiement</div>
+<table>
+  <thead>
+    <tr>
+      <th>Moyen de paiement</th>
+      <th>Nb transactions</th>
+      <th>Total ({{ cfg.pdf_currency_symbol }})</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tally in data.tallies %}
+    <tr>
+      <td>{{ tally.payment_method.value | replace('_', ' ') | title }}</td>
+      <td>{{ tally.count }}</td>
+      <td>{{ "%.2f" | format(tally.total_minor / 100) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" style="text-align:center;color:#888;">Aucun paiement enregistré</td></tr>
+    {% endfor %}
+    <tr class="totals-row">
+      <td>TOTAL TOUS MOYENS</td>
+      <td></td>
+      <td>{{ "%.2f" | format(data.total_all_methods / 100) }} {{ cfg.pdf_currency_symbol }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">Contrôle de caisse (espèces)</div>
+<table class="meta-table">
+  <tr>
+    <td>Total espèces attendu</td>
+    <td>{{ "%.2f" | format((data.expected_total_cash or 0) / 100) }} {{ cfg.pdf_currency_symbol }}</td>
+  </tr>
+  <tr>
+    <td>Total espèces compté</td>
+    <td>{{ "%.2f" | format((data.counted_total_cash or 0) / 100) }} {{ cfg.pdf_currency_symbol }}</td>
+  </tr>
+  <tr>
+    <td>Écart</td>
+    <td>
+      {% set diff = data.difference or 0 %}
+      {% if diff > 0 %}
+        <span class="diff-positive">+{{ "%.2f" | format(diff / 100) }} {{ cfg.pdf_currency_symbol }} (surplus)</span>
+      {% elif diff < 0 %}
+        <span class="diff-negative">{{ "%.2f" | format(diff / 100) }} {{ cfg.pdf_currency_symbol }} (manque)</span>
+      {% else %}
+        <span class="diff-zero">0,00 {{ cfg.pdf_currency_symbol }}</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% if data.closing_reason %}
+  <tr><td>Motif de l'écart</td><td>{{ data.closing_reason }}</td></tr>
+  {% endif %}
+</table>
+
+<div class="footer">
+  <div class="signature-box">Signature caissier</div>
+  <div class="signature-box">Signature responsable</div>
+</div>
+
+{% if cfg.pdf_footer_text %}
+<p style="margin-top:30px;font-size:8pt;color:#888;text-align:center;">{{ cfg.pdf_footer_text }}</p>
+{% endif %}
+
+</body>
+</html>

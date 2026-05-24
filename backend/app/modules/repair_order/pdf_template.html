@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -8,7 +8,7 @@
     size: A4;
     margin: 18mm 16mm 22mm 16mm;
     @bottom-center {
-      content: "{{ cfg.cfg_legal_footer }}";
+      content: "{{ cfg.pdf_legal_mention }}";
       font-size: 7.5pt;
       color: #666;
     }
@@ -227,17 +227,17 @@
 <!-- ============================================================ HEADER -->
 <div class="header">
   <div class="header-logo">
-    {% if cfg.cfg_logo_url %}
-      <img src="{{ cfg.cfg_logo_url }}" alt="Logo">
+    {% if cfg.pdf_garage_logo_path %}
+      <img src="{{ cfg.pdf_garage_logo_path }}" alt="Logo">
     {% else %}
-      <span class="no-logo">{{ cfg.cfg_garage_name }}</span>
+      <span class="no-logo">{{ cfg.pdf_garage_name }}</span>
     {% endif %}
   </div>
   <div class="header-garage">
-    <span class="garage-name">{{ cfg.cfg_garage_name }}</span>
-    {% if cfg.cfg_garage_address %}<span>{{ cfg.cfg_garage_address }}</span><br>{% endif %}
-    {% if cfg.cfg_garage_phone %}<span>Tél : {{ cfg.cfg_garage_phone }}</span><br>{% endif %}
-    {% if cfg.cfg_garage_email %}<span>{{ cfg.cfg_garage_email }}</span>{% endif %}
+    <span class="garage-name">{{ cfg.pdf_garage_name }}</span>
+    {% if cfg.pdf_garage_address %}<span>{{ cfg.pdf_garage_address }}</span><br>{% endif %}
+    {% if cfg.pdf_garage_phone %}<span>Tél : {{ cfg.pdf_garage_phone }}</span><br>{% endif %}
+    {% if cfg.pdf_garage_email %}<span>{{ cfg.pdf_garage_email }}</span>{% endif %}
   </div>
 </div>
 

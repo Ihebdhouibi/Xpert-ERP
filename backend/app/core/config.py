@@ -1,4 +1,4 @@
-"""
+﻿"""
 Core configuration loader.
 
 All tuneable values come from environment variables (infrastructure settings)
@@ -98,16 +98,36 @@ class Settings(BaseSettings):
     signed_url_expiry_seconds: int = 3600  # 1 hour
 
     # -------------------------------------------------------------------------
-    # PDF / Garage branding (CFG_* — driven by configuration, not hard-coded)
+    # PDF / Document printing
     # -------------------------------------------------------------------------
-    cfg_garage_name: str = "Xpert Garage"
-    cfg_garage_address: str = ""
-    cfg_garage_phone: str = ""
-    cfg_garage_email: str = ""
-    cfg_logo_url: str = ""          # public URL or empty (logo omitted when blank)
-    cfg_legal_footer: str = ""      # e.g. "SARL au capital de 10 000 DT — RC 12345"
+    pdf_garage_name: str = "Xpert Garage"
+    pdf_garage_address: str = ""
+    pdf_garage_phone: str = ""
+    pdf_garage_email: str = ""
+    pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
+    pdf_vat_number: str = ""
+    pdf_legal_mention: str = ""
+    pdf_bank_details: str = ""
+    pdf_footer_text: str = ""
+    pdf_currency_symbol: str = "€"
+    pdf_payment_terms: str = "Paiement à 30 jours"
+
+    # -------------------------------------------------------------------------
+    # Cash register
+    # -------------------------------------------------------------------------
+    cash_diff_require_reason: bool = True  # require reason when closing with nonzero difference
+
+    # -------------------------------------------------------------------------
+    # Credit limit enforcement
+    # -------------------------------------------------------------------------
+    credit_limit_mode: str = "block"   # "block" = reject; "warn" = log only
+    credit_currency: str = "EUR"       # ISO-4217 currency code used for balance events
+
+    # -------------------------------------------------------------------------
+    # Parts / stock
+    # -------------------------------------------------------------------------
     cfg_gtk3_dll_dir: str = ""      # Windows only: path to GTK3\bin (e.g. C:\GTK3\bin)
-    cfg_allow_negative_stock: bool = False  # Allow on-hand to go negative with explicit reason
+    cfg_allow_negative_stock: bool = False  # allow on-hand to go negative with explicit reason
 
 
 @lru_cache(maxsize=1)

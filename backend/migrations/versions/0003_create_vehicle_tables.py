@@ -1,4 +1,4 @@
-"""M2 - create vehicle, ownership history and registration alias tables.
+﻿"""M2 - create vehicle, ownership history and registration alias tables.
 
 Revision ID: 0003
 Revises: 0002
