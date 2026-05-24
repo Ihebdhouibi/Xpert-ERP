@@ -64,6 +64,10 @@ class Payment(Base):
 
     invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="payments")  # type: ignore[name-defined]
     cash_session: Mapped[Optional["CashSession"]] = relationship("CashSession", back_populates="payments")  # type: ignore[name-defined]
+    refunds: Mapped[list["Refund"]] = relationship(  # type: ignore[name-defined]
+        "Refund",
+        back_populates="payment",
+    )
 
     __table_args__ = (
         Index("ix_payment_invoice_id", "invoice_id"),

@@ -300,8 +300,11 @@ class TestInvoiceService:
         )
         assert cancelled.status == InvoiceStatus.cancelled
 
-    async def test_cannot_cancel_paid(self, db_session: AsyncSession):
+    async def test_cancel_paid_creates_credit_note(self, db_session: AsyncSession):
+        """Cancelling a paid invoice is allowed and auto-creates a credit note."""
         from app.modules.invoice import repository as inv_repo
+        from app.modules.credit_note import repository as cn_repo
+        from app.modules.credit_note.models import CreditNoteStatus
         customer = Customer(garage_id=1, type=CustomerType.individual,
                             full_name="G", status=CustomerStatus.active)
         db_session.add(customer)
@@ -309,13 +312,37 @@ class TestInvoiceService:
         out = await inv_service.create_invoice(
             db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
         )
-        # Manually force paid status
+        # Manually force paid status with a non-zero paid amount
         from app.modules.invoice.models import Invoice
         from sqlalchemy import select
         inv_obj = (await db_session.execute(
             select(Invoice).where(Invoice.id == out.id)
         )).scalar_one()
         inv_obj.status = InvoiceStatus.paid
+        inv_obj.paid_amount_minor = inv_obj.total_minor
+        await db_session.flush()
+
+        cancelled = await inv_service.cancel_invoice(
+            db_session, out.id, 1, expected_version=out.version, user_id=1
+        )
+        assert cancelled.status == InvoiceStatus.cancelled
+
+    async def test_cannot_cancel_already_cancelled(self, db_session: AsyncSession):
+        """Cancelling an already-cancelled invoice raises InvoiceStateError."""
+        from app.modules.invoice import repository as inv_repo
+        customer = Customer(garage_id=1, type=CustomerType.individual,
+                            full_name="G2", status=CustomerStatus.active)
+        db_session.add(customer)
+        await db_session.flush()
+        out = await inv_service.create_invoice(
+            db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
+        )
+        from app.modules.invoice.models import Invoice
+        from sqlalchemy import select
+        inv_obj = (await db_session.execute(
+            select(Invoice).where(Invoice.id == out.id)
+        )).scalar_one()
+        inv_obj.status = InvoiceStatus.cancelled
         await db_session.flush()
 
         with pytest.raises(InvoiceStateError):
