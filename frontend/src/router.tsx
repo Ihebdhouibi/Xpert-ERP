@@ -15,6 +15,7 @@ import { PartsPage } from './pages/parts/PartsPage'
 import { StockPage } from './pages/parts/StockPage'
 import { SupplierPage } from './pages/suppliers/SupplierPage'
 import { PurchaseOrderPage } from './pages/purchase-orders/PurchaseOrderPage'
+import { SupplierInvoicePage } from './pages/supplier-invoices/SupplierInvoicePage'
 
 export const router = createBrowserRouter([
   {
@@ -130,6 +131,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <PurchaseOrderPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/supplier-invoices',
+    element: (
+      <ProtectedRoute>
+        <SupplierInvoicePage />
       </ProtectedRoute>
     ),
   },

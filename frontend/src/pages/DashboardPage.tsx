@@ -14,6 +14,7 @@ import InventoryIcon from '@mui/icons-material/Inventory'
 import WarehouseIcon from '@mui/icons-material/Warehouse'
 import LocalShippingIcon from '@mui/icons-material/LocalShipping'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -225,6 +226,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Achats & réception
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="supplier_invoice.read">
+          <Paper
+            component={RouterLink}
+            to="/supplier-invoices"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <ReceiptLongIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Factures fournisseurs
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Rapprochement 3 voies
               </Typography>
             </Box>
           </Paper>

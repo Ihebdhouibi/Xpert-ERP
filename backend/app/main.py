@@ -98,6 +98,7 @@ def create_app() -> FastAPI:
     from app.modules.credit_note.router import router as credit_note_router, refund_router
     from app.modules.supplier.router import router as supplier_router
     from app.modules.purchase_order.router import router as purchase_order_router
+    from app.modules.supplier_invoice.router import router as supplier_invoice_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
     app.include_router(refund_router, prefix="/api/v1")
     app.include_router(supplier_router, prefix="/api/v1")
     app.include_router(purchase_order_router, prefix="/api/v1")
+    app.include_router(supplier_invoice_router, prefix="/api/v1")
 
     return app
 

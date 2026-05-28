@@ -65,3 +65,24 @@ Migrations 0014/0015/0016/0017 used sa.Enum with create_type=False instead of po
 --------------------------------------------------------------------    ---
 
 
+Issue #38 is complete. Here's what was delivered:
+
+Summary
+Backend (7 files)
+0020_create_supplier_invoice.py — migration creating supplier_invoice table with JSONB lines, has_discrepancy, override_reason, and seeding 5 permissions for all admin roles
+models.py — SQLAlchemy ORM with SupplierInvoiceStatus enum (draft → posted → approved → paid) and SIMatchStatus (ok | qty_mismatch | price_mismatch)
+repository.py — CRUD + list with status/search/pagination filters
+service.py — three-way match engine, override with audit log, approve gate, accounting export builder
+router.py — 9 endpoints: create, get, update, post, override, approve, mark-paid, cancel, accounting-export
+main.py — router registered
+test_supplier_invoice.py — 17/17 tests pass
+Frontend (4 files)
+supplierInvoiceApi.ts — typed API client
+SupplierInvoicePage.tsx — list with discrepancy badges; detail with color-coded match report table (red/yellow/green per line); create dialog pre-filling from PO; override dialog (requires reason); accounting export dialog
+router.tsx — /supplier-invoices route
+DashboardPage.tsx — "Factures fournisseurs" card
+Key behaviors
+Three-way match runs automatically on POST /supplier-invoices/{id}/post; compares invoiced qty vs received qty (not ordered), and unit price — both within cfg_po_match_tolerance_percent (5% default)
+Discrepancy blocks approved status until override reason is recorded (audit log entry created)
+PDF attachment uses existing GED system with category=supplier_invoice
+Accounting export (GET .../accounting-export) returns purchases journal entries: debit 607 + 44566, credit 401
