@@ -134,6 +134,39 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     cfg_po_match_tolerance_percent: float = 5.0  # three-way match tolerance %
 
+    # -------------------------------------------------------------------------
+    # Media upload (photo/video for inspections)
+    # -------------------------------------------------------------------------
+    cfg_upload_chunk_size_bytes: int = 5_242_880   # 5 MB — S3 multipart minimum per part
+    cfg_photo_archive_after_days: int = 90          # days after upload before cold-storage move
+    cfg_image_max_dimension: int = 1920             # client-side compression target (longest edge, px)
+    cfg_image_quality: int = 85                     # client-side JPEG/WebP quality (0-100)
+    cfg_media_session_ttl_hours: int = 24           # how long an incomplete upload session stays valid
+    s3_bucket_media_archive: str = ""               # bucket for cold storage; falls back to s3_bucket_media
+
+    # -------------------------------------------------------------------------
+    # Inspections
+    # -------------------------------------------------------------------------
+    cfg_inspection_approval_expiry_days: int = 7  # days a customer approval link stays valid
+
+    # -------------------------------------------------------------------------
+    # Notifications
+    # -------------------------------------------------------------------------
+    cfg_notification_max_retries: int = 3
+    cfg_quiet_hours_start: str = "22:00"  # HH:MM — start of quiet window
+    cfg_quiet_hours_end: str = "08:00"    # HH:MM — end of quiet window (may cross midnight)
+
+    # Scheduled reminder delays (days after due / threshold date)
+    cfg_reminder_delay_1_days: int = 7
+    cfg_reminder_delay_2_days: int = 14
+    cfg_reminder_delay_3_days: int = 30
+
+    # SMS provider (provider-agnostic HTTP)
+    cfg_sms_provider: str = ""   # arbitrary label, e.g. "vonage"
+    cfg_sms_api_url: str = ""    # base URL for the provider's send endpoint
+    cfg_sms_api_key: str = ""    # API key / bearer token
+    cfg_sms_from: str = ""       # sender ID or E.164 number
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

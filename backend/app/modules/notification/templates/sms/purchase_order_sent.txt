@@ -1,0 +1,1 @@
+{{ garage_name }}: BC {{ po_number }} envoyé à {{ supplier_name }}. Montant HT: {{ amount_ht }}.

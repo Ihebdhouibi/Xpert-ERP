@@ -16,6 +16,11 @@ import { StockPage } from './pages/parts/StockPage'
 import { SupplierPage } from './pages/suppliers/SupplierPage'
 import { PurchaseOrderPage } from './pages/purchase-orders/PurchaseOrderPage'
 import { SupplierInvoicePage } from './pages/supplier-invoices/SupplierInvoicePage'
+import { TemplatesPage } from './pages/notifications/TemplatesPage'
+import { InspectionTemplatesPage } from './pages/inspections/InspectionTemplatesPage'
+import { InspectionsListPage } from './pages/inspections/InspectionsListPage'
+import { InspectionExecutionPage } from './pages/inspections/InspectionExecutionPage'
+import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPage'
 
 export const router = createBrowserRouter([
   {
@@ -141,6 +146,42 @@ export const router = createBrowserRouter([
         <SupplierInvoicePage />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/notification-templates',
+    element: (
+      <ProtectedRoute>
+        <TemplatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/inspection-templates',
+    element: (
+      <ProtectedRoute>
+        <InspectionTemplatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/inspections',
+    element: (
+      <ProtectedRoute>
+        <InspectionsListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/inspections/:publicId',
+    element: (
+      <ProtectedRoute>
+        <InspectionExecutionPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/approve/:token',
+    element: <InspectionApprovalPage />,
   },
   {
     path: '*',

@@ -86,3 +86,249 @@ Three-way match runs automatically on POST /supplier-invoices/{id}/post; compare
 Discrepancy blocks approved status until override reason is recorded (audit log entry created)
 PDF attachment uses existing GED system with category=supplier_invoice
 Accounting export (GET .../accounting-export) returns purchases journal entries: debit 607 + 44566, credit 401
+
+
+-----------------------------------------------------------------------------
+issue 39 
+M8 — Notification Adapter & Email/SMS Providers
+New files
+File	Purpose
+notification/models.py	NotificationLog ORM model; NotificationChannel + NotificationStatus enums
+notification/repository.py	create, get, list, increment_attempt, mark_sent, mark_failed, mark_bounced
+notification/adapter.py	NotificationAdapter ABC, DeliveryResult, EmailAdapter (aiosmtplib+Jinja2), SmsAdapter (httpx)
+notification/service.py	dispatch() — quiet-hours delay, exponential-backoff retry, full log lifecycle
+templates/email/base.html	Jinja2 base layout (extend for each template)
+templates/email/supplier_invoice_approved.html	Example email template
+templates/email/purchase_order_sent.html	Example email template
+templates/sms/supplier_invoice_approved.txt	SMS text template
+templates/sms/purchase_order_sent.txt	SMS text template
+0021_create_notification_log.py	Alembic migration — creates notification_log table + 3 indexes
+Modified files
+File	Change
+config.py	Added cfg_notification_max_retries, cfg_quiet_hours_start/end, cfg_sms_provider/api_url/api_key/from
+Key design decisions
+Quiet hours — _in_quiet_hours() supports overnight windows (e.g. 22:00→08:00). dispatch() calls asyncio.sleep(seconds_until_quiet_end) before the first attempt. Meant to run in a FastAPI BackgroundTask.
+Retry — up to cfg_notification_max_retries attempts with delay doubling (1s → 2s → 4s…). Every attempt increments notification_log.attempts and commits immediately so failures are visible even if the process dies mid-retry.
+Credential safety — adapters catch exceptions and only surface type(exc).__name__ in DeliveryResult.error, never the exception message (which can echo SMTP passwords or API keys).
+SMS — provider-agnostic: posts {from, to, text} JSON to cfg_sms_api_url with a Bearer token. Swap providers by changing the URL.
+To use from another service:
+
+
+from fastapi import BackgroundTasks
+from app.modules.notification.service import dispatch
+
+# inside a route handler
+background_tasks.add_task(
+    dispatch, db,
+    garage_id=garage_id, recipient_id=user.id,
+    recipient=user.email, channel="email",
+    template_code="supplier_invoice_approved",
+    context={"invoice_number": "FA-2024-001", ...},
+)
+
+-------------------------------------------------------------
+
+M8 — What was built issue 40
+Backend (11 files)
+File	Change
+pyproject.toml	Added apscheduler==3.11.0
+core/config.py	Added cfg_reminder_delay_1/2/3_days
+notification/models.py	New NotificationTemplate model (garage_id, code, channel, locale, subject, body, active)
+migrations/0022_notification_template.py	Creates notification_template table with unique constraint
+notification/repository.py	Added TemplateRepository (get_active with garage→system fallback, list_for_admin, upsert, get_by_id) + has_recent() for dedup
+notification/templates_seed.py	Seed data for all 8 triggers × email+sms, TRIGGER_CATALOG, SAMPLE_CONTEXTS
+notification/adapter.py	Refactored — send() now takes pre-rendered subject/body (no more filesystem Jinja2)
+notification/service.py	dispatch() renders from DB first, filesystem fallback; new render_preview()
+notification/scheduler.py	APScheduler AsyncIOScheduler with 4 jobs (invoice reminders × 3, maintenance due, CT due, quotation expiring); 1-minute interval; dedup via has_recent()
+notification/router.py	GET /notification-templates/triggers, GET/PUT /notification-templates/{id}, POST /{id}/preview
+main.py	Starts scheduler in lifespan, seeds templates after migrations, registers router
+Frontend (3 files)
+File	Change
+lib/notificationApi.ts	API client — triggers, list, get, update, preview
+pages/notifications/TemplatesPage.tsx	Admin UI — templates grouped by trigger, edit dialog with Jinja2 editor + live preview tab, active toggle
+router.tsx	Route /notification-templates
+Architecture notes
+garage_id=0 = system defaults seeded at startup; a garage override is created on first PUT of a system template
+Scheduler dedup: before each dispatch, checks notification_log for a sent/queued row within (delay_days − 1) days — prevents re-fires on every 1-minute tick
+vehicle_ready and payment_received_receipt are event-based — templates are seeded and previewable; call dispatch(..., template_code="vehicle_ready", ...) from the repair order / payment service when the event occurs
+
+-------------------------------------------------------------
+
+M9 — Issue 41: Digital Inspection Template & Execution (Tablet)
+Backend (7 files)
+File	Change
+migrations/0023_create_inspection_tables.py	5 tables: inspection_template (JSONB sections), inspection, inspection_item_result (JSONB media_ids), inspection_conflict_log, vehicle_recommendation; 2 PostgreSQL enums
+inspection/models.py	InspectionTemplate, Inspection, InspectionItemResult, InspectionConflictLog, VehicleRecommendation ORM models; InspectionItemStatus (ok/attention/defective/not_applicable) + InspectionStatus (draft/in_progress/completed/cancelled) enums; state machine + can_transition_inspection()
+inspection/repository.py	InspectionTemplateRepository (CRUD, soft-delete); InspectionRepository (list, get, transition, bulk_upsert_results with last-write-wins + conflict log); VehicleRecommendationRepository (bulk create, list_for_vehicle)
+inspection/service.py	create/update/delete template; create/transition inspection; submit_results; archive_declined_items; convert_to_repair_order
+inspection/schemas.py	Request/response Pydantic models for templates, inspections, bulk results, conflict entries, recommendations
+inspection/router.py	12 endpoints: 5 for templates, 6 for inspections (list/create/get/status/results/recommendations/convert-to-ro), 1 for vehicle recommendations
+main.py	Registered inspection_router under /api/v1
+Frontend (6 files)
+File	Change
+lib/inspectionApi.ts	Fully typed API client — templates CRUD, inspection lifecycle, bulk result submit, archive declined, convert to RO, vehicle recommendations
+lib/inspectionOfflineStore.ts	IndexedDB wrapper (singleton) — saveResult, getPending, getAll, markSynced, clearSynced; keyed by [inspectionId, itemId]; indexed by inspectionId
+pages/inspections/InspectionTemplatesPage.tsx	Template list + create dialog with dynamic section/item editor
+pages/inspections/InspectionsListPage.tsx	Inspection list with status filter, create-inspection dialog (choose template)
+pages/inspections/InspectionExecutionPage.tsx	Tablet-optimized execution UI — collapsible section cards, large touch buttons per status, notes collapse, online/offline badge, auto-sync on reconnect, sticky "Terminer" button, confirm dialog
+router.tsx	Routes: /inspection-templates, /inspections, /inspections/:publicId
+Key behaviors
+Offline-tolerant: every status tap writes to IndexedDB immediately; navigator.onLine event triggers auto-sync; pending queue replays via POST /inspections/{id}/results with written_at timestamps
+Conflict resolution: server-side last-write-wins per item — if client written_at ≤ server written_at, the update is discarded and logged in inspection_conflict_log
+Standalone inspections: repair_order_id is nullable; POST /inspections/{id}/convert-to-ro links to an OR later (raises 409 if already linked)
+Declined items → archived recommendations: POST /inspections/{id}/recommendations creates vehicle_recommendation rows with status="archived", accessible via GET /vehicles/{id}/recommendations
+
+
+----------------------------------------------------------------------------------
+
+M9 is complete. Here's everything that was built:
+
+What was delivered
+Backend — 7 files
+File	What
+migrations/versions/0023_create_inspection_tables.py	5 tables + 2 PG enums (idempotent DO $$ BEGIN … EXCEPTION blocks)
+inspection/models.py	InspectionTemplate, Inspection, InspectionItemResult, InspectionConflictLog, VehicleRecommendation; state machine
+inspection/repository.py	bulk_upsert_results — last-write-wins per item via written_at; conflicts logged automatically
+inspection/service.py	Domain logic + custom exceptions for each error case
+inspection/schemas.py	Pydantic request/response models
+inspection/router.py	12 endpoints across templates, inspections, and vehicle recommendations
+main.py	Router registered under /api/v1
+Key endpoints:
+
+POST /inspections/{id}/results — bulk upsert, last-write-wins conflict resolution
+POST /inspections/{id}/recommendations — archives declined items as vehicle_recommendation rows (status=archived)
+POST /inspections/{id}/convert-to-ro — links standalone inspection to repair order (409 if already linked)
+GET /vehicles/{id}/recommendations — full archived recommendation history
+Frontend — 6 files
+File	What
+lib/inspectionApi.ts	Typed API client for all endpoints
+lib/inspectionOfflineStore.ts	IndexedDB store — [inspectionId, itemId] composite key; getPending, markSynced, clearSynced
+InspectionTemplatesPage.tsx	Template manager with dynamic section/item editor dialog
+InspectionsListPage.tsx	List with status filter + create dialog
+InspectionExecutionPage.tsx	Tablet UI: collapsible section cards, 4 large touch-friendly status buttons per item, notes collapse, online/offline badge, sticky "Terminer" button
+router.tsx	/inspection-templates, /inspections, /inspections/:publicId
+Offline behavior: Every status tap writes to IndexedDB immediately. When navigator.onLine fires, all pending items replay via submitResults with their written_at timestamps. The server applies last-write-wins and returns a conflicts[] array for any items the server already had a newer write for.
+
+----------------------------------------------------------------------------------
+
+Issue #42: Photo/Video Upload with Client-Side Compression & EXIF Stripping
+
+Backend (9 files)
+File    What
+migrations/versions/0024_create_ro_media.py     2 tables: ro_media (completed uploads) and ro_media_upload_session (in-flight chunks); indexes for archive sweep and session expiry
+modules/media/__init__.py   Package init
+modules/media/models.py     RoMedia + MediaUploadSession ORM models; storage_key on session avoids key derivation
+modules/media/schemas.py    Pydantic request/response models — UploadSessionCreate, UploadSessionOut, PartUploadOut, RoMediaOut, SignedUrlResponse
+modules/media/storage.py    Async S3 multipart wrappers: create_multipart_upload, upload_part, complete_multipart_upload, abort, copy, delete, download; strip_exif() via Pillow (sync, run in executor)
+modules/media/service.py    create_upload_session, receive_part (idempotent — skips already-received parts), complete_upload (EXIF strip + RoMedia record), get_signed_url, delete_media, archive_old_media; domain exceptions
+modules/media/router.py     6 endpoints: POST /media/upload-sessions, GET /media/upload-sessions/{id}, PUT /media/upload-sessions/{id}/parts/{n}, POST /media/upload-sessions/{id}/complete, GET /media/{id}/signed-url, DELETE /media/{id}
+modules/media/archiver.py   APScheduler job (daily, interval=24h): archive_old_media → copy to archive bucket prefix, delete original, set archived=true + archived_at
+main.py     Registers media_router and archiver job in the shared notification scheduler
+
+Config additions (config.py):
+cfg_upload_chunk_size_bytes = 5_242_880 (5 MB — S3 multipart minimum)
+cfg_photo_archive_after_days = 90
+cfg_image_max_dimension = 1920
+cfg_image_quality = 85
+cfg_media_session_ttl_hours = 24
+s3_bucket_media_archive = "" (fallback: s3_bucket_media)
+
+pyproject.toml: Pillow==11.2.1 added for server-side EXIF stripping
+
+Frontend (3 new files + 1 modified)
+File    What
+lib/imageCompressor.ts  compressAndStripExif(file, opts): canvas redraw strips ALL EXIF (GPS, device, orientation) before any bytes leave the device; resizes to maxDimension; outputs JPEG or WebP
+lib/mediaApi.ts         createSession, getSession, uploadPart, completeUpload, getSignedUrl, deleteMedia; high-level uploadFile() handles chunking, progress callbacks, and resume from sessionId
+components/inspections/MediaUploadButton.tsx    Camera-trigger button; compresses + uploads on file select; shows LinearProgress per chunk; thumbnail strip with delete; MediaThumb lazy-loads signed URL via useEffect
+pages/inspections/InspectionExecutionPage.tsx   LocalResults type gains mediaIds[]; handleMediaAdded / handleMediaDeleted callbacks persist to IndexedDB and update local state; MediaUploadButton wired into every ItemRow; mediaIds flow through sync → submitResults → server
+
+Key behaviors
+Resumable upload: GET /media/upload-sessions/{id} returns received_part_numbers; uploadFile() skips those parts and resumes from the first missing one — satisfies "interrupted at 50% resumes cleanly"
+EXIF stripping: canvas toBlob() (client-side, primary) + Pillow re-encode on complete_upload (server-side, defence-in-depth) — satisfies "no EXIF data in uploaded file"
+Cold storage: daily archiver copies ro_media rows older than CFG_PHOTO_ARCHIVE_AFTER_DAYS to archive/ prefix; signed-URL resolver switches bucket/key for archived media transparently
+
+
+---------------------------------------------------------------------------
+
+All done. Here's what was built for Issue #42:
+
+What was delivered
+Backend — 9 files
+Migration 0024_create_ro_media.py
+
+Two tables: ro_media (completed uploads: ro_id, inspection_id, uploader_id, storage_key, mime_type, size_bytes, caption, archived, uploaded_at) and ro_media_upload_session (in-flight chunked uploads with per-chunk received_parts JSONB).
+
+modules/media/storage.py
+
+Async S3 multipart helpers: create_multipart_upload, upload_part, complete_multipart_upload, abort, copy_object, delete_object, download_object; strip_exif() via Pillow (runs in executor thread).
+
+modules/media/service.py
+
+create_upload_session — initiates S3 multipart upload, stores storage_key on the session row
+receive_part — idempotent: skips already-received parts, enabling clean resume
+complete_upload — finalises S3 upload, downloads & Pillow-strips EXIF for images, creates ro_media record
+archive_old_media — called daily, moves files older than CFG_PHOTO_ARCHIVE_AFTER_DAYS to archive prefix
+modules/media/router.py
+
+POST /media/upload-sessions → GET /media/upload-sessions/{id} → PUT /media/upload-sessions/{id}/parts/{n} → POST /media/upload-sessions/{id}/complete → GET /media/{id}/signed-url / DELETE /media/{id}
+
+modules/media/archiver.py
+
+Daily APScheduler job registered into the existing notification scheduler.
+
+Config additions (cfg_upload_chunk_size_bytes=5MB, cfg_photo_archive_after_days=90, cfg_image_max_dimension=1920, cfg_image_quality=85, cfg_media_session_ttl_hours=24, s3_bucket_media_archive). Pillow==11.2.1 added to pyproject.toml.
+
+Frontend — 3 new + 1 modified
+lib/imageCompressor.ts
+
+compressAndStripExif(file, opts) — draws image onto <canvas> then exports via toBlob(), which strips all EXIF/GPS/device metadata before anything touches the network.
+
+lib/mediaApi.ts
+
+Low-level wrappers + high-level uploadFile(blob, opts) that chunks the compressed blob, calls GET /upload-sessions/{id} on resume to learn received_part_numbers, then skips those — resuming cleanly from the exact interruption point.
+
+components/inspections/MediaUploadButton.tsx
+
+Camera-trigger button (capture="environment" for rear camera on mobile), LinearProgress per chunk, 56×56 thumbnail strip with delete, MediaThumb lazy-loads signed URLs via useEffect.
+
+InspectionExecutionPage.tsx
+
+LocalResults gains mediaIds[]; handleMediaAdded/handleMediaDeleted persist to IndexedDB; MediaUploadButton appears under every item row; mediaIds flow through the offline sync → submitResults.
+
+----------------------------------------------------------------------
+
+
+Here's a summary of everything delivered for issue #43:
+
+Issue #43 — Implemented
+Backend (9 files changed/created)
+config.py — added cfg_inspection_approval_expiry_days: int = 7
+
+0025_inspection_approval_token.py — new migration; creates inspection_approval_token(id, jti UNIQUE, inspection_id FK CASCADE, expires_at, used_at, created_at)
+
+models.py — added InspectionApprovalToken ORM model
+
+repository.py — added ApprovalTokenRepository (create, get_by_jti, mark_used) and InspectionRepository.get_by_public_id_any_garage (no garage scope, needed for public approval endpoint)
+
+pdf_service.py + inspection_pdf_template.html — WeasyPrint PDF with vehicle info, mechanic name, inspection date, per-section item tables with colour-coded status badges
+
+schemas.py — added GenerateApprovalLinkResponse, ApprovalPublicInspection/Section/Item, ProcessApprovalRequest/Response
+
+service.py — added TokenInvalidError/ExpiredError/AlreadyUsedError, generate_approval_link, get_inspection_for_approval, process_approval, build_approval_public_inspection
+
+router.py — 4 new endpoints:
+
+GET /inspections/{id}/report.pdf (auth: inspection.read)
+POST /inspections/{id}/approval-link (auth: inspection.write, requires completed + RO linked)
+GET /inspections/approve/{token} — public
+POST /inspections/approve/{token} — public, returns 410 Gone on second use
+Acceptance criteria met
+Single-use: used_at is written atomically before side effects in process_approval; second call hits TokenAlreadyUsedError → 410
+Repair tasks created immediately: approved attention/defective items → ROLaborLine rows on the linked RO (zero-cost placeholders for mechanic to fill in)
+Rejected items → VehicleRecommendation with status="archived" on the vehicle
+Frontend (3 files)
+inspectionApi.ts — generateApprovalLink, downloadReport, getApprovalData, submitApproval (last two use raw axios, no auth header)
+
+InspectionApprovalPage.tsx — customer-facing public page; shows sections/items, Approve/Reject buttons on actionable items, sticky submit bar, success/410/404 states
+
+router.tsx — /approve/:token public route (no ProtectedRoute); InspectionExecutionPage gains "Télécharger le rapport PDF" and "Générer lien approbation client" (copies to clipboard) buttons when status = completed

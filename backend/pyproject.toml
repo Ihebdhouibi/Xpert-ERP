@@ -39,6 +39,10 @@ dependencies = [
     "weasyprint==65.1",
     # Form parsing (multipart)
     "python-multipart==0.0.20",
+    # Image processing (EXIF stripping, server-side re-encode)
+    "Pillow==11.2.1",
+    # Scheduler
+    "apscheduler==3.11.0",
 ]
 
 [project.optional-dependencies]

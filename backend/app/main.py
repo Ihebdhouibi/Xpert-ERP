@@ -27,6 +27,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger = get_logger("app")
     logger.info("startup", version=settings.app_version, environment=settings.environment)
 
+    from app.modules.notification.scheduler import configure_scheduler
+    from app.modules.media.archiver import register_archiver_job
+    notification_scheduler = configure_scheduler()
+    register_archiver_job(notification_scheduler)
+    notification_scheduler.start()
+
     # Run Alembic migrations on every startup (safe — only applies pending ones)
     try:
         from alembic import command
@@ -48,7 +54,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("migrations_failed", error=str(exc))
         raise
 
+    # Seed system notification templates (idempotent)
+    try:
+        from app.core.database import AsyncSessionFactory
+        from app.modules.notification.templates_seed import seed_templates
+        async with AsyncSessionFactory() as seed_db:
+            await seed_templates(seed_db)
+        logger.info("notification_templates_seeded")
+    except Exception as exc:
+        logger.warning("notification_templates_seed_failed", error=str(exc))
+
     yield
+    notification_scheduler.shutdown(wait=False)
     await close_redis()
     logger.info("shutdown")
 
@@ -99,6 +116,9 @@ def create_app() -> FastAPI:
     from app.modules.supplier.router import router as supplier_router
     from app.modules.purchase_order.router import router as purchase_order_router
     from app.modules.supplier_invoice.router import router as supplier_invoice_router
+    from app.modules.notification.router import router as notification_router
+    from app.modules.inspection.router import router as inspection_router
+    from app.modules.media.router import router as media_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -122,6 +142,9 @@ def create_app() -> FastAPI:
     app.include_router(supplier_router, prefix="/api/v1")
     app.include_router(purchase_order_router, prefix="/api/v1")
     app.include_router(supplier_invoice_router, prefix="/api/v1")
+    app.include_router(notification_router, prefix="/api/v1")
+    app.include_router(inspection_router, prefix="/api/v1")
+    app.include_router(media_router, prefix="/api/v1")
 
     return app
 

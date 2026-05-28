@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Bon de commande envoyé{% endblock %}
+{% block content %}
+<p>Bonjour,</p>
+<p>
+  Le bon de commande <strong>{{ po_number }}</strong> a été envoyé au fournisseur
+  <strong>{{ supplier_name }}</strong>.
+</p>
+<ul>
+  <li><strong>Date :</strong> {{ order_date }}</li>
+  <li><strong>Montant HT :</strong> {{ amount_ht }}</li>
+</ul>
+<p>Vous serez notifié(e) lorsque la livraison sera confirmée.</p>
+{% endblock %}

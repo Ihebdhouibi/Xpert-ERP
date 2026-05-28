@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Notification{% endblock %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .wrapper { max-width: 600px; margin: 32px auto; background: #ffffff; border-radius: 4px; overflow: hidden; }
+    .header { background: #1a1a2e; color: #ffffff; padding: 24px 32px; font-size: 18px; font-weight: bold; }
+    .body { padding: 24px 32px; color: #333333; font-size: 14px; line-height: 1.6; }
+    .footer { background: #f4f4f4; padding: 16px 32px; color: #888888; font-size: 12px; text-align: center; }
+    .btn { display: inline-block; padding: 10px 20px; background: #4f46e5; color: #ffffff;
+           text-decoration: none; border-radius: 4px; margin-top: 16px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">{{ garage_name | default("Xpert ERP") }}</div>
+    <div class="body">{% block content %}{% endblock %}</div>
+    <div class="footer">
+      Ce message est généré automatiquement — merci de ne pas y répondre.
+    </div>
+  </div>
+</body>
+</html>
