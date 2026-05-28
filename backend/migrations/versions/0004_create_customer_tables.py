@@ -14,7 +14,8 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers
 revision: str = "0004"
-down_revision: str | None = "0003"branch_labels: str | Sequence[str] | None = None
+down_revision: str | None = "0003"
+branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 

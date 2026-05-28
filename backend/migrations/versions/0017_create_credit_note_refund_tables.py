@@ -1,6 +1,7 @@
 ﻿"""0010 – create credit_note and refund tables."""
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0017"
 down_revision = "0016"
@@ -21,7 +22,7 @@ def upgrade() -> None:
         sa.Column("doc_number", sa.String(50), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("draft", "issued", "void", name="credit_note_status_enum", create_type=False),
+            postgresql.ENUM("draft", "issued", "void", name="credit_note_status_enum", create_type=False),
             nullable=False,
             server_default="draft",
         ),
@@ -46,7 +47,7 @@ def upgrade() -> None:
         sa.Column("amount_minor", sa.BigInteger(), nullable=False),
         sa.Column(
             "payment_method",
-            sa.Enum("cash", "card", "bank_transfer", "cheque", "other", name="payment_method_enum", create_type=False),
+            postgresql.ENUM("cash", "card", "bank_transfer", "cheque", "other", name="payment_method_enum", create_type=False),
             nullable=False,
             server_default="cash",
         ),

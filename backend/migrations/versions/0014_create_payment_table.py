@@ -1,6 +1,7 @@
 ﻿"""0007 – create payment table."""
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0014"
 down_revision = "0013"
@@ -22,7 +23,7 @@ def upgrade() -> None:
         sa.Column("amount_minor", sa.BigInteger(), nullable=False),
         sa.Column(
             "payment_method",
-            sa.Enum("cash", "card", "bank_transfer", "cheque", "other", name="payment_method_enum", create_type=False),
+            postgresql.ENUM("cash", "card", "bank_transfer", "cheque", "other", name="payment_method_enum", create_type=False),
             nullable=False,
         ),
         sa.Column("paid_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),

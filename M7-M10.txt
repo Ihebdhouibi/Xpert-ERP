@@ -1,0 +1,67 @@
+Everything is done. Here's a summary of what was built for issue #36:
+
+Backend (12 files created/modified)
+
+File	What
+0018_create_supplier_tables.py	Migration: supplier + supplier_part_price tables
+supplier/models.py	Supplier + SupplierPartPrice ORM models
+supplier/repository.py	SupplierRepository (CRUD+search) + SupplierPartPriceRepository (price history, historical query, comparison)
+supplier/service.py	Business logic + domain exceptions
+supplier/router.py	8 endpoints: CRUD, price history, price comparison
+main.py	Registered supplier router
+tests/test_supplier.py	19 tests across 5 test classes (all green)
+Key behavioral logic:
+
+POST /suppliers/{id}/prices — closes the previous open price (effective_to = new_from - 1 day) before inserting
+GET /parts/{part_id}/supplier-prices?at=YYYY-MM-DD — historical query returns the price where effective_from <= at_date AND (effective_to IS NULL OR effective_to >= at_date), sorted cheapest-first
+reliability_score is stored but never writable via the create/update request (enforced by omitting it from SupplierUpdateRequest)
+Frontend (4 files created/modified)
+
+File	What
+supplierApi.ts	Full typed API client
+SupplierPage.tsx	List + CRUD, price history dialog, price comparison tab
+router.tsx	/suppliers route
+DashboardPage.tsx	"Fournisseurs" dashboard card (gated by supplier.read)
+
+
+--------------------------------------------------------------------    ---
+
+[M7] Purchase Order & Reception Flow — Complete
+Backend (16/16 tests pass)
+Migration 0019 — purchase_order and purchase_order_line tables + seeds purchase_order.read permission.
+
+Models (purchase_order/models.py):
+
+PurchaseOrder: public_id, garage_id, supplier_id, doc_number (auto PO-YYYY-NNNNN), status, expected_delivery_date, notes, total_ht, version, soft delete
+PurchaseOrderLine: quantity_ordered, unit_price_ht, quantity_received, quantity_invoiced, match_flag
+Service (purchase_order/service.py):
+
+create_po → generates doc_number via sequence, resolves supplier + part public IDs
+send_po → draft → sent
+receive_po → creates stock in_ movement atomically per line, updates status (partially_received / completed), recomputes match flags
+cancel_po → draft/sent/partially_received → cancelled
+update_invoiced_qty → three-way match re-evaluation per line
+create_po_from_alert → one-click PO from low-stock alert
+Three-way match (tolerance from CFG_PO_MATCH_TOLERANCE_PERCENT, default 5%):
+
+qty_mismatch → |ordered − received| / ordered > tolerance
+inv_mismatch → |received − invoiced| / received > tolerance (when invoiced > 0)
+API (purchase_order/router.py):
+
+GET/POST /purchase-orders
+GET/PUT /purchase-orders/{id}
+POST /purchase-orders/{id}/send|receive|cancel
+PATCH /purchase-orders/{id}/lines/{line_id}/invoice
+POST /stock/alerts/{id}/create-po
+Frontend
+purchaseOrderApi.ts — full typed API client
+PurchaseOrderPage.tsx — list with status filter, create dialog (supplier + lines), detail view, reception dialog (per-line qty input), invoice control dialog (match flags), send/cancel buttons
+Dashboard card "Bons de commande" gated by purchase_order.read
+Also fixed (pre-existing bugs)
+Migration 0004 syntax error (branch_labels on same line as down_revision)
+Migrations 0014/0015/0016/0017 used sa.Enum with create_type=False instead of postgresql.ENUM — causing startup failur
+
+
+--------------------------------------------------------------------    ---
+
+

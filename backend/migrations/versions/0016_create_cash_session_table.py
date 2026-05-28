@@ -1,6 +1,7 @@
 ﻿"""0009 – create cash_session table and add cash_session_id to payment."""
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0016"
 down_revision = "0015"
@@ -18,7 +19,7 @@ def upgrade() -> None:
         sa.Column("garage_id", sa.BigInteger(), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("open", "closed", name="cash_session_status_enum", create_type=False),
+            postgresql.ENUM("open", "closed", name="cash_session_status_enum", create_type=False),
             nullable=False,
             server_default="open",
         ),

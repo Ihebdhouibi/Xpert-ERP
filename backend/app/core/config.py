@@ -129,6 +129,11 @@ class Settings(BaseSettings):
     cfg_gtk3_dll_dir: str = ""      # Windows only: path to GTK3\bin (e.g. C:\GTK3\bin)
     cfg_allow_negative_stock: bool = False  # allow on-hand to go negative with explicit reason
 
+    # -------------------------------------------------------------------------
+    # Purchase orders
+    # -------------------------------------------------------------------------
+    cfg_po_match_tolerance_percent: float = 5.0  # three-way match tolerance %
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

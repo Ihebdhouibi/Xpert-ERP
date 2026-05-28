@@ -13,6 +13,8 @@ import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
 import { TabletViewPage } from './pages/tablet/TabletViewPage'
 import { PartsPage } from './pages/parts/PartsPage'
 import { StockPage } from './pages/parts/StockPage'
+import { SupplierPage } from './pages/suppliers/SupplierPage'
+import { PurchaseOrderPage } from './pages/purchase-orders/PurchaseOrderPage'
 
 export const router = createBrowserRouter([
   {
@@ -112,6 +114,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <StockPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/suppliers',
+    element: (
+      <ProtectedRoute>
+        <SupplierPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/purchase-orders',
+    element: (
+      <ProtectedRoute>
+        <PurchaseOrderPage />
       </ProtectedRoute>
     ),
   },
