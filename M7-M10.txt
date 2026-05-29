@@ -415,3 +415,34 @@ Period selector (today / week / month / quarter / year / custom with date picker
 KPI cards now include open repair orders and low-stock alerts
 Export buttons (CSV + Excel) on top-customers, top-suppliers, and low-stock-alerts tables
 Role gating: admin + super_admin see everything; accountant sees only finance section (revenue, outstanding, invoices); workshop section (repair count chart, productivity chart, occupancy cards) hidden for accountant; inventory section controlled by reporting.inventory.read
+
+----------------------------------------------------------------------------
+
+Here's a summary of everything implemented for issue #46:
+
+Issue #46 — Accounting Export (M10)
+What was built
+New module — backend/app/modules/accounting_export/
+
+File	Purpose
+models.py	AccountingExport ORM model — period, format, status, file_storage_key, record_counts
+repository.py	CRUD (create, get_by_public_id, list, update)
+schemas.py	Pydantic request/response models + preview response
+formatters.py	Generates ZIP of 4 CSVs for Sage/Cegid/EBP/generic_csv — French PCG accounts, locale-correct separators/dates
+service.py	Gathers records, builds ZIP, uploads to S3, marks exported, handles failure status
+router.py	GET /preview, POST /, GET /, GET /{id}, GET /{id}/download
+Migration — 0027_create_accounting_export.py
+
+Creates accounting_export table
+Adds is_exported to payment and supplier_invoice
+Seeds 3 permissions (accounting_export.read/create/download)
+Export lock enforcement
+
+invoice/service.py — cancel_invoice blocked if is_exported
+credit_note/service.py — record_refund blocked if payment.is_exported
+supplier_invoice/service.py — update and cancel blocked if is_exported
+Config — cfg_accounting_format added (default: generic_csv)
+
+Bug fix — kpi/router.py — pre-existing Depends(require_permission(...)) double-wrap fixed
+
+Tests — test_accounting_export.py — 21 tests: 8 formatter unit tests + 13 integration tests covering preview, export, re-export exclusion, lock enforcement. All 101 existing tests continue to pass.

@@ -7,6 +7,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -49,6 +50,7 @@ class Payment(Base):
     )
     reference: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_exported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     created_by: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True

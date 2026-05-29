@@ -26,7 +26,7 @@ router = APIRouter(prefix="/kpi", tags=["kpi"])
 @router.get(
     "/live",
     response_model=KpiLiveResponse,
-    dependencies=[Depends(require_permission("reporting.dashboard.read"))],
+    dependencies=[require_permission("reporting.dashboard.read")],
 )
 async def get_live(
     user: AuthUser,
@@ -48,7 +48,7 @@ async def get_live(
 @router.get(
     "/snapshots",
     response_model=KpiTrendResponse,
-    dependencies=[Depends(require_permission("reporting.dashboard.read"))],
+    dependencies=[require_permission("reporting.dashboard.read")],
 )
 async def get_trend(
     user: AuthUser,
@@ -82,7 +82,7 @@ async def get_trend(
 @router.get(
     "/analytics",
     response_model=AnalyticsResponse,
-    dependencies=[Depends(require_permission("reporting.dashboard.read"))],
+    dependencies=[require_permission("reporting.dashboard.read")],
 )
 async def get_analytics(
     user: AuthUser,

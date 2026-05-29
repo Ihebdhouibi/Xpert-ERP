@@ -258,6 +258,10 @@ async def record_refund(
     payment = await pay_repo.get_by_id(db, request.payment_id, garage_id)
     if not payment:
         raise RefundNotFoundError(f"Payment {request.payment_id} not found.")
+    if payment.is_exported:
+        raise CreditNoteStateError(
+            "Exported payments cannot be refunded directly. Issue a credit note against the invoice."
+        )
 
     already_refunded = await repo.total_refunded_for_payment(db, request.payment_id)
     available = payment.amount_minor - already_refunded

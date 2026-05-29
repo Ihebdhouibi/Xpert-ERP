@@ -415,6 +415,10 @@ async def cancel_invoice(
         InvoiceStatus.partial, InvoiceStatus.paid,
     ):
         raise InvoiceStateError(f"Cannot cancel an invoice in status '{inv.status.value}'.")
+    if inv.is_exported:
+        raise InvoiceStateError(
+            "Exported invoices cannot be cancelled. Issue a credit note instead."
+        )
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 

@@ -197,6 +197,8 @@ async def update_supplier_invoice(
         raise SIVersionConflictError(si.version, submitted_version)
     if si.status != SupplierInvoiceStatus.draft:
         raise SIInvalidTransitionError("Only draft supplier invoices can be updated")
+    if si.is_exported:
+        raise SIInvalidTransitionError("Exported supplier invoices cannot be modified")
 
     updates: dict = {}
     if number is not None:
@@ -471,6 +473,8 @@ async def cancel_supplier_invoice(
         raise SIInvalidTransitionError(
             f"Cannot cancel a supplier invoice with status '{si.status}'"
         )
+    if si.is_exported:
+        raise SIInvalidTransitionError("Exported supplier invoices cannot be cancelled")
 
     return await SupplierInvoiceRepository.update(
         db, si, status=SupplierInvoiceStatus.cancelled

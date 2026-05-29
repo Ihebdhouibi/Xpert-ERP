@@ -72,6 +72,7 @@ class SupplierInvoice(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     has_discrepancy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_exported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 

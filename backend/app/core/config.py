@@ -156,6 +156,11 @@ class Settings(BaseSettings):
     cfg_kpi_workshop_capacity: int = 10            # number of bays / concurrent RO slots
 
     # -------------------------------------------------------------------------
+    # Accounting export
+    # -------------------------------------------------------------------------
+    cfg_accounting_format: str = "generic_csv"  # sage | cegid | ebp | generic_csv
+
+    # -------------------------------------------------------------------------
     # Notifications
     # -------------------------------------------------------------------------
     cfg_notification_max_retries: int = 3
