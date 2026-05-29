@@ -7,10 +7,19 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-xpert}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xpert_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-xpert_erp}
+    command: >
+      postgres
+      -c wal_level=replica
+      -c archive_mode=on
+      -c archive_command='test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f'
+      -c archive_cleanup_command='pg_archivecleanup /var/lib/postgresql/wal_archive %r'
+      -c max_wal_senders=3
+      -c wal_keep_size=128
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      - pg_wal_archive:/var/lib/postgresql/wal_archive
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xpert}"]
       interval: 10s
@@ -73,7 +82,24 @@ services:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    container_name: xpert_erp_backup
+    profiles: ["backup"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../infra/scripts:/scripts:ro
+      - pg_wal_archive:/var/lib/postgresql/wal_archive:ro
+    entrypoint: ["/bin/bash", "/scripts/backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pg_data:
   redis_data:
   minio_data:
+  pg_wal_archive:
