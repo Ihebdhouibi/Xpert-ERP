@@ -15,6 +15,7 @@ import WarehouseIcon from '@mui/icons-material/Warehouse'
 import LocalShippingIcon from '@mui/icons-material/LocalShipping'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
+import BarChartIcon from '@mui/icons-material/BarChart'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -252,6 +253,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Rapprochement 3 voies
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="reporting.dashboard.read">
+          <Paper
+            component={RouterLink}
+            to="/kpi"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <BarChartIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Tableau de bord KPI
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Indicateurs & tendances
               </Typography>
             </Box>
           </Paper>

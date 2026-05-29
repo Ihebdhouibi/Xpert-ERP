@@ -119,6 +119,7 @@ def create_app() -> FastAPI:
     from app.modules.notification.router import router as notification_router
     from app.modules.inspection.router import router as inspection_router
     from app.modules.media.router import router as media_router
+    from app.modules.kpi.router import router as kpi_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -145,6 +146,7 @@ def create_app() -> FastAPI:
     app.include_router(notification_router, prefix="/api/v1")
     app.include_router(inspection_router, prefix="/api/v1")
     app.include_router(media_router, prefix="/api/v1")
+    app.include_router(kpi_router, prefix="/api/v1")
 
     return app
 

@@ -290,6 +290,44 @@ async def _run_quotation_expiring() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Job: daily KPI snapshots
+# ---------------------------------------------------------------------------
+
+
+async def _run_kpi_snapshots() -> None:
+    """Compute and persist daily KPI snapshots for all active garages."""
+    from app.modules.kpi.service import compute_all_kpis
+    from app.modules.kpi.repository import KpiSnapshotRepository
+
+    today = datetime.now(tz=timezone.utc).date()
+
+    async with AsyncSessionFactory() as db:
+        try:
+            # Collect distinct garage_ids from repair_order as a proxy for active garages.
+            from sqlalchemy import text as sa_text
+            result = await db.execute(
+                sa_text("SELECT DISTINCT garage_id FROM repair_order WHERE deleted_at IS NULL LIMIT 100")
+            )
+            garage_ids = [row[0] for row in result.fetchall()]
+
+            for garage_id in garage_ids:
+                try:
+                    kpi_data = await compute_all_kpis(db, garage_id)
+                    await KpiSnapshotRepository.upsert_many(
+                        db,
+                        garage_id=garage_id,
+                        snapshot_date=today,
+                        kpis={code: (val, meta) for code, (val, meta) in kpi_data.items()},
+                    )
+                    logger.info("kpi_snapshot_stored", garage_id=garage_id, date=str(today))
+                except Exception:
+                    logger.exception("kpi_snapshot_error", garage_id=garage_id)
+        except Exception:
+            logger.exception("kpi_snapshot_job_error")
+            await db.rollback()
+
+
+# ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
 
@@ -325,6 +363,16 @@ def configure_scheduler() -> AsyncIOScheduler:
         trigger="interval",
         minutes=1,
         id="quotation_expiring",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Daily KPI snapshot at 00:05 UTC
+    scheduler.add_job(
+        _run_kpi_snapshots,
+        trigger="cron",
+        hour=0,
+        minute=5,
+        id="kpi_daily_snapshot",
         max_instances=1,
         coalesce=True,
     )

@@ -21,6 +21,7 @@ import { InspectionTemplatesPage } from './pages/inspections/InspectionTemplates
 import { InspectionsListPage } from './pages/inspections/InspectionsListPage'
 import { InspectionExecutionPage } from './pages/inspections/InspectionExecutionPage'
 import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPage'
+import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 
 export const router = createBrowserRouter([
   {
@@ -176,6 +177,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <InspectionExecutionPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/kpi',
+    element: (
+      <ProtectedRoute>
+        <KpiDashboardPage />
       </ProtectedRoute>
     ),
   },

@@ -198,6 +198,7 @@ async def get_signed_url(
 @router.delete(
     "/{media_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     dependencies=[require_permission("inspection.write")],
     summary="Soft-delete a media record",
 )

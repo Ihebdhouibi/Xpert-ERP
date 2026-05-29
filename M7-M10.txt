@@ -331,4 +331,58 @@ inspectionApi.ts — generateApprovalLink, downloadReport, getApprovalData, subm
 
 InspectionApprovalPage.tsx — customer-facing public page; shows sections/items, Approve/Reject buttons on actionable items, sticky submit bar, success/410/404 states
 
-router.tsx — /approve/:token public route (no ProtectedRoute); InspectionExecutionPage gains "Télécharger le rapport PDF" and "Générer lien approbation client" (copies to clipboard) buttons when status = completed
+router.tsx — /approve/:token public route (no ProtectedRoute); InspectionExecutionPage gains "Télécharger le rapport PDF" and "Générer lien approbation client" (copies to clipboard) buttons when status = completed00
+
+---------------------------------------------------------
+----------------------------------------------
+----------------------------------
+problem of sign in 
+----------------
+--------------
+-------------
+FastAPI 0.115.x added a stricter startup-time assertion — any route with status_code=204 (No Content) must explicitly declare that it has no response body, otherwise FastAPI refuses to boot.
+
+Before 0.115, FastAPI was lenient: if you wrote -> None as the return type on a 204 route, it silently accepted it. In 0.115 it now enforces it hard at import time with:
+
+
+assert is_body_allowed_for_status_code(status_code)
+# AssertionError: Status code 204 must not have a response body
+The two correct patterns that satisfy the check:
+
+
+# Option A — response_model=None (explicit "no schema")
+@router.delete("/foo", status_code=204, response_model=None)
+async def delete_foo() -> None: ...
+
+# Option B — response_class=Response (returns a raw Response object)
+@router.delete("/foo", status_code=204, response_class=Response)
+async def delete_foo() -> Response:
+    return Response(status_code=204)
+Why only two routes were broken — most routers in your codebase were already using one of those patterns correctly. The inspection and media routers were written slightly earlier and missed it. The bug was dormant because those modules had never actually been loaded until now (they were untracked in git and the server hadn't been started since they were added).-
+
+
+-------------------------------------------------------------------------
+
+issue 44 
+All good. Here's what was delivered for issue #44:
+
+Backend — 8 files created/modified
+
+File	What
+migrations/versions/0026_create_kpi_snapshot.py	kpi_snapshot table: garage_id, snapshot_date, kpi_code, value NUMERIC(24,4), meta JSONB (for list KPIs), computed_at; unique on (garage_id, snapshot_date, kpi_code)
+kpi/models.py	KpiSnapshot ORM
+kpi/repository.py	upsert_many (bulk INSERT … ON CONFLICT), get_trend, get_latest_all
+kpi/service.py	12 KPI computations via single-round-trip raw SQL; get_live_kpis with Redis cache at CFG_KPI_REFRESH_INTERVAL_SECONDS TTL; compute_all_kpis used by both live endpoint and scheduler
+kpi/schemas.py	KpiLiveResponse, KpiSnapshotOut, KpiTrendResponse
+kpi/router.py	GET /kpi/live (cached, requires reporting.dashboard.read), GET /kpi/snapshots?kpi_code=X&from_date=Y&to_date=Z
+notification/scheduler.py	Daily cron job at 00:05 UTC — computes + upserts snapshots for all active garages
+core/config.py	cfg_kpi_refresh_interval_seconds=300, cfg_kpi_workshop_capacity=10
+KPI codes: revenue_mtd, revenue_ytd, margin_avg_pct, workshop_occupancy_pct, avg_repair_duration_h, avg_immobilization_h, unpaid_invoices_count, outstanding_amount_minor, top_customers (meta=[]), top_suppliers (meta=[]), comeback_rate_pct, quotation_conversion_rate_pct
+
+Frontend — 4 files created/modified
+
+File	What
+lib/kpiApi.ts	getLive(), getTrend(code, from, to)
+pages/kpi/KpiDashboardPage.tsx	10 KPI cards + Recharts trend chart with KPI selector + top-10 tables; auto-refresh at refresh_interval_seconds from API response
+router.tsx	/kpi protected route
+DashboardPage.tsx	"Tableau de bord KPI" card gated by reporting.dashboard.read

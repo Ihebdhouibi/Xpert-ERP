@@ -197,6 +197,7 @@ async def update_template_endpoint(
 @router.delete(
     "/inspection-templates/{public_id}",
     status_code=204,
+    response_model=None,
     dependencies=[require_permission("inspection.write")],
 )
 async def delete_template_endpoint(

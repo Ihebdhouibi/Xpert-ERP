@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     cfg_inspection_approval_expiry_days: int = 7  # days a customer approval link stays valid
 
     # -------------------------------------------------------------------------
+    # KPI dashboard
+    # -------------------------------------------------------------------------
+    cfg_kpi_refresh_interval_seconds: int = 300   # live endpoint Redis cache TTL
+    cfg_kpi_workshop_capacity: int = 10            # number of bays / concurrent RO slots
+
+    # -------------------------------------------------------------------------
     # Notifications
     # -------------------------------------------------------------------------
     cfg_notification_max_retries: int = 3
