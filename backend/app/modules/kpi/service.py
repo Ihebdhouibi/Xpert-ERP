@@ -36,6 +36,8 @@ KPI_CODES = [
     "avg_immobilization_h",
     "unpaid_invoices_count",
     "outstanding_amount_minor",
+    "open_repair_orders_count",
+    "low_stock_alerts_count",
     "top_customers",
     "top_suppliers",
     "comeback_rate_pct",
@@ -359,6 +361,39 @@ async def _comeback_rate_pct(db: AsyncSession, garage_id: int) -> tuple[Optional
     return (Decimal(val) if val is not None else None), None
 
 
+async def _open_repair_orders_count(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
+    """Count of repair orders not yet delivered."""
+    row = await db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM repair_order
+            WHERE garage_id = :g
+              AND status NOT IN ('delivered')
+              AND deleted_at IS NULL
+            """
+        ),
+        {"g": garage_id},
+    )
+    return Decimal(row.scalar() or 0), None
+
+
+async def _low_stock_alerts_count(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
+    """Count of open (unacknowledged) low-stock alerts."""
+    row = await db.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM low_stock_alert
+            WHERE garage_id = :g
+              AND status = 'open'
+            """
+        ),
+        {"g": garage_id},
+    )
+    return Decimal(row.scalar() or 0), None
+
+
 async def _quotation_conversion_rate_pct(
     db: AsyncSession, garage_id: int
 ) -> tuple[Optional[Decimal], None]:
@@ -414,6 +449,8 @@ async def compute_all_kpis(
     results["avg_immobilization_h"] = await _avg_immobilization_h(db, garage_id)
     results["unpaid_invoices_count"] = await _unpaid_invoices_count(db, garage_id)
     results["outstanding_amount_minor"] = await _outstanding_amount_minor(db, garage_id)
+    results["open_repair_orders_count"] = await _open_repair_orders_count(db, garage_id)
+    results["low_stock_alerts_count"] = await _low_stock_alerts_count(db, garage_id)
     results["top_customers"] = await _top_customers(db, garage_id)
     results["top_suppliers"] = await _top_suppliers(db, garage_id)
     results["comeback_rate_pct"] = await _comeback_rate_pct(db, garage_id)
@@ -460,6 +497,99 @@ async def get_live_kpis(db: AsyncSession, garage_id: int) -> dict[str, Any]:
         logger.warning("kpi_cache_write_failed", exc_info=True)
 
     return payload
+
+
+async def compute_analytics(
+    db: AsyncSession,
+    garage_id: int,
+    from_date: date,
+    to_date: date,
+) -> dict[str, Any]:
+    """
+    Compute period-scoped analytics for charts.
+    Returns daily revenue trend, daily repair count trend, and per-mechanic productivity.
+    """
+    revenue_result = await db.execute(
+        text(
+            """
+            SELECT (issued_at AT TIME ZONE 'UTC')::date AS day,
+                   COALESCE(SUM(total_minor), 0)::bigint AS amount_minor
+            FROM invoice
+            WHERE garage_id = :g
+              AND status IN ('issued', 'partial', 'paid')
+              AND (issued_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+              AND deleted_at IS NULL
+            GROUP BY day
+            ORDER BY day
+            """
+        ),
+        {"g": garage_id, "from_d": from_date, "to_d": to_date},
+    )
+    revenue_trend = [
+        {"date": str(r.day), "value": int(r.amount_minor)}
+        for r in revenue_result.fetchall()
+    ]
+
+    repair_result = await db.execute(
+        text(
+            """
+            SELECT (e.occurred_at AT TIME ZONE 'UTC')::date AS day,
+                   COUNT(DISTINCT e.ro_id)::bigint AS count
+            FROM ro_status_event e
+            JOIN repair_order ro ON ro.id = e.ro_id
+            WHERE ro.garage_id = :g
+              AND e.new_status = 'delivered'
+              AND (e.occurred_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+              AND ro.deleted_at IS NULL
+            GROUP BY day
+            ORDER BY day
+            """
+        ),
+        {"g": garage_id, "from_d": from_date, "to_d": to_date},
+    )
+    repair_count_trend = [
+        {"date": str(r.day), "value": int(r.count)}
+        for r in repair_result.fetchall()
+    ]
+
+    mechanic_result = await db.execute(
+        text(
+            """
+            SELECT u.full_name,
+                   COUNT(DISTINCT e.ro_id)::bigint AS completed_count,
+                   ROUND(AVG(
+                       EXTRACT(EPOCH FROM (e.occurred_at - ro.created_at)) / 3600.0
+                   )::NUMERIC, 2) AS avg_duration_h
+            FROM ro_status_event e
+            JOIN repair_order ro ON ro.id = e.ro_id
+            JOIN app_user u ON u.id = ro.assigned_user_id
+            WHERE ro.garage_id = :g
+              AND e.new_status = 'delivered'
+              AND (e.occurred_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+              AND ro.deleted_at IS NULL
+              AND u.deleted_at IS NULL
+            GROUP BY u.id, u.full_name
+            ORDER BY completed_count DESC
+            """
+        ),
+        {"g": garage_id, "from_d": from_date, "to_d": to_date},
+    )
+    mechanic_productivity = [
+        {
+            "name": r.full_name,
+            "completed_count": int(r.completed_count),
+            "avg_duration_h": float(r.avg_duration_h) if r.avg_duration_h is not None else None,
+        }
+        for r in mechanic_result.fetchall()
+    ]
+
+    return {
+        "from_date": str(from_date),
+        "to_date": str(to_date),
+        "revenue_trend": revenue_trend,
+        "repair_count_trend": repair_count_trend,
+        "mechanic_productivity": mechanic_productivity,
+    }
 
 
 async def invalidate_cache(garage_id: int) -> None:

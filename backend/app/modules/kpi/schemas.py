@@ -36,3 +36,22 @@ class KpiTrendResponse(BaseModel):
     from_date: date
     to_date: date
     points: list[KpiSnapshotOut]
+
+
+class AnalyticsTrendPoint(BaseModel):
+    date: str
+    value: float
+
+
+class MechanicProductivityEntry(BaseModel):
+    name: str
+    completed_count: int
+    avg_duration_h: Optional[float]
+
+
+class AnalyticsResponse(BaseModel):
+    from_date: str
+    to_date: str
+    revenue_trend: list[AnalyticsTrendPoint]
+    repair_count_trend: list[AnalyticsTrendPoint]
+    mechanic_productivity: list[MechanicProductivityEntry]

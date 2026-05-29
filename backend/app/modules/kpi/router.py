@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.modules.kpi.export_service import export_csv, export_xlsx
 from app.modules.kpi.repository import KpiSnapshotRepository
-from app.modules.kpi.schemas import KpiLiveResponse, KpiSnapshotOut, KpiTrendResponse, KpiValueOut
-from app.modules.kpi.service import get_live_kpis
+from app.modules.kpi.schemas import (
+    AnalyticsResponse,
+    KpiLiveResponse,
+    KpiSnapshotOut,
+    KpiTrendResponse,
+    KpiValueOut,
+)
+from app.modules.kpi.service import compute_analytics, get_live_kpis
 
 router = APIRouter(prefix="/kpi", tags=["kpi"])
 
@@ -69,3 +77,78 @@ async def get_trend(
         to_date=to_date,
         points=[KpiSnapshotOut.model_validate(s) for s in snapshots],
     )
+
+
+@router.get(
+    "/analytics",
+    response_model=AnalyticsResponse,
+    dependencies=[Depends(require_permission("reporting.dashboard.read"))],
+)
+async def get_analytics(
+    user: AuthUser,
+    from_date: date = Query(
+        default_factory=lambda: date.today() - timedelta(days=29),
+        description="Start date (inclusive)",
+    ),
+    to_date: date = Query(
+        default_factory=date.today,
+        description="End date (inclusive)",
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> AnalyticsResponse:
+    """Period-scoped analytics: revenue trend, repair count trend, mechanic productivity."""
+    if from_date > to_date:
+        raise HTTPException(status_code=422, detail="from_date must be <= to_date")
+    data = await compute_analytics(db, user.garage_id, from_date, to_date)
+    return AnalyticsResponse(
+        from_date=data["from_date"],
+        to_date=data["to_date"],
+        revenue_trend=[{"date": p["date"], "value": p["value"]} for p in data["revenue_trend"]],
+        repair_count_trend=[{"date": p["date"], "value": p["value"]} for p in data["repair_count_trend"]],
+        mechanic_productivity=data["mechanic_productivity"],
+    )
+
+
+_EXPORT_TABLES = {"top_customers", "top_suppliers", "low_stock_alerts"}
+_EXPORT_PERMISSION: dict[str, str] = {
+    "top_customers": "reporting.dashboard.read",
+    "top_suppliers": "reporting.dashboard.read",
+    "low_stock_alerts": "reporting.inventory.read",
+}
+_EXPORT_FILENAMES: dict[str, str] = {
+    "top_customers": "top_clients",
+    "top_suppliers": "top_fournisseurs",
+    "low_stock_alerts": "alertes_stock",
+}
+
+
+@router.get("/export")
+async def export_table(
+    user: AuthUser,
+    table: str = Query(..., description="Table to export: top_customers | top_suppliers | low_stock_alerts"),
+    format: Literal["csv", "xlsx"] = Query("csv", description="Output format"),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Export a KPI table as CSV or Excel."""
+    if table not in _EXPORT_TABLES:
+        raise HTTPException(status_code=422, detail=f"Unknown table: {table}")
+
+    required_perm = _EXPORT_PERMISSION[table]
+    if not user.has_permission(required_perm):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    filename = _EXPORT_FILENAMES[table]
+    if format == "xlsx":
+        content = await export_xlsx(db, user.garage_id, table)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
+        )
+    else:
+        content = await export_csv(db, user.garage_id, table)
+        return Response(
+            content=content.encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8-sig",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+        )

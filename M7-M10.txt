@@ -386,3 +386,32 @@ lib/kpiApi.ts	getLive(), getTrend(code, from, to)
 pages/kpi/KpiDashboardPage.tsx	10 KPI cards + Recharts trend chart with KPI selector + top-10 tables; auto-refresh at refresh_interval_seconds from API response
 router.tsx	/kpi protected route
 DashboardPage.tsx	"Tableau de bord KPI" card gated by reporting.dashboard.read
+
+--------------------------------------------------------------------------------
+Issue #45 is complete. Here's a summary of every change made:
+
+What was built
+Backend
+kpi/service.py — two new KPI computations added to the live payload:
+
+open_repair_orders_count — all non-delivered ROs
+low_stock_alerts_count — open low-stock alerts
+compute_analytics(db, garage_id, from_date, to_date) — returns daily revenue trend, daily completed-repair count trend, and per-mechanic productivity table for any arbitrary period
+kpi/export_service.py (new file) — CSV and Excel export using openpyxl for three tables: top_customers, top_suppliers, low_stock_alerts. Excel headers get blue/white formatting and auto-sized columns. CSV uses utf-8-sig for clean Excel import.
+
+kpi/schemas.py — added AnalyticsTrendPoint, MechanicProductivityEntry, AnalyticsResponse.
+
+kpi/router.py — two new endpoints:
+
+GET /kpi/analytics?from_date=&to_date= — period-scoped analytics, requires reporting.dashboard.read
+GET /kpi/export?table=&format=csv|xlsx — per-table permission check (dashboard or inventory read)
+Frontend
+lib/kpiApi.ts — added getAnalytics(), downloadExport() (triggers browser download via blob), and the new TypeScript interfaces.
+
+pages/kpi/KpiDashboardPage.tsx — complete rewrite:
+
+Period selector (today / week / month / quarter / year / custom with date pickers)
+4 Recharts charts: revenue trend (AreaChart), outstanding balance evolution (AreaChart from snapshots), repair count per day (BarChart), mechanic productivity (horizontal BarChart)
+KPI cards now include open repair orders and low-stock alerts
+Export buttons (CSV + Excel) on top-customers, top-suppliers, and low-stock-alerts tables
+Role gating: admin + super_admin see everything; accountant sees only finance section (revenue, outstanding, invoices); workshop section (repair count chart, productivity chart, occupancy cards) hidden for accountant; inventory section controlled by reporting.inventory.read
