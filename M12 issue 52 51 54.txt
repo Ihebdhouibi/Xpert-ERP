@@ -42,3 +42,25 @@ OpenAPI docs gated (main.py): disabled in production and staging environments
 Password min length 12 (config.py, auth/schemas.py, rbac/schemas.py): raised from 8 to meet ASVS 2.1.1
 Audit document
 Full OWASP ASVS L2 checklist, pen-smoke-test results, and acceptance criteria verification at docs/security/audit_M12.md.
+
+
+-----------------------------------------------------------------------------------
+
+Issue #54 is done. Here's a summary of everything delivered:
+
+What was built:
+
+File	What it does
+config.py:181	Added cfg_config_cache_ttl_seconds = 60 to Settings
+modules/config/models.py	GarageSetting ORM model — garage_id + key unique, indexed
+modules/config/service.py	SettingsService — Redis → DB → env → default lookup chain; typed helpers get_int/get_bool/get_float; upsert_setting / delete_setting with immediate cache invalidation
+modules/config/router.py	GET/PUT/DELETE /api/v1/settings/{key}?garage_id=0 — guarded by config.read / config.write
+migrations/0028_create_garage_setting.py	Creates garage_setting table + seeds config.read / config.write permissions
+main.py	Router registered
+tests/test_settings_service.py	15 unit tests, all passing, no infrastructure required
+docs/feature/foundations/config_reference.md	Full CFG_* catalog with types, defaults, descriptions
+.github/scripts/check_hardcoded.sh	Grep-based CI check for hard-coded threshold literals
+Acceptance criteria met:
+
+Changing a CFG_* value via PUT /api/v1/settings/{key} invalidates the cache instantly; the new value is live within cfg_config_cache_ttl_seconds (default 60 s) with no restart.
+CI check fails if threshold names with bare literals appear in module files outside of config.py or tests.
