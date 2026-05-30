@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.rate_limit import rate_limit
 from app.core.redis import get_redis
 from app.modules.auth import service
 from app.modules.auth.schemas import (
@@ -35,6 +36,7 @@ def _client_ip(request: Request) -> str:
     response_model=LoginResponse,
     status_code=status.HTTP_200_OK,
     summary="Authenticate and receive access + refresh tokens",
+    dependencies=[rate_limit("auth:login", max_requests=10, window_seconds=60)],
 )
 async def login(
     body: LoginRequest,
@@ -65,6 +67,7 @@ async def login(
     response_model=LoginResponse,
     status_code=status.HTTP_200_OK,
     summary="Rotate refresh token and issue new access token",
+    dependencies=[rate_limit("auth:refresh", max_requests=30, window_seconds=60)],
 )
 async def refresh(
     body: RefreshRequest,
@@ -99,6 +102,7 @@ async def logout(
     "/password-reset/request",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Request a password reset email",
+    dependencies=[rate_limit("auth:pw-reset", max_requests=5, window_seconds=300)],
 )
 async def password_reset_request(
     body: PasswordResetRequest,
@@ -118,6 +122,7 @@ async def password_reset_request(
     "/password-reset/confirm",
     status_code=status.HTTP_200_OK,
     summary="Confirm password reset with token",
+    dependencies=[rate_limit("auth:pw-reset", max_requests=5, window_seconds=300)],
 )
 async def password_reset_confirm(
     body: PasswordResetConfirm,

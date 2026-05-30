@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     auth_max_failed_attempts: int = 5
     auth_lockout_minutes: int = 15
     password_reset_expiry_minutes: int = 30
-    password_min_length: int = 8
+    password_min_length: int = 12
 
     # -------------------------------------------------------------------------
     # CORS

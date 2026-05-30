@@ -6,9 +6,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+import jwt as pyjwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
-from jose import JWTError, jwt
+from jwt.exceptions import PyJWTError as JWTError
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,13 +76,14 @@ def create_access_token(
         "sub": subject,
         "uid": user_id,
         "gid": garage_id,
+        "jti": secrets.token_urlsafe(16),
         "roles": roles,
         "perms": permissions,
         "exp": expire,
         "iat": _utcnow(),
         "type": "access",
     }
-    token = jwt.encode(payload, cfg.secret_key, algorithm=cfg.algorithm)
+    token = pyjwt.encode(payload, cfg.secret_key, algorithm=cfg.algorithm)
     return token, expire_seconds
 
 
@@ -97,14 +99,14 @@ def create_refresh_token(subject: str) -> tuple[str, str]:
         "iat": _utcnow(),
         "type": "refresh",
     }
-    token = jwt.encode(payload, cfg.secret_key, algorithm=cfg.algorithm)
+    token = pyjwt.encode(payload, cfg.secret_key, algorithm=cfg.algorithm)
     return token, jti
 
 
 def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
     """Decode and validate a JWT. Raises JWTError on failure."""
     cfg = get_settings()
-    payload: dict[str, Any] = jwt.decode(
+    payload: dict[str, Any] = pyjwt.decode(
         token, cfg.secret_key, algorithms=[cfg.algorithm]
     )
     if payload.get("type") != expected_type:

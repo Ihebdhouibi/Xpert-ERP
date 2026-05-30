@@ -1,0 +1,44 @@
+Everything is done. Here's what was created:
+
+Infrastructure changes:
+
+infra/docker-compose.yml — PostgreSQL service now has WAL archiving (wal_level=replica, archive_mode=on, archive_command) and a new pg_wal_archive volume. Added a backup service under the backup profile.
+infra/Dockerfile.backup — postgres:15-alpine extended with the MinIO client (mc).
+Scripts:
+
+infra/scripts/backup.sh — pg_dump + MinIO mirror + WAL sync → backup S3 bucket, with 7-day retention pruning.
+infra/scripts/restore.sh — downloads a named dump (or latest), drops/recreates the DB, restores, and prints row-count integrity checks.
+infra/scripts/pitr_basebackup.sh — pg_basebackup → uploads to S3 for PITR. Run weekly alongside the daily backup.
+Config:
+
+.env.example — added BACKUP_S3_*, BACKUP_RETENTION_DAYS, POSTGRES_HOST.
+Docs:
+
+docs/operations/backup_restore_drill_2026-05-29.md — full drill record with steps, output, row counts, and result.
+docs/operations/runbook.md — complete operator guide covering startup, shutdown, backup, restore (logical + PITR), log rotation, migrations, and every alert scenario.
+Zero overlap with issues #47/#48. Ready to commit whenever you want.
+
+--------------------------------------------------------------------------------
+
+Issue 51 is complete. Here's a summary of everything done:
+
+Issue #51 — Security Audit: Completed
+Dependency scan — all production CVEs remediated
+Package	Before	After	CVEs fixed
+python-jose	3.3.0	removed	3 (including one with no upstream fix)
+PyJWT	—	2.13.0	replacement
+cryptography	44.0.3	46.0.7	3
+starlette	0.46.2	1.2.0	3
+fastapi	0.115.12	0.136.3	(carrier for starlette)
+python-multipart	0.0.20	0.0.27	3
+weasyprint	65.1	68.0	1
+Remaining pip-audit findings are pip, pytest, setuptools — build/dev tools, not shipped.
+
+Code hardening
+Rate limiting (backend/app/core/rate_limit.py): Redis-backed per-IP limiter — 10 req/60 s on login, 30/60 s on refresh, 5/300 s on password-reset
+PyJWT migration (auth/service.py, rbac/dependencies.py): dropped python-jose, which had 3 unpatched CVEs
+Access token JTI (auth/service.py): added jti claim — existing deny-list check already handles it (ASVS 3.5.2)
+OpenAPI docs gated (main.py): disabled in production and staging environments
+Password min length 12 (config.py, auth/schemas.py, rbac/schemas.py): raised from 8 to meet ASVS 2.1.1
+Audit document
+Full OWASP ASVS L2 checklist, pen-smoke-test results, and acceptance criteria verification at docs/security/audit_M12.md.
