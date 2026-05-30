@@ -178,6 +178,11 @@ class Settings(BaseSettings):
     cfg_sms_api_key: str = ""    # API key / bearer token
     cfg_sms_from: str = ""       # sender ID or E.164 number
 
+    # -------------------------------------------------------------------------
+    # Runtime settings cache
+    # -------------------------------------------------------------------------
+    cfg_config_cache_ttl_seconds: int = 60  # how long DB-backed CFG_* values are cached in Redis
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
