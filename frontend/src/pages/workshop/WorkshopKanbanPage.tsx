@@ -17,14 +17,14 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Paper,
-  Snackbar,
   Stack,
   Typography,
 } from '@mui/material'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { useToast } from '../../contexts/ToastContext'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -44,14 +44,15 @@ const STATUS_ORDER: ROStatus[] = [
   'delivered',
 ]
 
-const STATUS_COLORS: Record<ROStatus, string> = {
-  created: '#e3f2fd',
-  diagnosis: '#e8f5e9',
-  in_repair: '#fff3e0',
-  finished: '#f3e5f5',
-  delivered: '#e0f2f1',
-  paused_parts: '#fce4ec',
-  paused_approval: '#fce4ec',
+// Top-border accent color per status (design system tokens)
+const STATUS_ACCENT: Record<ROStatus, string> = {
+  created: '#94A3B8',      // slate — neutral, just created
+  diagnosis: '#3B82F6',    // blue — active investigation
+  in_repair: '#F59E0B',    // amber — hands-on work
+  finished: '#10B981',     // emerald — work done
+  delivered: '#6366F1',    // indigo — closed/delivered
+  paused_parts: '#EF4444', // red — blocked
+  paused_approval: '#F97316', // orange — waiting on client
 }
 
 const PRIORITY_COLORS: Record<string, 'default' | 'warning' | 'error'> = {
@@ -165,18 +166,29 @@ function KanbanColumn({
       <Box
         sx={{
           px: 1.5,
-          py: 1,
-          borderRadius: 1,
-          bgcolor: STATUS_COLORS[status],
-          borderBottom: '2px solid',
-          borderColor: 'divider',
+          py: 1.25,
+          borderRadius: '8px 8px 0 0',
+          bgcolor: 'background.paper',
+          borderTop: '3px solid',
+          borderColor: STATUS_ACCENT[status],
+          borderBottom: '1px solid #E2E8F0',
         }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="subtitle2" fontWeight={700}>
+          <Typography variant="subtitle2" fontWeight={700} fontSize="0.8125rem">
             {STATUS_LABELS[status]}
           </Typography>
-          <Chip label={cards.length} size="small" sx={{ height: 20, fontSize: 11 }} />
+          <Box
+            sx={{
+              minWidth: 22, height: 22, borderRadius: '6px',
+              bgcolor: cards.length > 0 ? STATUS_ACCENT[status] : '#E2E8F0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Typography variant="caption" fontWeight={700} fontSize="0.6875rem" color={cards.length > 0 ? 'white' : 'text.disabled'}>
+              {cards.length}
+            </Typography>
+          </Box>
         </Stack>
       </Box>
 
@@ -185,14 +197,15 @@ function KanbanColumn({
         sx={{
           flex: 1,
           minHeight: 120,
-          p: 0.5,
-          borderRadius: 1,
-          bgcolor: isOver ? 'action.hover' : 'transparent',
-          border: isOver ? '2px dashed' : '2px solid transparent',
-          borderColor: isOver ? 'primary.main' : 'transparent',
+          p: 0.75,
+          borderRadius: '0 0 8px 8px',
+          bgcolor: isOver ? '#EFF6FF' : '#F8FAFC',
+          border: '1px solid',
+          borderTop: 0,
+          borderColor: isOver ? 'primary.light' : '#E2E8F0',
           display: 'flex',
           flexDirection: 'column',
-          gap: 1,
+          gap: 0.75,
           transition: 'background-color 0.15s, border-color 0.15s',
         }}
       >
@@ -206,12 +219,8 @@ function KanbanColumn({
 
 export function WorkshopKanbanPage() {
   const queryClient = useQueryClient()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [activeRo, setActiveRo] = useState<RepairOrderSummary | null>(null)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  })
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -228,11 +237,11 @@ export function WorkshopKanbanPage() {
       repairOrderApi.transition(publicId, { new_status: newStatus }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban-repair-orders'] })
-      setSnackbar({ open: true, message: 'Statut mis à jour', severity: 'success' })
+      toastSuccess('Statut mis à jour.')
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban-repair-orders'] })
-      setSnackbar({ open: true, message: 'Transition invalide ou accès refusé', severity: 'error' })
+      toastError('Transition invalide ou accès refusé.')
     },
   })
 
@@ -252,7 +261,7 @@ export function WorkshopKanbanPage() {
       if (newStatus === ro.status) return
       const allowed = ALLOWED_TRANSITIONS[ro.status]
       if (!allowed.includes(newStatus)) {
-        setSnackbar({ open: true, message: `Transition ${STATUS_LABELS[ro.status]} → ${STATUS_LABELS[newStatus]} non permise`, severity: 'error' })
+        toastError(`Transition ${STATUS_LABELS[ro.status]} → ${STATUS_LABELS[newStatus]} non permise.`)
         return
       }
       transitionMutation.mutate({ publicId: ro.id, newStatus })
@@ -268,21 +277,19 @@ export function WorkshopKanbanPage() {
     if (groupedByStatus[ro.status]) groupedByStatus[ro.status].push(ro)
   })
 
+  const totalActive = data ? data.items.filter(r => !['delivered'].includes(r.status)).length : 0
+
   return (
-    <Box p={3} sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Tableau kanban atelier
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Glissez les cartes pour changer le statut &mdash; actualisation auto toutes les 30 s
-          </Typography>
-        </Box>
-        <Button startIcon={<RefreshIcon />} onClick={() => refetch()} size="small">
-          Actualiser
-        </Button>
-      </Stack>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
+      <PageHeader
+        title="Atelier — Kanban"
+        subtitle={data ? `${totalActive} ordre${totalActive !== 1 ? 's' : ''} actif${totalActive !== 1 ? 's' : ''} · actualisation auto 30 s` : 'Glissez les cartes pour changer le statut'}
+        actions={
+          <Button startIcon={<RefreshIcon />} onClick={() => refetch()} size="small" variant="outlined">
+            Actualiser
+          </Button>
+        }
+      />
 
       {isLoading && (
         <Box display="flex" justifyContent="center" pt={8}>
@@ -331,16 +338,6 @@ export function WorkshopKanbanPage() {
         </PermissionGate>
       )}
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   )
 }

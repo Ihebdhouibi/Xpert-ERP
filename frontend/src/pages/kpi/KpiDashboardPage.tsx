@@ -43,6 +43,7 @@ import {
 } from 'recharts'
 import { kpiApi, TopCustomerEntry, TopSupplierEntry, ExportTable } from '../../lib/kpiApi'
 import { useAuth } from '../../contexts/AuthContext'
+import { PageHeader } from '../../components/ui/PageHeader'
 
 // ---------------------------------------------------------------------------
 // Period helpers
@@ -268,53 +269,47 @@ export function KpiDashboardPage() {
   const BAR_COLORS = ['#1976d2', '#388e3c', '#f57c00', '#7b1fa2', '#d32f2f', '#0288d1']
 
   return (
-    <Box p={4}>
-      {/* Header + period selector */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            Tableau de bord analytique
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Actualisé toutes les {Math.round(live.refresh_interval_seconds / 60)} min —{' '}
-            {new Date(live.computed_at).toLocaleTimeString('fr-FR')}
-          </Typography>
-        </Box>
-
-        <Stack direction="column" gap={1} alignItems="flex-end">
-          <ButtonGroup size="small" variant="outlined">
-            {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Period[]).map(p => (
-              <Button
-                key={p}
-                variant={period === p ? 'contained' : 'outlined'}
-                onClick={() => setPeriod(p)}
-              >
-                {PERIOD_LABELS[p]}
-              </Button>
-            ))}
-          </ButtonGroup>
-          {period === 'custom' && (
-            <Stack direction="row" gap={1}>
-              <TextField
-                type="date"
-                size="small"
-                label="Du"
-                value={customFrom}
-                onChange={e => setCustomFrom(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                type="date"
-                size="small"
-                label="Au"
-                value={customTo}
-                onChange={e => setCustomTo(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Stack>
-          )}
-        </Stack>
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Tableau de bord analytique"
+        subtitle={`Actualisé toutes les ${Math.round(live.refresh_interval_seconds / 60)} min — ${new Date(live.computed_at).toLocaleTimeString('fr-FR')}`}
+        actions={
+          <Stack direction="column" gap={1} alignItems="flex-end">
+            <ButtonGroup size="small" variant="outlined">
+              {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Period[]).map(p => (
+                <Button
+                  key={p}
+                  variant={period === p ? 'contained' : 'outlined'}
+                  onClick={() => setPeriod(p)}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  {PERIOD_LABELS[p]}
+                </Button>
+              ))}
+            </ButtonGroup>
+            {period === 'custom' && (
+              <Stack direction="row" gap={1}>
+                <TextField
+                  type="date"
+                  size="small"
+                  label="Du"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  type="date"
+                  size="small"
+                  label="Au"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Stack>
+            )}
+          </Stack>
+        }
+      />
 
       {/* Finance KPI cards — visible to all */}
       <Stack direction="row" flexWrap="wrap" gap={2} mb={3}>

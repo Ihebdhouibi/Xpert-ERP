@@ -31,6 +31,10 @@ import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
 import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
 import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
 import { AccountingExportPage } from './pages/accounting/AccountingExportPage'
+import { UsersPage } from './pages/admin/UsersPage'
+import { RolesPage } from './pages/admin/RolesPage'
+import { SettingsPage } from './pages/admin/SettingsPage'
+import { AuditLogsPage } from './pages/admin/AuditLogsPage'
 
 export const router = createBrowserRouter([
   // Public routes — no shell
@@ -111,6 +115,12 @@ export const router = createBrowserRouter([
 
       // Analytics
       { path: 'kpi', element: <KpiDashboardPage /> },
+
+      // Administration
+      { path: 'users', element: <UsersPage /> },
+      { path: 'roles', element: <RolesPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: 'audit-logs', element: <AuditLogsPage /> },
 
       // Catch-all
       { path: '*', element: <Navigate to="/" replace /> },

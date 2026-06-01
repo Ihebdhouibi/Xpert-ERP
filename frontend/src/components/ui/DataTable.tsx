@@ -9,6 +9,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   Typography,
 } from '@mui/material'
 import { EmptyState } from './EmptyState'
@@ -21,6 +22,7 @@ export interface Column<T> {
   align?: 'left' | 'center' | 'right'
   width?: string | number
   minWidth?: string | number
+  sortable?: boolean
 }
 
 interface DataTableProps<T> {
@@ -40,6 +42,9 @@ interface DataTableProps<T> {
   emptyDescription?: string
   emptyAction?: ReactNode
   stickyHeader?: boolean
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  onSort?: (columnId: string) => void
 }
 
 export function DataTable<T>({
@@ -59,6 +64,9 @@ export function DataTable<T>({
   emptyDescription,
   emptyAction,
   stickyHeader = false,
+  sortBy,
+  sortOrder = 'asc',
+  onSort,
 }: DataTableProps<T>) {
   const showPagination =
     total != null && page != null && onPageChange != null
@@ -77,8 +85,17 @@ export function DataTable<T>({
                   key={col.id}
                   align={col.align ?? 'left'}
                   sx={{ width: col.width, minWidth: col.minWidth }}
+                  sortDirection={sortBy === col.id ? sortOrder : false}
                 >
-                  {col.label}
+                  {col.sortable && onSort ? (
+                    <TableSortLabel
+                      active={sortBy === col.id}
+                      direction={sortBy === col.id ? sortOrder : 'asc'}
+                      onClick={() => onSort(col.id)}
+                    >
+                      {col.label}
+                    </TableSortLabel>
+                  ) : col.label}
                 </TableCell>
               ))}
             </TableRow>

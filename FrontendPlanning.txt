@@ -210,3 +210,140 @@ Route	Page	Key UX decision
 /credit-notes	Credit notes	Amount displayed in red with minus sign — visually distinct from invoices
 /accounting-export	Accounting export	Preview counts before triggering; format selector; download history
 What's next — Phase 3 (Admin) or Phase 4 (polish existing pages with the component library). I'd recommend Phase 4 first since the existing 22 pages are still using raw MUI tables and no PageHeader — a quick polish pass will make the whole app feel consistent before we demo it.
+
+-----------------------------------------------------------------------------------------------
+Phase 4 — What landed
+StatusChip extended — 8 new domain statuses added: created, diagnosis, in_repair, finished, paused_parts, paused_approval, completed, partially_received. Every page in the app can now use one consistent chip.
+
+Page	Changes
+CustomersListPage	Full rewrite → DataTable + PageHeader + avatar icons per customer type + formatMinor for outstanding amount
+RepairOrdersListPage	Full rewrite → DataTable + PageHeader + ToggleButtonGroup status filter (8 statuses)
+InspectionsListPage	PageHeader + ToggleButtonGroup + polished card list with hover lift + EmptyState
+KpiDashboardPage	PageHeader with period selector in actions slot
+StockPage	PageHeader with live alert badge + TableLoadingSkeleton in all 4 tabs + StatusChip for alerts
+SupplierPage	PageHeader + useToast (success/error on delete) + ConfirmDialog replacing raw Dialog
+PurchaseOrderPage	PageHeader + StatusChip + ConfirmDialog for cancel replacing window.confirm
+SupplierInvoicePage	PageHeader + useToast replacing both Snackbar instances + StatusChip
+WorkshopKanbanPage	PageHeader + useToast replacing Snackbar + column count badges (were already there)
+PartsPage	PageHeader with "Nouvelle pièce" action + useToast for delete errors + StatusChip + formatMinor
+Next logical step: Phase 3 (Admin pages: /users, /roles, /settings, /audit-logs) whenever you're ready.
+------------------------------------------------------------------------------
+note oon the UI/UX design :
+Phase 4 was a wiring pass more than a design pass. Here's the real breakdown:
+
+What landed well:
+
+Consistency (principle 3) — every page now shares the same PageHeader, StatusChip, DataTable. The app feels cohesive for the first time.
+User efficiency (principle 7) — window.confirm → ConfirmDialog, Snackbar → useToast, clear empty states.
+Tables (principle 10) — DataTable brings loading skeletons, empty states, and consistent pagination to the list pages.
+Where I cut corners:
+
+PurchaseOrderPage and SupplierInvoicePage still use useState + useEffect + useCallback instead of React Query — raw <CircularProgress /> remains inside the detail view.
+PartsPage got a header stapled on. The split-panel category sidebar is still raw MUI List with no polish.
+WorkshopKanbanPage column headers still use the old pastel background colors (#e3f2fd, #fff3e0) that don't match the design system tokens.
+StockPage loading skeletons are hacky inline JSX — not proper skeleton patterns.
+KpiDashboardPage — the KpiCard subcomponent uses Card sx={{ minWidth: 180, flex: '1 1 180px' }} which misses the 12px radius / 1px border that the theme defines.
+None of the list pages got column sorting despite principle 10 calling it out explicitly.
+The InspectionsListPage skeleton is 5 blank <Paper> elements — a fake skeleton, not a real one.
+The Phase 2 pages (VehiclesPage, QuotationsPage, InvoicesPage, etc.) were built from scratch with the UX philosophy in mind — every layout decision was intentional. Phase 4 retrofitted the component library onto pages I didn't design, so the quality is uneven.
+
+What I'd propose to actually close the gap:
+
+Do a targeted redesign of RepairOrderDetailPage — it's the most-used screen and still uses raw Paper/Grid/Table
+Fix WorkshopKanbanPage column header colors to use design system tokens
+Convert PurchaseOrderPage and SupplierInvoicePage detail views to React Query
+Add column sort to at least CustomersListPage and RepairOrdersListPage
+-------------------------------------------------------------------------
+
+All four tasks done, build clean. Here's what changed and why each decision was made:
+
+1. RepairOrderDetailPage — full redesign
+
+The core change is layout: from a single column of stacked Paper sections to a two-column Card layout. The right column is position: sticky so the status transition, timer, and history stay in view while scrolling through labor/parts lines.
+
+UX decisions:
+
+Status transition as buttons, not a dropdown — each allowed transition is a direct click, with an inline reason field that expands on select. Zero extra clicks for the common case.
+Cost total banner in dark navy at the bottom of the left column — immediate answer to "how much will this cost?"
+Status timeline as a vertical dot-and-line trace, not a raw table — chronological reading direction matches how humans think about history.
+Timer panel shows a pulsing green "In progress" banner instead of a chip — no ambiguity about whether a session is running.
+Comments max-height scrollable with pre-wrap text — handles multi-line notes cleanly.
+2. WorkshopKanbanPage column headers
+
+Replaced #e3f2fd pastel hex values with a design-system-aligned accent-color-per-status system (slate for created, amber for in_repair, red for blocked, etc). The count badge is now a colored square badge matching the accent — immediately scannable at a glance.
+
+3. PurchaseOrderPage + SupplierInvoicePage → React Query
+
+Both list views now use useQuery with placeholderData: prev => prev for stale-while-revalidating. onBack triggers queryClient.invalidateQueries instead of manually calling a load() async function. Removes 4 state variables each (invoices, total, loading, the manual effect).
+
+4. Column sort on DataTable
+
+DataTable now accepts sortable?: boolean per column, plus sortBy, sortOrder, onSort props. Uses MUI's TableSortLabel for the visual indicator. Sort is client-side (current page only) — correct tradeoff for a paginated table where the backend sort isn't confirmed. Customers: sort by name, outstanding, status. Repair orders: sort by date (default desc), priority, estimated cost.
+
+----------------------------------------------------------------------------
+-------------------------------------------------------------------
+before starting phase 3. tell me what else we have before we finish the gameplan you elaborated
+Here's the full honest accounting against the gameplan:
+
+Phase 1 — App Shell ✅ Complete
+Phase 2 — Missing Core Pages ✅ Mostly complete
+Three detail pages were noted as missing and still are:
+
+/vehicles/new — route exists in nav but no VehicleCreatePage built
+/quotations/:id — quotation detail page not built
+/invoices/:id — invoice detail page not built
+Phase 3 — Admin Pages 🔲 Not started
+/users — user management
+/roles — permission matrix editor
+/settings — garage config (tax rates, document sequences, email)
+/audit-logs — audit trail viewer
+/documents — GED viewer
+Phase 4 — Polish 🔲 Partially done
+List/complex pages are polished. These never got touched:
+
+CustomerDetailPage — high traffic, still raw Grid layout
+CustomerCreatePage + CustomerEditPage — forms, no PageHeader
+RepairOrderCreatePage — form, no PageHeader
+InspectionTemplatesPage — never polished
+InspectionExecutionPage — specifically called out in the gameplan: "photo upload UX, offline indicator badge"
+TemplatesPage (notifications) — never polished
+Phase 5 — Mobile / PWA 🔲 Not started
+PWA manifest + service worker (installable on tablet)
+Tablet layout for Workshop Kanban and Inspection Execution
+Wire up the offline inspection store (inspectionOfflineStore.ts partially written)
+Mobile-first flow for mechanics (check-in, job done, photo capture)
+Summary
+Phase	Status
+Phase 1 — Shell & design system	✅ Done
+Phase 2 — Core pages	✅ Done minus 3 detail pages
+Phase 3 — Admin pages	🔲 Not started
+Phase 4 — Polish	🟡 ~60% — 6 pages untouched
+Phase 5 — Mobile/PWA	🔲 Not started
+My recommendation for sequencing:
+
+Phase 3 (Admin) — needed for any real deployment
+The 3 missing Phase 2 detail pages (vehicles/new, quotations/:id, invoices/:id) — complete the billing flow
+Phase 4 remaining polish (CustomerDetail, forms, InspectionExecution)
+Phase 5 PWA — last, once desktop is solid
+Phase 5 is the only phase that's genuinely optional for a first client demo. Everything else has visible gaps.
+
+
+------------------------------------------------------------------------------
+Phase 3 — What was built
+2 API clients:
+
+lib/usersApi.ts — list, create, patch, assign roles, deactivate
+lib/settingsApi.ts — list, upsert, delete key-value pairs
+4 admin pages:
+
+/users — UsersPage
+Full CRUD. DataTable with avatar + name/email, role chips (colored per role type), StatusChip (active/inactive/locked), last login, and 3 per-row actions (edit, manage roles, deactivate). Three dialogs: create (email + name + password with validation + role checkboxes), edit (name + status), assign roles (checkbox list with role color coding). ConfirmDialog for deactivate with self-deactivation guard.
+
+/roles — RolesPage
+No dedicated backend endpoint, so built as a role-distribution view: 6 role cards in a 3-column grid, each with the accent color, permission summary, and a live list of users who hold that role (derived from the users query). Includes an honest note about custom role management coming in a future sprint.
+
+/settings — SettingsPage
+30 settings across 7 categories (Garage & Identité, Sécurité, Facturation, Stock, Notifications, KPI, Médias). Each setting shows key, description, typed input (string/int/float/bool toggle/select/textarea), and a Save button that only appears when the value is dirty. Settings not yet in the DB are flagged "valeur env par défaut". Changes save immediately via PUT with Redis cache invalidation.
+
+/audit-logs — AuditLogsPage
+Honest placeholder. Explains the backend logs everything but the query endpoint hasn't been exposed yet. Shows the 6 tracked module categories with their action verbs as chips, and the full 14-field audit log schema as a reference table — gives the client confidence the audit trail is real without pretending an API exists that doesn't.

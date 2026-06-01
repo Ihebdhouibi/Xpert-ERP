@@ -5,19 +5,11 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
+  Card,
+  CardContent,
   Divider,
   Grid,
   IconButton,
-  MenuItem,
-  Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -25,15 +17,18 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
-import EditIcon from '@mui/icons-material/Edit'
-import DeleteIcon from '@mui/icons-material/Delete'
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import StopIcon from '@mui/icons-material/Stop'
-import SendIcon from '@mui/icons-material/Send'
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
+import StopRoundedIcon from '@mui/icons-material/StopRounded'
+import SendRoundedIcon from '@mui/icons-material/SendRounded'
+import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
+import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -41,39 +36,47 @@ import {
   ALLOWED_TRANSITIONS,
   type ROStatus,
   type RepairOrderDetail,
-  type TimeEntry,
   type Comment,
 } from '../../lib/repairOrderApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { LoadingScreen } from '../../components/ui/LoadingScreen'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { useToast } from '../../contexts/ToastContext'
 
-const STATUS_COLORS: Record<
-  ROStatus,
-  'default' | 'info' | 'warning' | 'success' | 'error' | 'primary'
-> = {
-  created: 'default',
-  diagnosis: 'info',
-  in_repair: 'primary',
-  finished: 'warning',
-  delivered: 'success',
-  paused_parts: 'error',
-  paused_approval: 'error',
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Basse', normal: 'Normale', high: 'Haute', urgent: 'Urgente',
+}
+const PRIORITY_COLOR: Record<string, string> = {
+  low: '#64748B', normal: '#2563EB', high: '#F59E0B', urgent: '#EF4444',
 }
 
-function formatMoney(minor: number | null, currency: string | null): string {
-  if (minor === null) return '-'
-  if (!currency) return `${minor}`
-  return (minor / 100).toLocaleString('fr-FR', { style: 'currency', currency })
+const SECTION_LABEL_SX = {
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.08em',
+  display: 'block',
+  mb: 2,
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function InfoField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Box>
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" display="block" mb={0.25}>
         {label}
       </Typography>
-      <Typography variant="body1">{value || '-'}</Typography>
+      {typeof value === 'string' || typeof value === 'number' ? (
+        <Typography variant="body2" fontWeight={500}>{value}</Typography>
+      ) : (
+        value
+      )}
     </Box>
   )
 }
+
+// ─── Status transition ───────────────────────────────────────────────────────
 
 function StatusTransitionPanel({
   ro,
@@ -82,206 +85,261 @@ function StatusTransitionPanel({
   ro: RepairOrderDetail
   onTransitioned: () => void
 }) {
-  const [targetStatus, setTargetStatus] = useState<ROStatus | ''>('')
+  const { success, error: toastError } = useToast()
+  const [selectedStatus, setSelectedStatus] = useState<ROStatus | null>(null)
   const [reason, setReason] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const allowed = ALLOWED_TRANSITIONS[ro.status]
 
   const mutation = useMutation({
     mutationFn: () =>
       repairOrderApi.transition(ro.id, {
-        new_status: targetStatus as ROStatus,
+        new_status: selectedStatus!,
         reason: reason || null,
       }),
     onSuccess: () => {
-      setTargetStatus('')
+      success(`Statut mis à jour → ${STATUS_LABELS[selectedStatus!]}`)
+      setSelectedStatus(null)
       setReason('')
-      setError(null)
       onTransitioned()
     },
-    onError: (err: unknown) => {
-      const detail = (err as { response?: { data?: { detail?: unknown } } })
-        ?.response?.data?.detail
-      if (detail && typeof detail === 'object' && 'code' in detail) {
-        const d = detail as unknown as { from_status?: string; to_status?: string }
-        setError(`Transition invalide : ${d.from_status ?? '?'} → ${d.to_status ?? '?'}`)
-      } else {
-        setError('Erreur lors du changement de statut.')
-      }
-    },
+    onError: () => toastError('Transition invalide ou accès refusé.'),
   })
 
   if (allowed.length === 0) return null
 
   return (
     <Box>
-      <Typography variant="overline" color="text.secondary">
+      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
         Changer le statut
       </Typography>
-      <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
-        <Select
-          size="small"
-          displayEmpty
-          value={targetStatus}
-          onChange={(e) => setTargetStatus(e.target.value as ROStatus)}
-          sx={{ minWidth: 200 }}
-        >
-          <MenuItem value="">Sélectionner...</MenuItem>
-          {allowed.map((s) => (
-            <MenuItem key={s} value={s}>
+      <Stack spacing={1}>
+        {allowed.map(s => (
+          <Box key={s}>
+            <Button
+              fullWidth
+              variant={selectedStatus === s ? 'contained' : 'outlined'}
+              size="small"
+              startIcon={<ArrowForwardRoundedIcon />}
+              onClick={() => setSelectedStatus(selectedStatus === s ? null : s)}
+              sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem' }}
+            >
               {STATUS_LABELS[s]}
-            </MenuItem>
-          ))}
-        </Select>
-        <TextField
-          size="small"
-          placeholder="Motif (optionnel)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          sx={{ flex: 1 }}
-        />
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<SwapHorizIcon />}
-          disabled={!targetStatus || mutation.isPending}
-          onClick={() => mutation.mutate()}
-        >
-          Appliquer
-        </Button>
+            </Button>
+            {selectedStatus === s && (
+              <Box mt={1} pl={0.5}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Motif (optionnel)"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  sx={{ mb: 1 }}
+                />
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="small"
+                  disabled={mutation.isPending}
+                  onClick={() => mutation.mutate()}
+                  sx={{ fontWeight: 700 }}
+                >
+                  {mutation.isPending ? 'En cours…' : 'Confirmer'}
+                </Button>
+              </Box>
+            )}
+          </Box>
+        ))}
       </Stack>
-      {error && (
-        <Alert severity="error" sx={{ mt: 1 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
     </Box>
   )
 }
 
+// ─── Timer ──────────────────────────────────────────────────────────────────
+
 function TimerPanel({ publicId }: { publicId: string }) {
   const queryClient = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [stopNotes, setStopNotes] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const { data } = useQuery({
     queryKey: ['time-entries', publicId],
     queryFn: () => repairOrderApi.listTimeEntries(publicId),
   })
 
-  const openEntry: TimeEntry | undefined = data?.items.find((e) => e.ended_at === null)
+  const openEntry = data?.items.find(e => e.ended_at === null)
 
   const startMutation = useMutation({
     mutationFn: () => repairOrderApi.startTimeEntry(publicId),
     onSuccess: () => {
-      setError(null)
+      success('Pointage démarré.')
       queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
     },
-    onError: () => setError('Une session de pointage est déjà ouverte.'),
+    onError: () => toastError('Une session de pointage est déjà ouverte.'),
   })
 
   const stopMutation = useMutation({
     mutationFn: () => repairOrderApi.stopTimeEntry(publicId, stopNotes || undefined),
     onSuccess: () => {
+      success('Pointage arrêté.')
       setStopNotes('')
-      setError(null)
       queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
     },
-    onError: () => setError('Aucune session ouverte à arrêter.'),
+    onError: () => toastError('Aucune session ouverte à arrêter.'),
   })
 
-  const totalMinutes = data?.items
-    .filter((e) => e.duration_minutes !== null)
-    .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
+  const totalMinutes =
+    data?.items
+      .filter(e => e.duration_minutes !== null)
+      .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
 
   return (
     <Box>
-      <Typography variant="overline" color="text.secondary">
+      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
         Pointage du temps
       </Typography>
-      <Stack direction="row" spacing={1} alignItems="center" mt={0.5} flexWrap="wrap">
-        {openEntry ? (
-          <>
-            <Chip
-              icon={<PlayArrowIcon />}
-              label={`En cours depuis ${new Date(openEntry.started_at).toLocaleTimeString('fr-FR')}`}
-              color="success"
-              variant="outlined"
-            />
-            <TextField
-              size="small"
-              placeholder="Note de fin (optionnel)"
-              value={stopNotes}
-              onChange={(e) => setStopNotes(e.target.value)}
-              sx={{ flex: 1, minWidth: 200 }}
-            />
-            <Button
-              variant="contained"
-              color="error"
-              size="small"
-              startIcon={<StopIcon />}
-              disabled={stopMutation.isPending}
-              onClick={() => stopMutation.mutate()}
-            >
-              Arrêter
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<PlayArrowIcon />}
-            disabled={startMutation.isPending}
-            onClick={() => startMutation.mutate()}
+
+      {openEntry ? (
+        <Box>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            mb={1.5}
+            sx={{ p: 1.25, bgcolor: '#F0FDF4', borderRadius: 1.5, border: '1px solid #BBF7D0' }}
           >
-            Démarrer une session
+            <RadioButtonCheckedRoundedIcon sx={{ color: '#16A34A', fontSize: 15 }} />
+            <Typography variant="caption" fontWeight={700} color="success.main">
+              En cours depuis {new Date(openEntry.started_at).toLocaleTimeString('fr-FR')}
+            </Typography>
+          </Stack>
+          <TextField
+            size="small"
+            fullWidth
+            placeholder="Note de fin (optionnel)"
+            value={stopNotes}
+            onChange={e => setStopNotes(e.target.value)}
+            sx={{ mb: 1 }}
+          />
+          <Button
+            variant="contained"
+            color="error"
+            fullWidth
+            size="small"
+            startIcon={<StopRoundedIcon />}
+            disabled={stopMutation.isPending}
+            onClick={() => stopMutation.mutate()}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            Arrêter le pointage
           </Button>
-        )}
-        {totalMinutes > 0 && (
-          <Typography variant="body2" color="text.secondary">
+        </Box>
+      ) : (
+        <Button
+          variant="outlined"
+          fullWidth
+          size="small"
+          startIcon={<PlayArrowRoundedIcon />}
+          disabled={startMutation.isPending}
+          onClick={() => startMutation.mutate()}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
+          Démarrer une session
+        </Button>
+      )}
+
+      {totalMinutes > 0 && (
+        <Stack direction="row" alignItems="center" spacing={0.75} mt={1.5}>
+          <AccessTimeRoundedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+          <Typography variant="caption" color="text.secondary" fontWeight={600}>
             Total : {Math.floor(totalMinutes / 60)}h{String(totalMinutes % 60).padStart(2, '0')}
           </Typography>
-        )}
-      </Stack>
-      {error && (
-        <Alert severity="error" sx={{ mt: 1 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+        </Stack>
       )}
+
       {data && data.items.length > 0 && (
-        <Table size="small" sx={{ mt: 2 }}>
-          <TableHead>
-            <TableRow>
-              <TableCell>Début</TableCell>
-              <TableCell>Fin</TableCell>
-              <TableCell align="right">Durée (min)</TableCell>
-              <TableCell>Note</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {data.items.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell>{new Date(e.started_at).toLocaleString('fr-FR')}</TableCell>
-                <TableCell>
-                  {e.ended_at ? new Date(e.ended_at).toLocaleString('fr-FR') : '—'}
-                </TableCell>
-                <TableCell align="right">{e.duration_minutes ?? '—'}</TableCell>
-                <TableCell>{e.notes ?? '—'}</TableCell>
-              </TableRow>
+        <Box mt={2}>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" mb={0.75}>
+            Historique des sessions
+          </Typography>
+          <Stack spacing={0.5}>
+            {data.items.map(e => (
+              <Stack
+                key={e.id}
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ px: 1.25, py: 0.75, bgcolor: '#F8FAFC', borderRadius: 1, border: '1px solid #F1F5F9' }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {new Date(e.started_at).toLocaleTimeString('fr-FR')}
+                  {e.ended_at && ` → ${new Date(e.ended_at).toLocaleTimeString('fr-FR')}`}
+                </Typography>
+                <Typography variant="caption" fontWeight={700} color={e.ended_at ? 'text.primary' : 'success.main'}>
+                  {e.duration_minutes != null ? `${e.duration_minutes} min` : '●'}
+                </Typography>
+              </Stack>
             ))}
-          </TableBody>
-        </Table>
+          </Stack>
+        </Box>
       )}
     </Box>
   )
 }
 
+// ─── Status timeline ─────────────────────────────────────────────────────────
+
+function StatusTimeline({ events }: { events: RepairOrderDetail['status_events'] }) {
+  if (events.length === 0) {
+    return <Typography variant="body2" color="text.secondary">Aucun historique.</Typography>
+  }
+  return (
+    <Stack spacing={0}>
+      {events.map((evt, i) => (
+        <Stack key={evt.id} direction="row" spacing={1.5} sx={{ position: 'relative', pb: i < events.length - 1 ? 2 : 0 }}>
+          {i < events.length - 1 && (
+            <Box sx={{ position: 'absolute', left: 6, top: 16, width: 2, bottom: 0, bgcolor: '#E2E8F0', zIndex: 0 }} />
+          )}
+          <Box
+            sx={{
+              width: 14, height: 14, borderRadius: '50%',
+              bgcolor: i === 0 ? 'primary.main' : '#94A3B8',
+              flexShrink: 0, mt: 0.3, zIndex: 1,
+              border: '2px solid white',
+              boxShadow: i === 0 ? '0 0 0 2px #2563EB' : '0 0 0 2px #94A3B8',
+            }}
+          />
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={0.5} flexWrap="wrap">
+              {evt.old_status && (
+                <>
+                  <Typography variant="caption" color="text.secondary">
+                    {STATUS_LABELS[evt.old_status as ROStatus] ?? evt.old_status}
+                  </Typography>
+                  <ArrowForwardRoundedIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
+                </>
+              )}
+              <Typography variant="caption" fontWeight={700} color={i === 0 ? 'primary.main' : 'text.primary'}>
+                {STATUS_LABELS[evt.new_status as ROStatus] ?? evt.new_status}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="text.disabled" display="block">
+              {new Date(evt.occurred_at).toLocaleString('fr-FR')}
+            </Typography>
+          </Box>
+        </Stack>
+      ))}
+    </Stack>
+  )
+}
+
+// ─── Comments ────────────────────────────────────────────────────────────────
+
 function CommentsPanel({ publicId }: { publicId: string }) {
   const queryClient = useQueryClient()
+  const { error: toastError } = useToast()
   const [newBody, setNewBody] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editBody, setEditBody] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   const { data } = useQuery({
     queryKey: ['comments', publicId],
@@ -292,10 +350,9 @@ function CommentsPanel({ publicId }: { publicId: string }) {
     mutationFn: () => repairOrderApi.createComment(publicId, newBody),
     onSuccess: () => {
       setNewBody('')
-      setError(null)
       queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
     },
-    onError: () => setError('Impossible d\'ajouter le commentaire.'),
+    onError: () => toastError("Impossible d'ajouter le commentaire."),
   })
 
   const updateMutation = useMutation({
@@ -306,104 +363,87 @@ function CommentsPanel({ publicId }: { publicId: string }) {
       setEditBody('')
       queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
     },
-    onError: () => setError('Impossible de modifier le commentaire.'),
+    onError: () => toastError('Impossible de modifier le commentaire.'),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (commentId: number) =>
-      repairOrderApi.deleteComment(publicId, commentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['comments', publicId] })
-    },
-    onError: () => setError('Impossible de supprimer le commentaire.'),
+    mutationFn: (commentId: number) => repairOrderApi.deleteComment(publicId, commentId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['comments', publicId] }),
+    onError: () => toastError('Impossible de supprimer le commentaire.'),
   })
 
   return (
     <Box>
-      <Typography variant="overline" color="text.secondary">
-        Commentaires
-      </Typography>
-
-      {error && (
-        <Alert severity="error" sx={{ mt: 1, mb: 1 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      <Stack spacing={1.5} mt={1}>
-        {data?.items.map((comment) => (
-          <Box key={comment.id} sx={{ borderLeft: '3px solid', borderColor: 'divider', pl: 1.5 }}>
+      <Stack spacing={1.5} mb={2} sx={{ maxHeight: 400, overflowY: 'auto' }}>
+        {data?.items.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            Aucun commentaire pour l'instant.
+          </Typography>
+        )}
+        {data?.items.map(comment => (
+          <Box
+            key={comment.id}
+            sx={{ p: 1.5, bgcolor: '#F8FAFC', borderRadius: 1.5, border: '1px solid #E2E8F0' }}
+          >
             {editingId === comment.id ? (
-              <Stack direction="row" spacing={1} alignItems="flex-start">
-                <TextField
-                  size="small"
-                  multiline
-                  value={editBody}
-                  onChange={(e) => setEditBody(e.target.value)}
-                  sx={{ flex: 1 }}
-                />
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={updateMutation.isPending || !editBody.trim()}
-                  onClick={() => updateMutation.mutate(comment)}
-                >
-                  Sauvegarder
-                </Button>
-                <Button size="small" onClick={() => setEditingId(null)}>
-                  Annuler
-                </Button>
+              <Stack spacing={1}>
+                <TextField size="small" multiline fullWidth value={editBody} onChange={e => setEditBody(e.target.value)} />
+                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  <Button size="small" variant="outlined" onClick={() => setEditingId(null)}>Annuler</Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={updateMutation.isPending || !editBody.trim()}
+                    onClick={() => updateMutation.mutate(comment)}
+                  >
+                    Sauvegarder
+                  </Button>
+                </Stack>
               </Stack>
             ) : (
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                <Box>
-                  <Typography variant="body2" whiteSpace="pre-wrap">
-                    {comment.body}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                <Box flex={1}>
+                  <Typography variant="body2" whiteSpace="pre-wrap">{comment.body}</Typography>
+                  <Typography variant="caption" color="text.disabled">
                     {new Date(comment.created_at).toLocaleString('fr-FR')}
-                    {comment.created_at !== comment.updated_at && ' (modifié)'}
+                    {comment.created_at !== comment.updated_at && ' · modifié'}
                   </Typography>
                 </Box>
-                <Stack direction="row" spacing={0.5}>
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      setEditingId(comment.id)
-                      setEditBody(comment.body)
-                    }}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => deleteMutation.mutate(comment.id)}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                <Stack direction="row" flexShrink={0}>
+                  <Tooltip title="Modifier">
+                    <IconButton
+                      size="small"
+                      onClick={() => { setEditingId(comment.id); setEditBody(comment.body) }}
+                    >
+                      <EditRoundedIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Supprimer">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(comment.id)}
+                    >
+                      <DeleteRoundedIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                 </Stack>
               </Stack>
             )}
           </Box>
         ))}
-        {data?.items.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Aucun commentaire.
-          </Typography>
-        )}
       </Stack>
 
-      <Stack direction="row" spacing={1} alignItems="flex-end" mt={2}>
+      <Stack direction="row" spacing={1} alignItems="flex-end">
         <TextField
           size="small"
           multiline
-          placeholder="Ajouter un commentaire..."
+          fullWidth
+          placeholder="Ajouter un commentaire… (Ctrl+Entrée pour envoyer)"
           value={newBody}
-          onChange={(e) => setNewBody(e.target.value)}
-          sx={{ flex: 1 }}
-          onKeyDown={(e) => {
+          onChange={e => setNewBody(e.target.value)}
+          onKeyDown={e => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && newBody.trim()) {
               createMutation.mutate()
             }
@@ -412,9 +452,10 @@ function CommentsPanel({ publicId }: { publicId: string }) {
         <Button
           variant="contained"
           size="small"
-          startIcon={<SendIcon />}
+          startIcon={<SendRoundedIcon />}
           disabled={createMutation.isPending || !newBody.trim()}
           onClick={() => createMutation.mutate()}
+          sx={{ height: 40, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}
         >
           Envoyer
         </Button>
@@ -423,12 +464,14 @@ function CommentsPanel({ publicId }: { publicId: string }) {
   )
 }
 
+// ─── Main page ───────────────────────────────────────────────────────────────
+
 export function RepairOrderDetailPage() {
   const { publicId = '' } = useParams<{ publicId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { error: toastError } = useToast()
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
   const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -443,7 +486,7 @@ export function RepairOrderDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ['repair-orders'] })
       navigate('/repair-orders', { replace: true })
     } catch {
-      setActionError('Erreur lors de la suppression.')
+      toastError('Erreur lors de la suppression.')
       setConfirmDelete(false)
     }
   }
@@ -454,286 +497,351 @@ export function RepairOrderDetailPage() {
       const { url } = await repairOrderApi.getPdfUrl(publicId)
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch {
-      setActionError('Erreur lors de la génération du PDF.')
+      toastError('Erreur lors de la génération du PDF.')
     } finally {
       setPdfLoading(false)
     }
   }
 
   if (isLoading) {
-    return (
-      <Box p={4} display="flex" justifyContent="center">
-        <CircularProgress />
-      </Box>
-    )
+    return <LoadingScreen message="Chargement de l'ordre de réparation…" />
   }
   if (isError || !data) {
     return (
-      <Box p={4}>
-        <Alert severity="error">Impossible de charger cet ordre de réparation.</Alert>
-        <Button sx={{ mt: 2 }} onClick={() => navigate('/repair-orders')}>
-          Retour à la liste
+      <Box>
+        <Alert severity="error" sx={{ mb: 2 }}>Impossible de charger cet ordre de réparation.</Alert>
+        <Button variant="outlined" onClick={() => navigate('/repair-orders')}>
+          ← Retour à la liste
         </Button>
       </Box>
     )
   }
 
   const ro: RepairOrderDetail = data
+  const currency = ro.estimated_cost_currency ?? 'EUR'
+  const laborTotal = ro.labor_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
+  const partsTotal = ro.part_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
 
   return (
-    <Box p={4} maxWidth={960} mx="auto">
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={3}
-      >
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Ordre de réparation
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {ro.description}
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Chip
-            color={STATUS_COLORS[ro.status]}
-            label={STATUS_LABELS[ro.status]}
-          />
-          <PermissionGate permission="repair_order.read">
-            <Button
-              startIcon={pdfLoading ? <CircularProgress size={16} /> : <PictureAsPdfIcon />}
-              onClick={handleDownloadPdf}
-              disabled={pdfLoading}
-              variant="outlined"
-            >
-              PDF
-            </Button>
-          </PermissionGate>
-          <PermissionGate permission="repair_order.update">
-            <Button
-              startIcon={<EditIcon />}
-              component={RouterLink}
-              to={`/repair-orders/${ro.id}/edit`}
-            >
-              Modifier
-            </Button>
-          </PermissionGate>
-          <PermissionGate permission="repair_order.delete">
-            <Button
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={() => setConfirmDelete(true)}
-            >
-              Supprimer
-            </Button>
-          </PermissionGate>
-        </Stack>
-      </Stack>
+    <Box>
+      <PageHeader
+        title={ro.description || 'Ordre de réparation'}
+        subtitle={`#${String(ro.id).slice(-8).toUpperCase()} · Créé le ${new Date(ro.created_at).toLocaleDateString('fr-FR')}`}
+        breadcrumbs={[
+          { label: 'Ordres de réparation', href: '/repair-orders' },
+          { label: ro.description || 'Détail' },
+        ]}
+        actions={
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <StatusChip status={ro.status} label={STATUS_LABELS[ro.status]} size="medium" />
+            <PermissionGate permission="repair_order.read">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<PictureAsPdfRoundedIcon />}
+                onClick={handleDownloadPdf}
+                disabled={pdfLoading}
+                sx={{ textTransform: 'none' }}
+              >
+                {pdfLoading ? 'Génération…' : 'PDF'}
+              </Button>
+            </PermissionGate>
+            <PermissionGate permission="repair_order.update">
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<EditRoundedIcon />}
+                component={RouterLink}
+                to={`/repair-orders/${ro.id}/edit`}
+                sx={{ textTransform: 'none' }}
+              >
+                Modifier
+              </Button>
+            </PermissionGate>
+            <PermissionGate permission="repair_order.delete">
+              <Button
+                size="small"
+                color="error"
+                variant="outlined"
+                startIcon={<DeleteRoundedIcon />}
+                onClick={() => setConfirmDelete(true)}
+                sx={{ textTransform: 'none' }}
+              >
+                Supprimer
+              </Button>
+            </PermissionGate>
+          </Stack>
+        }
+      />
 
-      {actionError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError(null)}>
-          {actionError}
-        </Alert>
-      )}
+      <Grid container spacing={3}>
+        {/* ── LEFT COLUMN ─────────────────────────────────────────────── */}
+        <Grid item xs={12} md={8}>
 
-      {/* General info */}
-      <Paper sx={{ p: 3, mb: 2 }}>
-        <Typography variant="overline" color="text.secondary">
-          Informations générales
-        </Typography>
-        <Grid container spacing={2} mt={0.5}>
-          <Grid item xs={6} sm={3}>
-            <Field label="Client ID" value={ro.customer_id} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Field label="Véhicule ID" value={ro.vehicle_id ?? '-'} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Field label="Priorité" value={ro.priority ?? '-'} />
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Field
-              label="Créé le"
-              value={new Date(ro.created_at).toLocaleDateString('fr-FR')}
-            />
-          </Grid>
-          <Grid item xs={6} sm={4}>
-            <Field
-              label="Coût estimé"
-              value={formatMoney(ro.estimated_cost_minor, ro.estimated_cost_currency)}
-            />
-          </Grid>
-          <Grid item xs={6} sm={4}>
-            <Field
-              label="Coût réel"
-              value={formatMoney(ro.actual_cost_minor, ro.estimated_cost_currency)}
-            />
-          </Grid>
-          <Grid item xs={6} sm={4}>
-            <Field label="Version" value={ro.version} />
-          </Grid>
+          {/* Key info */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
+                Informations
+              </Typography>
+              <Grid container spacing={2.5}>
+                <Grid item xs={6} sm={3}>
+                  <InfoField label="Client" value={`#${ro.customer_id}`} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <InfoField label="Véhicule" value={ro.vehicle_id ? `#${ro.vehicle_id}` : '—'} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <InfoField
+                    label="Priorité"
+                    value={
+                      ro.priority ? (
+                        <Typography
+                          variant="body2"
+                          fontWeight={700}
+                          sx={{ color: PRIORITY_COLOR[ro.priority] ?? 'text.primary' }}
+                        >
+                          {PRIORITY_LABEL[ro.priority] ?? ro.priority}
+                        </Typography>
+                      ) : '—'
+                    }
+                  />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <InfoField label="Version" value={`v${ro.version}`} />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <InfoField
+                    label="Coût estimé"
+                    value={
+                      ro.estimated_cost_minor != null
+                        ? <Typography variant="body2" fontWeight={600}>{formatMinor(ro.estimated_cost_minor, currency)}</Typography>
+                        : '—'
+                    }
+                  />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <InfoField
+                    label="Coût réel"
+                    value={
+                      ro.actual_cost_minor != null
+                        ? <Typography variant="body2" fontWeight={700} color="primary.main">{formatMinor(ro.actual_cost_minor, currency)}</Typography>
+                        : '—'
+                    }
+                  />
+                </Grid>
+              </Grid>
+
+              {ro.notes && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Notes
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" whiteSpace="pre-wrap">
+                    {ro.notes}
+                  </Typography>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Labor lines */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: 0 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, py: 2 }}>
+                <Typography variant="subtitle2" fontWeight={700}>
+                  Main d'œuvre
+                  <Typography component="span" variant="caption" color="text.secondary" ml={1} fontWeight={400}>
+                    {ro.labor_lines.length} ligne{ro.labor_lines.length !== 1 ? 's' : ''}
+                  </Typography>
+                </Typography>
+                <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
+                  {formatMinor(laborTotal, currency)}
+                </Typography>
+              </Stack>
+              <Divider />
+              {ro.labor_lines.length === 0 ? (
+                <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">Aucune ligne de main d'œuvre.</Typography>
+                </Box>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Type</TableCell>
+                      <TableCell align="right">Durée</TableCell>
+                      <TableCell align="right">Taux</TableCell>
+                      <TableCell align="right">Montant</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {ro.labor_lines.map(line => (
+                      <TableRow key={line.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{line.labor_type}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2">{line.duration_minutes} min</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2">{formatMinor(line.rate_minor, currency)}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                      <TableCell colSpan={3}>
+                        <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Total MO
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={700}>{formatMinor(laborTotal, currency)}</Typography>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Parts lines */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent sx={{ p: 0 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 3, py: 2 }}>
+                <Typography variant="subtitle2" fontWeight={700}>
+                  Pièces
+                  <Typography component="span" variant="caption" color="text.secondary" ml={1} fontWeight={400}>
+                    {ro.part_lines.length} ligne{ro.part_lines.length !== 1 ? 's' : ''}
+                  </Typography>
+                </Typography>
+                <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
+                  {formatMinor(partsTotal, currency)}
+                </Typography>
+              </Stack>
+              <Divider />
+              {ro.part_lines.length === 0 ? (
+                <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">Aucune pièce.</Typography>
+                </Box>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Pièce</TableCell>
+                      <TableCell align="right">Qté</TableCell>
+                      <TableCell align="right">Prix unit.</TableCell>
+                      <TableCell align="right">Montant</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {ro.part_lines.map(line => (
+                      <TableRow key={line.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{line.part_name}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2">{line.quantity}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2">{formatMinor(line.unit_cost_minor, currency)}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                      <TableCell colSpan={3}>
+                        <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Total Pièces
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight={700}>{formatMinor(partsTotal, currency)}</Typography>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Grand total banner */}
+          {(laborTotal > 0 || partsTotal > 0) && (
+            <Card sx={{ mb: 3, bgcolor: '#0F172A', color: 'white' }}>
+              <CardContent sx={{ py: 2, px: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle2" fontWeight={700} color="rgba(255,255,255,0.7)">
+                    Total estimé (MO + Pièces)
+                  </Typography>
+                  <Typography variant="h6" fontWeight={800} color="white">
+                    {formatMinor(laborTotal + partsTotal, currency)}
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Comments */}
+          <Card>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="subtitle2" fontWeight={700} mb={2}>
+                Commentaires
+              </Typography>
+              <CommentsPanel publicId={publicId} />
+            </CardContent>
+          </Card>
         </Grid>
-        {ro.notes && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="overline" color="text.secondary">
-              Notes
-            </Typography>
-            <Typography mt={0.5} whiteSpace="pre-wrap">
-              {ro.notes}
-            </Typography>
-          </>
-        )}
-      </Paper>
 
-      {/* Status transition */}
-      <PermissionGate permission="repair_order.transition">
-        <Paper sx={{ p: 3, mb: 2 }}>
-          <StatusTransitionPanel ro={ro} onTransitioned={() => refetch()} />
-        </Paper>
-      </PermissionGate>
+        {/* ── RIGHT COLUMN ────────────────────────────────────────────── */}
+        <Grid item xs={12} md={4}>
+          <Stack spacing={3} sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
 
-      {/* Labor lines */}
-      <Paper sx={{ p: 3, mb: 2 }}>
-        <Typography variant="overline" color="text.secondary">
-          Main d'œuvre
-        </Typography>
-        {ro.labor_lines.length === 0 ? (
-          <Typography color="text.secondary" mt={1}>
-            Aucune ligne de main d'œuvre.
-          </Typography>
-        ) : (
-          <Table size="small" sx={{ mt: 1 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Type</TableCell>
-                <TableCell align="right">Durée (min)</TableCell>
-                <TableCell align="right">Taux</TableCell>
-                <TableCell align="right">Montant</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {ro.labor_lines.map((line) => (
-                <TableRow key={line.id}>
-                  <TableCell>{line.labor_type}</TableCell>
-                  <TableCell align="right">{line.duration_minutes}</TableCell>
-                  <TableCell align="right">
-                    {formatMoney(line.rate_minor, ro.estimated_cost_currency)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatMoney(line.amount_minor, ro.estimated_cost_currency)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Paper>
+            {/* Status transition */}
+            <PermissionGate permission="repair_order.transition">
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <StatusTransitionPanel ro={ro} onTransitioned={() => refetch()} />
+                </CardContent>
+              </Card>
+            </PermissionGate>
 
-      {/* Part lines */}
-      <Paper sx={{ p: 3, mb: 2 }}>
-        <Typography variant="overline" color="text.secondary">
-          Pièces
-        </Typography>
-        {ro.part_lines.length === 0 ? (
-          <Typography color="text.secondary" mt={1}>
-            Aucune pièce.
-          </Typography>
-        ) : (
-          <Table size="small" sx={{ mt: 1 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Pièce</TableCell>
-                <TableCell align="right">Qté</TableCell>
-                <TableCell align="right">Prix unitaire</TableCell>
-                <TableCell align="right">Montant</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {ro.part_lines.map((line) => (
-                <TableRow key={line.id}>
-                  <TableCell>{line.part_name}</TableCell>
-                  <TableCell align="right">{line.quantity}</TableCell>
-                  <TableCell align="right">
-                    {formatMoney(line.unit_cost_minor, ro.estimated_cost_currency)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatMoney(line.amount_minor, ro.estimated_cost_currency)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Paper>
+            {/* Timer */}
+            <PermissionGate permission="repair_order.update">
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <TimerPanel publicId={publicId} />
+                </CardContent>
+              </Card>
+            </PermissionGate>
 
-      {/* Time tracking */}
-      <PermissionGate permission="repair_order.update">
-        <Paper sx={{ p: 3, mb: 2 }}>
-          <TimerPanel publicId={publicId} />
-        </Paper>
-      </PermissionGate>
+            {/* Status timeline */}
+            <Card>
+              <CardContent sx={{ p: 2.5 }}>
+                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
+                  Historique des statuts
+                </Typography>
+                <StatusTimeline events={ro.status_events} />
+              </CardContent>
+            </Card>
 
-      {/* Comments */}
-      <Paper sx={{ p: 3, mb: 2 }}>
-        <CommentsPanel publicId={publicId} />
-      </Paper>
+          </Stack>
+        </Grid>
+      </Grid>
 
-      {/* Status history */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="overline" color="text.secondary">
-          Historique des statuts
-        </Typography>
-        {ro.status_events.length === 0 ? (
-          <Typography color="text.secondary" mt={1}>
-            Aucun historique.
-          </Typography>
-        ) : (
-          <Table size="small" sx={{ mt: 1 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>De</TableCell>
-                <TableCell>Vers</TableCell>
-                <TableCell>Date</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {ro.status_events.map((evt) => (
-                <TableRow key={evt.id}>
-                  <TableCell>
-                    {evt.old_status
-                      ? STATUS_LABELS[evt.old_status as ROStatus] ?? evt.old_status
-                      : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {STATUS_LABELS[evt.new_status as ROStatus] ?? evt.new_status}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(evt.occurred_at).toLocaleString('fr-FR')}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Paper>
-
-      <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)}>
-        <DialogTitle>Supprimer cet ordre de réparation ?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            L'ordre sera archivé et n'apparaîtra plus dans la liste.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDelete(false)}>Annuler</Button>
-          <Button color="error" onClick={handleDelete}>
-            Supprimer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Supprimer l'ordre de réparation ?"
+        message="L'ordre sera archivé et n'apparaîtra plus dans la liste principale."
+        confirmLabel="Supprimer"
+        dangerous
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </Box>
   )
 }

@@ -5,8 +5,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -17,25 +15,28 @@ import {
   Paper,
   Select,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
-import AssignmentIcon from '@mui/icons-material/Assignment'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded'
+import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import {
   inspectionApi,
   type InspectionStatus,
   INSPECTION_STATUS_LABELS,
   INSPECTION_ALLOWED_TRANSITIONS,
 } from '../../lib/inspectionApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { EmptyState } from '../../components/ui/EmptyState'
 
-const STATUS_COLORS: Record<
-  InspectionStatus,
-  'default' | 'primary' | 'success' | 'error'
-> = {
-  draft: 'default',
-  in_progress: 'primary',
-  completed: 'success',
-  cancelled: 'error',
+const STATUS_MAP: Record<InspectionStatus, string> = {
+  draft: 'draft',
+  in_progress: 'in_progress',
+  completed: 'done',
+  cancelled: 'cancelled',
 }
 
 function CreateInspectionDialog({
@@ -76,19 +77,18 @@ function CreateInspectionDialog({
           <Select
             value={templateId}
             label="Modèle d'inspection"
-            onChange={(e) => setTemplateId(e.target.value)}
+            onChange={e => setTemplateId(e.target.value)}
           >
-            {templates?.items.map((t) => (
+            {templates?.items.map(t => (
               <MenuItem key={t.id} value={t.id}>
-                {t.name} (
-                {t.sections.reduce((sum, s) => sum + s.items.length, 0)} éléments)
+                {t.name} ({t.sections.reduce((s, sec) => s + sec.items.length, 0)} éléments)
               </MenuItem>
             ))}
           </Select>
         </FormControl>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Annuler</Button>
+        <Button variant="outlined" onClick={onClose}>Annuler</Button>
         <Button
           variant="contained"
           disabled={!templateId || createMutation.isPending}
@@ -100,6 +100,14 @@ function CreateInspectionDialog({
     </Dialog>
   )
 }
+
+const FILTER_OPTIONS: Array<{ value: InspectionStatus | ''; label: string }> = [
+  { value: '', label: 'Toutes' },
+  { value: 'draft', label: 'Brouillon' },
+  { value: 'in_progress', label: 'En cours' },
+  { value: 'completed', label: 'Terminées' },
+  { value: 'cancelled', label: 'Annulées' },
+]
 
 export function InspectionsListPage() {
   const navigate = useNavigate()
@@ -116,7 +124,7 @@ export function InspectionsListPage() {
         page,
         page_size: 20,
       }),
-    placeholderData: (prev) => prev,
+    placeholderData: prev => prev,
   })
 
   const handleCreated = (id: string) => {
@@ -124,104 +132,166 @@ export function InspectionsListPage() {
     navigate(`/inspections/${id}`)
   }
 
-  const statuses: InspectionStatus[] = ['draft', 'in_progress', 'completed', 'cancelled']
-
   return (
-    <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={3}
-        flexWrap="wrap"
-        spacing={1}
-        useFlexGap
-      >
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            Inspections
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {data?.total ?? 0} inspection{(data?.total ?? 0) !== 1 ? 's' : ''}
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel>Statut</InputLabel>
-            <Select
-              value={statusFilter}
-              label="Statut"
-              onChange={(e) => setStatusFilter(e.target.value as InspectionStatus | '')}
-            >
-              <MenuItem value="">Tous</MenuItem>
-              {statuses.map((s) => (
-                <MenuItem key={s} value={s}>
-                  {INSPECTION_STATUS_LABELS[s]}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+    <Box>
+      <PageHeader
+        title="Inspections"
+        subtitle={data ? `${data.total} inspection${data.total !== 1 ? 's' : ''}` : 'Inspections véhicules'}
+        actions={
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
+            startIcon={<AddRoundedIcon />}
             onClick={() => setCreateOpen(true)}
           >
             Nouvelle inspection
           </Button>
-        </Stack>
-      </Stack>
+        }
+      />
 
-      {isLoading && <CircularProgress />}
-      {isError && <Alert severity="error">Impossible de charger les inspections.</Alert>}
-
-      {data?.items.map((insp) => {
-        const canContinue = INSPECTION_ALLOWED_TRANSITIONS[insp.status].includes('completed')
-        return (
-          <Paper
-            key={insp.id}
-            sx={{ mb: 1.5, p: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-            onClick={() => navigate(`/inspections/${insp.id}`)}
-          >
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              flexWrap="wrap"
-              spacing={1}
-              useFlexGap
+      <Box mb={2}>
+        <ToggleButtonGroup
+          value={statusFilter}
+          exclusive
+          onChange={(_, v) => { if (v !== null || statusFilter !== '') { setStatusFilter(v ?? '') } }}
+          size="small"
+        >
+          {FILTER_OPTIONS.map(opt => (
+            <ToggleButton
+              key={opt.value}
+              value={opt.value}
+              sx={{
+                px: 2,
+                py: 0.75,
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                border: '1px solid #E2E8F0 !important',
+                borderRadius: '8px !important',
+                mr: 0.75,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'primary.dark' },
+                },
+              }}
             >
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <AssignmentIcon color="action" />
-                <Box>
-                  <Typography fontWeight={600}>{insp.template_name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    #{insp.id.slice(-8).toUpperCase()} ·{' '}
-                    {new Date(insp.created_at).toLocaleDateString('fr-FR')}
-                    {insp.vehicle_id ? ` · Véhicule #${insp.vehicle_id}` : ''}
-                    {insp.repair_order_id ? ` · OR #${insp.repair_order_id.slice(-6).toUpperCase()}` : ''}
-                  </Typography>
-                </Box>
-              </Stack>
-              <Stack direction="row" spacing={1} alignItems="center">
-                {canContinue && (
-                  <Chip label="En cours" color="primary" size="small" variant="outlined" />
-                )}
-                <Chip
-                  label={INSPECTION_STATUS_LABELS[insp.status]}
-                  color={STATUS_COLORS[insp.status]}
-                  size="small"
-                  sx={{ fontWeight: 700 }}
-                />
-              </Stack>
-            </Stack>
-          </Paper>
-        )
-      })}
+              {opt.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
 
-      {data?.items.length === 0 && !isLoading && (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">Aucune inspection trouvée.</Typography>
-        </Paper>
+      {isLoading && (
+        <Stack spacing={1.5}>
+          {[...Array(5)].map((_, i) => (
+            <Paper key={i} sx={{ p: 2, height: 72, opacity: 0.4 }} />
+          ))}
+        </Stack>
+      )}
+
+      {isError && (
+        <Alert severity="error">Impossible de charger les inspections.</Alert>
+      )}
+
+      {!isLoading && !isError && data?.items.length === 0 && (
+        <EmptyState
+          icon={<AssignmentRoundedIcon sx={{ fontSize: 48, color: '#CBD5E1' }} />}
+          title="Aucune inspection"
+          description={statusFilter ? 'Aucune inspection avec ce statut.' : 'Créez une inspection pour commencer.'}
+          action={
+            <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setCreateOpen(true)}>
+              Nouvelle inspection
+            </Button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && (data?.items ?? []).length > 0 && (
+        <Stack spacing={1.5}>
+          {(data?.items ?? []).map(insp => {
+            const canContinue = INSPECTION_ALLOWED_TRANSITIONS[insp.status].includes('completed')
+            return (
+              <Paper
+                key={insp.id}
+                sx={{
+                  p: 2,
+                  cursor: 'pointer',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    borderColor: 'primary.light',
+                    boxShadow: '0 2px 8px rgba(37,99,235,0.08)',
+                    transform: 'translateY(-1px)',
+                  },
+                }}
+                onClick={() => navigate(`/inspections/${insp.id}`)}
+              >
+                <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '10px',
+                        bgcolor: '#EFF6FF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <AssignmentRoundedIcon sx={{ color: '#2563EB', fontSize: 20 }} />
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" fontWeight={700}>
+                        {insp.template_name}
+                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                          #{insp.id.slice(-8).toUpperCase()}
+                        </Typography>
+                        <Typography variant="caption" color="text.disabled">·</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(insp.created_at).toLocaleDateString('fr-FR')}
+                        </Typography>
+                        {insp.vehicle_id && (
+                          <>
+                            <Typography variant="caption" color="text.disabled">·</Typography>
+                            <Stack direction="row" alignItems="center" spacing={0.5}>
+                              <DirectionsCarRoundedIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
+                              <Typography variant="caption" color="text.secondary">
+                                Véhicule #{insp.vehicle_id}
+                              </Typography>
+                            </Stack>
+                          </>
+                        )}
+                        {insp.repair_order_id && (
+                          <>
+                            <Typography variant="caption" color="text.disabled">·</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              OR #{insp.repair_order_id.slice(-6).toUpperCase()}
+                            </Typography>
+                          </>
+                        )}
+                      </Stack>
+                    </Box>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {canContinue && (
+                      <StatusChip status="in_progress" label="En cours" size="small" />
+                    )}
+                    <StatusChip
+                      status={STATUS_MAP[insp.status] ?? insp.status}
+                      label={INSPECTION_STATUS_LABELS[insp.status]}
+                      size="small"
+                    />
+                  </Stack>
+                </Stack>
+              </Paper>
+            )
+          })}
+        </Stack>
       )}
 
       <CreateInspectionDialog

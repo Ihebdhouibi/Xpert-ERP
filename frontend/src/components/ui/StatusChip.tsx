@@ -9,6 +9,11 @@ export type StatusKey =
   | 'done' | 'approved' | 'rejected'
   | 'open' | 'closed' | 'processing'
   | 'confirmed' | 'invoiced'
+  // Repair order statuses
+  | 'created' | 'diagnosis' | 'in_repair' | 'finished'
+  | 'paused_parts' | 'paused_approval'
+  // Purchase order / inspection statuses
+  | 'completed' | 'partially_received'
 
 const labels: Record<StatusKey, string> = {
   active: 'Actif',
@@ -38,6 +43,14 @@ const labels: Record<StatusKey, string> = {
   processing: 'En traitement',
   confirmed: 'Confirmé',
   invoiced: 'Facturé',
+  created: 'Créé',
+  diagnosis: 'Diagnostic',
+  in_repair: 'En réparation',
+  finished: 'Terminé',
+  paused_parts: 'Attente pièces',
+  paused_approval: 'Attente accord',
+  completed: 'Complété',
+  partially_received: 'Partiellement reçu',
 }
 
 type ChipColor = ChipProps['color']
@@ -70,6 +83,14 @@ const colorMap: Record<StatusKey, ChipColor> = {
   processing: 'info',
   confirmed: 'info',
   invoiced: 'success',
+  created: 'default',
+  diagnosis: 'info',
+  in_repair: 'primary',
+  finished: 'warning',
+  paused_parts: 'warning',
+  paused_approval: 'warning',
+  completed: 'success',
+  partially_received: 'warning',
 }
 
 interface StatusChipProps {

@@ -45,6 +45,10 @@ import {
   type PartStatus,
   type PartCreatePayload,
 } from '../../lib/partsApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { useToast } from '../../contexts/ToastContext'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
 const STATUS_COLORS: Record<PartStatus, 'success' | 'default' | 'error'> = {
   active: 'success',
@@ -53,7 +57,7 @@ const STATUS_COLORS: Record<PartStatus, 'success' | 'default' | 'error'> = {
 }
 
 function money(minor: number) {
-  return `${(minor / 100).toFixed(2)} DT`
+  return formatMinor(minor, 'EUR')
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +369,7 @@ function EquivalentDialog({
 // ---------------------------------------------------------------------------
 export function PartsPage() {
   const qc = useQueryClient()
+  const { error: toastError } = useToast()
   const [search, setSearch] = useState('')
   const [selectedCat, setSelectedCat] = useState<number | undefined>()
   const [statusFilter, setStatusFilter] = useState<PartStatus | ''>('')
@@ -375,7 +380,6 @@ export function PartsPage() {
   const [partDialog, setPartDialog] = useState(false)
   const [editingPart, setEditingPart] = useState<PartSummary | null>(null)
   const [equivDialog, setEquivDialog] = useState<PartSummary | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const categoriesQ = useQuery({
     queryKey: ['part-categories'],
@@ -397,13 +401,13 @@ export function PartsPage() {
   const deleteCatMut = useMutation({
     mutationFn: (id: number) => partsApi.deleteCategory(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['part-categories'] }),
-    onError: () => setDeleteError('Impossible de supprimer cette catégorie (des pièces y sont rattachées).'),
+    onError: () => toastError('Impossible de supprimer cette catégorie (des pièces y sont rattachées).'),
   })
 
   const deletePartMut = useMutation({
     mutationFn: (id: string) => partsApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['parts'] }),
-    onError: () => setDeleteError('Erreur lors de la suppression.'),
+    onError: () => toastError('Erreur lors de la suppression de la pièce.'),
   })
 
   const unlinkMut = useMutation({
@@ -417,7 +421,24 @@ export function PartsPage() {
   const total = partsQ.data?.total ?? 0
 
   return (
-    <Box display="flex" height="100%" gap={2} p={2}>
+    <Box display="flex" flexDirection="column" height="100%">
+      <PageHeader
+        title="Catalogue pièces"
+        subtitle="Gérez vos pièces, catégories et équivalences"
+        actions={
+          <PermissionGate permission="part.create">
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => { setEditingPart(null); setPartDialog(true) }}
+            >
+              Nouvelle pièce
+            </Button>
+          </PermissionGate>
+        }
+      />
+
+      <Box display="flex" flex={1} gap={2} overflow="hidden">
       {/* ---------------------------------------------------------------- */}
       {/* Left panel — categories                                           */}
       {/* ---------------------------------------------------------------- */}
@@ -478,12 +499,6 @@ export function PartsPage() {
       {/* Right panel — parts list                                          */}
       {/* ---------------------------------------------------------------- */}
       <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
-        {deleteError && (
-          <Alert severity="error" onClose={() => setDeleteError(null)} sx={{ mb: 1 }}>
-            {deleteError}
-          </Alert>
-        )}
-
         {/* Toolbar */}
         <Stack direction="row" spacing={1} mb={2} alignItems="center">
           <TextField
@@ -510,15 +525,6 @@ export function PartsPage() {
               <MenuItem key={s} value={s}>{STATUS_LABELS[s]}</MenuItem>
             ))}
           </Select>
-          <PermissionGate permission="part.create">
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => { setEditingPart(null); setPartDialog(true) }}
-            >
-              Nouvelle pièce
-            </Button>
-          </PermissionGate>
         </Stack>
 
         {/* Table */}
@@ -561,11 +567,7 @@ export function PartsPage() {
                       <TableCell align="right">{money(p.purchase_price_minor)}</TableCell>
                       <TableCell align="right">{money(p.selling_price_minor)}</TableCell>
                       <TableCell>
-                        <Chip
-                          size="small"
-                          label={STATUS_LABELS[p.status]}
-                          color={STATUS_COLORS[p.status]}
-                        />
+                        <StatusChip status={p.status} label={STATUS_LABELS[p.status]} />
                       </TableCell>
                       <TableCell>
                         <EquivalentCell part={p} onUnlink={(tgt) => unlinkMut.mutate({ src: p.id, tgt })} />
@@ -617,6 +619,7 @@ export function PartsPage() {
             </Button>
           </Stack>
         )}
+      </Box>
       </Box>
 
       {/* Dialogs */}
