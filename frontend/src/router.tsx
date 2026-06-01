@@ -23,6 +23,14 @@ import { InspectionsListPage } from './pages/inspections/InspectionsListPage'
 import { InspectionExecutionPage } from './pages/inspections/InspectionExecutionPage'
 import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPage'
 import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
+import { VehiclesPage } from './pages/vehicles/VehiclesPage'
+import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage'
+import { QuotationsPage } from './pages/quotations/QuotationsPage'
+import { InvoicesPage } from './pages/invoices/InvoicesPage'
+import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
+import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
+import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
+import { AccountingExportPage } from './pages/accounting/AccountingExportPage'
 
 export const router = createBrowserRouter([
   // Public routes — no shell
@@ -86,6 +94,20 @@ export const router = createBrowserRouter([
 
       // Notifications
       { path: 'notification-templates', element: <TemplatesPage /> },
+
+      // Vehicles
+      { path: 'vehicles', element: <VehiclesPage /> },
+      { path: 'vehicles/:id', element: <VehicleDetailPage /> },
+
+      // Billing — quotations & invoices
+      { path: 'quotations', element: <QuotationsPage /> },
+      { path: 'invoices', element: <InvoicesPage /> },
+
+      // Finance utilities
+      { path: 'advance-payments', element: <AdvancePaymentsPage /> },
+      { path: 'cash-sessions', element: <CashSessionsPage /> },
+      { path: 'credit-notes', element: <CreditNotesPage /> },
+      { path: 'accounting-export', element: <AccountingExportPage /> },
 
       // Analytics
       { path: 'kpi', element: <KpiDashboardPage /> },

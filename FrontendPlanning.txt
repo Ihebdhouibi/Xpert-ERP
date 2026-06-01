@@ -1,0 +1,212 @@
+Frontend Gameplan — Xpert ERP (Garage Workshop)
+Current State in One Line
+The backend is feature-complete (25 modules, 28 migrations). The frontend has 22 pages wired up, but they're built page-by-page with no shared shell, no component library, and very inconsistent UX. It works, but it doesn't feel like a product yet.
+
+Phase 1 — App Shell & Design Foundation (Highest ROI)
+This is the most critical phase. Everything else builds on it.
+
+1.1 — Sidebar Navigation Shell
+Right now there is no persistent nav — users go back to a dashboard tile grid. That's bad UX for a daily-use ERP. We need:
+
+Fixed left sidebar (collapsible on desktop, drawer on mobile/tablet)
+Grouped sections: Workshop | Stock & Purchasing | Billing | Admin
+Active route highlighting, permission-gated menu items
+Top header: garage name, notifications bell, user avatar + logout
+1.2 — Global Toast/Snackbar System
+Zero feedback on mutations right now. Need a useToast() hook + provider so every page can fire success/error/warning messages consistently.
+
+1.3 — Shared Component Library (these get reused on every page)
+
+DataTable — paginated, sortable, with a search bar and filter chips; replaces 10+ hand-rolled tables
+PageHeader — title, breadcrumbs, action button slot
+StatusChip — semantic color per status (RO: OPEN=blue, IN_PROGRESS=orange, DONE=green, etc.)
+CurrencyDisplay — formats integer minor-units (centimes) to €XX.XX
+ConfirmDialog — reusable destructive action confirmation
+EmptyState — empty list/no results placeholder
+LoadingSkeleton patterns — replace raw CircularProgress spinners
+1.4 — Error Boundary + 404 page
+No error boundary exists. The app will white-screen on any uncaught render error.
+
+Phase 2 — Missing Core Pages (Backend-ready, no UI)
+These are full workflows already implemented on the backend waiting for a screen:
+
+Page	Why it matters
+/vehicles	Vehicles are central to ROs — currently no management page
+/quotations	Customer estimates before work starts — key billing entry point
+/invoices	Customer invoices — the money flow has no UI
+/payments	Payment registration and status tracking
+/advance-payments	Deposit tracking — common in workshops
+/cash-sessions	Cash register open/close workflow
+/credit-notes	Refunds and credit notes for billing corrections
+/accounting-export	Export to Sage/Cegid/EBP — already built on backend
+Phase 3 — Admin & Settings Pages
+Page	Content
+/users	List, create, deactivate users; assign roles
+/roles	Role + permission matrix editor
+/settings	Garage info, tax rates, document sequences, email config
+/audit-logs	Filterable audit trail viewer (who changed what, when)
+/documents	GED viewer for archived documents
+Phase 4 — Polish & UX Upgrades on Existing Pages
+KPI Dashboard — current charts are basic; needs better layout, metric cards, trend indicators
+Repair Order Detail — the core screen of the app; needs a proper timeline, labor/parts editing inline, media gallery
+Workshop Kanban — needs column headers with count badges, card micro-design, quick-action menus
+Inspection Execution — photo upload UX, offline indicator badge
+Supplier Invoice page — three-way match visual (PO / receipt / invoice columns)
+All list pages — apply shared DataTable, add loading skeletons, empty states
+Phase 5 — Mobile & Tablet Optimization
+PWA manifest + service worker (installable on tablet)
+Tablet-specific layout for Workshop Kanban and Inspection Execution (already has /tablet route)
+Mobile-first flow for key mechanic tasks (check-in vehicle, mark job done, photo capture)
+Wire up the offline inspection store that's already partially written
+Recommended Start Order
+Phase 1 first — the shell and component library pays dividends on every page we touch after
+Vehicles + Quotations + Invoices/Payments — these complete the customer billing flow
+Admin pages — settings and user management are needed for a real deployment
+Polish the RO detail page — it's the most-used screen in the whole system
+Mobile/PWA — last, once the desktop experience is solid
+Where do you want to start? I'd recommend kicking off with Phase 1 — the app shell and layout, since that sets the foundation for everything else. We can design the sidebar navigation structure together and then build the shared component library on top of it.
+
+------------------------------------------------------------------------------------
+Keep this in your mind in  terms of UI/UX thinking : 
+You are taking the role of a senior product designer and frontend architect working at a top SaaS company.
+
+Your mission is not simply to make the interface functional, but to create a modern, premium, enterprise-grade experience that feels comparable to Linear, Notion, Stripe Dashboard, Vercel, Jira, HubSpot, and modern Microsoft applications.
+
+UI/UX principles:
+
+1. Visual Hierarchy
+- Users must immediately understand where to look first.
+- Important actions should stand out.
+- Reduce visual noise.
+
+2. Whitespace
+- Use generous spacing.
+- Avoid crowded layouts.
+- Let components breathe.
+
+3. Consistency
+- Consistent colors, spacing, typography, border radius, shadows, and component behavior.
+- Every page should feel like part of the same design system.
+
+4. Modern Enterprise Design
+- Clean, professional, premium.
+- Avoid outdated admin panel aesthetics.
+- Avoid excessive gradients, flashy effects, or excessive colors.
+
+5. Information Density
+- Optimize for business users who spend hours per day in the application.
+- Show information efficiently without overwhelming users.
+
+6. Accessibility
+- Strong contrast.
+- Readable typography.
+- Clear focus states.
+- Mobile and desktop responsive.
+
+7. User Efficiency
+- Minimize clicks.
+- Surface the most common actions.
+- Use contextual actions where appropriate.
+
+8. Dashboard Design
+- KPI cards should be visually distinct.
+- Charts should be readable and not decorative.
+- Tables should be easy to scan.
+
+9. Forms
+- Reduce cognitive load.
+- Group related fields.
+- Use clear labels and validation messages.
+
+10. Tables
+- Sticky headers where appropriate.
+- Search, filtering, sorting.
+- Clear row actions.
+
+11. Interactions
+- Smooth transitions.
+- Subtle animations only.
+- No distracting effects.
+
+12. Design System
+- Build reusable components.
+- Use a scalable spacing system.
+- Use a modern typography scale.
+
+For every screen you design:
+- Explain UX decisions.
+- Explain visual hierarchy.
+- Explain why each layout choice improves usability.
+- Prioritize user experience over implementation convenience.
+
+The final result should feel premium, modern, elegant, and production-ready.
+
+--------------------------------------------------------------------------------
+Phase 1 is done. Here's exactly what was built and what you now have:
+
+What just landed
+18 files created or updated, build is clean (0 errors).
+
+New design identity
+Font: Inter everywhere (Google Fonts CDN)
+Primary: #2563EB — vivid electric blue
+Sidebar: Deep navy #0F172A — premium, dark, professional
+Background: #F1F5F9 — clean off-white
+All components: polished borders, shadows, rounded corners, custom scrollbars, smooth transitions
+App shell
+Sidebar — collapsible dark navy sidebar (260px → 64px icon-only). All 7 nav sections (Atelier, Commercial, Finance, Achats, Stock, Analytique, Administration). Responsive: becomes a slide-out drawer on mobile. User profile at the bottom with initials avatar.
+TopBar — sticky white header with sidebar toggle, auto-resolves current page title, notifications bell placeholder, user avatar + dropdown menu with logout.
+All 22 existing pages are now automatically wrapped inside the shell via nested routes — zero changes needed to the existing page files.
+Component library (ready to use everywhere)
+Component	Where to import from
+PageHeader	components/ui/PageHeader
+StatusChip	components/ui/StatusChip
+DataTable	components/ui/DataTable
+ConfirmDialog	components/ui/ConfirmDialog
+EmptyState	components/ui/EmptyState
+CurrencyDisplay + formatMinor	components/ui/CurrencyDisplay
+LoadingScreen + TableLoadingSkeleton	components/ui/LoadingScreen
+useToast()	contexts/ToastContext
+Dashboard redesign
+Blue gradient hero with personalised greeting, 4 live KPI cards (OTs ouverts, CA du mois, Encours, Alertes stock), quick actions panel, and a full modules grid — all clean cards with hover lift animations.
+-------------------------------------------------------------------------------------------------------
+What Phase 1 got right:
+
+Inter font, proper type scale, letter spacing — the foundation is solid
+Dark navy sidebar matches the Linear/Vercel aesthetic
+Component tokens are consistent (same radius, same shadows, same color system everywhere)
+The theme overrides are deep enough that every MUI component inherits the right defaults
+Where I need to push harder in the next phases:
+
+The dashboard hero gradient is slightly too decorative — Linear and Vercel use flat, calm backgrounds with strong typography doing the heavy lifting. I'll tone that down.
+
+The KPI metric cards work but they're missing the trend context — a number without "compared to last month" means nothing to a business user. That's a UX failure, not just a visual one.
+
+The existing 22 pages (customers list, repair order detail, etc.) are still raw — they're just sitting inside the shell without benefiting from the new component library. DataTable, PageHeader, StatusChip, EmptyState — none of those are wired into the actual pages yet. That's Phase 4 work, but it matters a lot for consistency.
+
+One thing I'd push back on slightly:
+
+Point 4 says avoid excessive gradients — I agree. But a garage ERP is not Stripe. The users are workshop managers, mechanics, and accountants who sometimes use this on a tablet in a noisy garage. Information density and contrast need to be slightly higher than a pure B2B SaaS product like Linear. Think more Jira than Notion. I'll keep that tension in mind when designing every screen.
+
+My commitment going forward:
+Every page I build, I'll call out the UX decisions and hierarchy reasoning before writing a line of code. If something is a shortcut that compromises the experience, I'll flag it rather than hide it.
+
+---------------------------------------------------------------------------------------------------
+
+Next step: Phase 2 — build the missing core pages (vehicles, quotations, invoices, payments, cash sessions, credit notes). Want to start with the billing flow (quotations → invoices → payments) or vehicles first?
+---------------------------------------------------------------------------------------
+Phase 2 — What was built
+8 API clients — vehiclesApi, quotationApi, invoiceApi, paymentApi, advancePaymentApi, cashSessionApi, creditNoteApi, accountingExportApi — all typed against the real backend schemas with correct headers (If-Match for optimistic concurrency).
+
+8 pages now live in the sidebar and router:
+
+Route	Page	Key UX decision
+/vehicles	Vehicles list	Plate in monospace + bold as primary ID; CT/entretien dates show red when overdue
+/vehicles/:id	Vehicle detail	Two-column — identity+maintenance left, ownership history+ROs right
+/quotations	Quotations	Status toggle tabs; expiry date turns red automatically
+/invoices	Invoices	Payment progress bar per row; outstanding amount in red
+/advance-payments	Advance payments	Customer lookup + create dialog; applied vs available badge
+/cash-sessions	Cash sessions	Live open-session banner with close button; ecart calculation in real time
+/credit-notes	Credit notes	Amount displayed in red with minus sign — visually distinct from invoices
+/accounting-export	Accounting export	Preview counts before triggering; format selector; download history
+What's next — Phase 3 (Admin) or Phase 4 (polish existing pages with the component library). I'd recommend Phase 4 first since the existing 22 pages are still using raw MUI tables and no PageHeader — a quick polish pass will make the whole app feel consistent before we demo it.
