@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './pages/auth/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CustomersListPage } from './pages/customers/CustomersListPage'
@@ -24,82 +25,17 @@ import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPa
 import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 
 export const router = createBrowserRouter([
+  // Public routes — no shell
   {
     path: '/login',
     element: <LoginPage />,
   },
   {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <DashboardPage />
-      </ProtectedRoute>
-    ),
+    path: '/approve/:token',
+    element: <InspectionApprovalPage />,
   },
-  {
-    path: '/customers',
-    element: (
-      <ProtectedRoute>
-        <CustomersListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/new',
-    element: (
-      <ProtectedRoute>
-        <CustomerCreatePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/:publicId',
-    element: (
-      <ProtectedRoute>
-        <CustomerDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/:publicId/edit',
-    element: (
-      <ProtectedRoute>
-        <CustomerEditPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders',
-    element: (
-      <ProtectedRoute>
-        <RepairOrdersListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders/new',
-    element: (
-      <ProtectedRoute>
-        <RepairOrderCreatePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders/:publicId',
-    element: (
-      <ProtectedRoute>
-        <RepairOrderDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/workshop',
-    element: (
-      <ProtectedRoute>
-        <WorkshopKanbanPage />
-      </ProtectedRoute>
-    ),
-  },
+
+  // Tablet view — full screen, no shell
   {
     path: '/tablet',
     element: (
@@ -108,92 +44,54 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+
+  // Main app — protected layout with AppShell
   {
-    path: '/parts',
+    path: '/',
     element: (
       <ProtectedRoute>
-        <PartsPage />
+        <AppShell />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: '/stock',
-    element: (
-      <ProtectedRoute>
-        <StockPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/suppliers',
-    element: (
-      <ProtectedRoute>
-        <SupplierPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/purchase-orders',
-    element: (
-      <ProtectedRoute>
-        <PurchaseOrderPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/supplier-invoices',
-    element: (
-      <ProtectedRoute>
-        <SupplierInvoicePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/notification-templates',
-    element: (
-      <ProtectedRoute>
-        <TemplatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspection-templates',
-    element: (
-      <ProtectedRoute>
-        <InspectionTemplatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspections',
-    element: (
-      <ProtectedRoute>
-        <InspectionsListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspections/:publicId',
-    element: (
-      <ProtectedRoute>
-        <InspectionExecutionPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/kpi',
-    element: (
-      <ProtectedRoute>
-        <KpiDashboardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/approve/:token',
-    element: <InspectionApprovalPage />,
-  },
-  {
-    path: '*',
-    element: <Navigate to="/" replace />,
+    children: [
+      { index: true, element: <DashboardPage /> },
+
+      // Customers
+      { path: 'customers', element: <CustomersListPage /> },
+      { path: 'customers/new', element: <CustomerCreatePage /> },
+      { path: 'customers/:publicId', element: <CustomerDetailPage /> },
+      { path: 'customers/:publicId/edit', element: <CustomerEditPage /> },
+
+      // Repair orders
+      { path: 'repair-orders', element: <RepairOrdersListPage /> },
+      { path: 'repair-orders/new', element: <RepairOrderCreatePage /> },
+      { path: 'repair-orders/:publicId', element: <RepairOrderDetailPage /> },
+
+      // Workshop
+      { path: 'workshop', element: <WorkshopKanbanPage /> },
+
+      // Inspections
+      { path: 'inspections', element: <InspectionsListPage /> },
+      { path: 'inspections/:publicId', element: <InspectionExecutionPage /> },
+      { path: 'inspection-templates', element: <InspectionTemplatesPage /> },
+
+      // Parts & stock
+      { path: 'parts', element: <PartsPage /> },
+      { path: 'stock', element: <StockPage /> },
+
+      // Purchasing
+      { path: 'suppliers', element: <SupplierPage /> },
+      { path: 'purchase-orders', element: <PurchaseOrderPage /> },
+      { path: 'supplier-invoices', element: <SupplierInvoicePage /> },
+
+      // Notifications
+      { path: 'notification-templates', element: <TemplatesPage /> },
+
+      // Analytics
+      { path: 'kpi', element: <KpiDashboardPage /> },
+
+      // Catch-all
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
   },
 ])
