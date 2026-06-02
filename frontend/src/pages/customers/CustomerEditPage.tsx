@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert, Box, CircularProgress, Paper, Typography } from '@mui/material'
+import { Alert, Box, Paper } from '@mui/material'
 import { CustomerForm } from '../../components/customer/CustomerForm'
 import { customerApi } from '../../lib/customerApi'
 import type { CustomerCreateInput, CustomerStatus } from '../../lib/customerApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { LoadingScreen } from '../../components/ui/LoadingScreen'
 
 export function CustomerEditPage() {
   const { publicId = '' } = useParams<{ publicId: string }>()
@@ -14,11 +16,7 @@ export function CustomerEditPage() {
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
 
-  const {
-    data: customer,
-    isLoading,
-    isError,
-  } = useQuery({
+  const { data: customer, isLoading, isError } = useQuery({
     queryKey: ['customer', publicId],
     queryFn: () => customerApi.get(publicId),
     enabled: !!publicId,
@@ -70,38 +68,38 @@ export function CustomerEditPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <Box p={4} display="flex" justifyContent="center">
-        <CircularProgress />
-      </Box>
-    )
-  }
+  if (isLoading) return <LoadingScreen />
   if (isError || !customer) {
     return (
-      <Box p={4}>
+      <Box>
+        <PageHeader
+          title="Modifier le client"
+          breadcrumbs={[{ label: 'Clients', href: '/customers' }, { label: 'Modifier' }]}
+        />
         <Alert severity="error">Impossible de charger ce client.</Alert>
       </Box>
     )
   }
 
   return (
-    <Box p={4} maxWidth={900} mx="auto">
-      <Typography variant="h4" fontWeight={700} gutterBottom>
-        Modifier le client
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        {customer.full_name}
-        {customer.company_name ? ` — ${customer.company_name}` : ''}
-      </Typography>
+    <Box>
+      <PageHeader
+        title="Modifier le client"
+        subtitle={customer.full_name + (customer.company_name ? ` — ${customer.company_name}` : '')}
+        breadcrumbs={[
+          { label: 'Clients', href: '/customers' },
+          { label: customer.full_name, href: `/customers/${publicId}` },
+          { label: 'Modifier' },
+        ]}
+      />
 
       {serverError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
           {serverError}
         </Alert>
       )}
 
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, maxWidth: 860 }}>
         <CustomerForm
           mode="edit"
           initial={customer}

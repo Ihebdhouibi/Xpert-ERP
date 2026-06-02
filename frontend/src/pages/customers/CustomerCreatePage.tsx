@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Alert, Box, Paper, Typography } from '@mui/material'
+import { Alert, Box, Paper } from '@mui/material'
 import { CustomerForm } from '../../components/customer/CustomerForm'
 import { DuplicatePromptDialog } from '../../components/customer/DuplicatePromptDialog'
 import { customerApi } from '../../lib/customerApi'
@@ -12,6 +12,7 @@ import type {
   MergeMatchReason,
   MergePromptResponse,
 } from '../../lib/customerApi'
+import { PageHeader } from '../../components/ui/PageHeader'
 
 export function CustomerCreatePage() {
   const navigate = useNavigate()
@@ -49,22 +50,23 @@ export function CustomerCreatePage() {
   }
 
   return (
-    <Box p={4} maxWidth={900} mx="auto">
-      <Typography variant="h4" fontWeight={700} gutterBottom>
-        Nouveau client
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        Saisissez au minimum un nom. Les autres champs facilitent les recherches
-        futures et la facturation.
-      </Typography>
+    <Box>
+      <PageHeader
+        title="Nouveau client"
+        subtitle="Saisissez au minimum un nom — les autres champs facilitent les recherches et la facturation."
+        breadcrumbs={[
+          { label: 'Clients', href: '/customers' },
+          { label: 'Nouveau client' },
+        ]}
+      />
 
       {serverError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
           {serverError}
         </Alert>
       )}
 
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, maxWidth: 860 }}>
         <CustomerForm
           mode="create"
           submitting={submitting}

@@ -76,7 +76,21 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
   )
 }
 
+// Status accent colors — same palette as Kanban for consistency
+const STATUS_ACCENT_COLOR: Record<string, string> = {
+  created:         '#94A3B8',
+  diagnosis:       '#3B82F6',
+  in_repair:       '#F59E0B',
+  finished:        '#10B981',
+  delivered:       '#6366F1',
+  paused_parts:    '#EF4444',
+  paused_approval: '#F97316',
+}
+
 // ─── Status transition ───────────────────────────────────────────────────────
+// Each allowed transition is a quiet pill — flat bg, colored left border,
+// muted text. Selected state reveals the confirm step inline.
+// Zero competing colors at rest — only the selected pill activates.
 
 function StatusTransitionPanel({
   ro,
@@ -97,7 +111,7 @@ function StatusTransitionPanel({
         reason: reason || null,
       }),
     onSuccess: () => {
-      success(`Statut mis à jour → ${STATUS_LABELS[selectedStatus!]}`)
+      success(`Statut → ${STATUS_LABELS[selectedStatus!]}`)
       setSelectedStatus(null)
       setReason('')
       onTransitioned()
@@ -109,46 +123,100 @@ function StatusTransitionPanel({
 
   return (
     <Box>
-      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
+      <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" mb={1.5}>
         Changer le statut
       </Typography>
-      <Stack spacing={1}>
-        {allowed.map(s => (
-          <Box key={s}>
-            <Button
-              fullWidth
-              variant={selectedStatus === s ? 'contained' : 'outlined'}
-              size="small"
-              startIcon={<ArrowForwardRoundedIcon />}
-              onClick={() => setSelectedStatus(selectedStatus === s ? null : s)}
-              sx={{ justifyContent: 'flex-start', textTransform: 'none', fontWeight: 600, fontSize: '0.8125rem' }}
-            >
-              {STATUS_LABELS[s]}
-            </Button>
-            {selectedStatus === s && (
-              <Box mt={1} pl={0.5}>
-                <TextField
-                  size="small"
-                  fullWidth
-                  placeholder="Motif (optionnel)"
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                  sx={{ mb: 1 }}
+      <Stack spacing={0.75}>
+        {allowed.map(s => {
+          const accent = STATUS_ACCENT_COLOR[s] ?? '#94A3B8'
+          const isSelected = selectedStatus === s
+          return (
+            <Box key={s}>
+              {/* Quiet pill — left accent border, flat background */}
+              <Box
+                onClick={() => setSelectedStatus(isSelected ? null : s)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.25,
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: 1.5,
+                  border: '1px solid',
+                  borderLeft: `3px solid ${accent}`,
+                  borderColor: isSelected ? accent : '#E2E8F0',
+                  borderLeftColor: accent,
+                  bgcolor: isSelected ? `${accent}10` : '#FAFAFA',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    borderColor: accent,
+                    bgcolor: `${accent}08`,
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 8, height: 8,
+                    borderRadius: '50%',
+                    bgcolor: accent,
+                    flexShrink: 0,
+                  }}
                 />
-                <Button
-                  variant="contained"
-                  fullWidth
-                  size="small"
-                  disabled={mutation.isPending}
-                  onClick={() => mutation.mutate()}
-                  sx={{ fontWeight: 700 }}
+                <Typography
+                  variant="body2"
+                  fontWeight={isSelected ? 600 : 500}
+                  color={isSelected ? 'text.primary' : 'text.secondary'}
+                  flex={1}
                 >
-                  {mutation.isPending ? 'En cours…' : 'Confirmer'}
-                </Button>
+                  {STATUS_LABELS[s]}
+                </Typography>
+                <ArrowForwardRoundedIcon
+                  sx={{
+                    fontSize: 14,
+                    color: isSelected ? accent : '#CBD5E1',
+                    transition: 'color 0.15s',
+                  }}
+                />
               </Box>
-            )}
-          </Box>
-        ))}
+
+              {/* Inline confirm step — expands below the selected pill */}
+              {isSelected && (
+                <Box
+                  sx={{
+                    mt: 0.75,
+                    ml: 0.5,
+                    pl: 1.5,
+                    borderLeft: `2px solid ${accent}40`,
+                  }}
+                >
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="Motif (optionnel)"
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    sx={{ mb: 1 }}
+                  />
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="small"
+                    disabled={mutation.isPending}
+                    onClick={() => mutation.mutate()}
+                    sx={{
+                      background: accent,
+                      '&:hover': { background: accent, opacity: 0.9 },
+                      fontWeight: 600,
+                    }}
+                  >
+                    {mutation.isPending ? 'En cours…' : `Confirmer → ${STATUS_LABELS[s]}`}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )
+        })}
       </Stack>
     </Box>
   )

@@ -1,23 +1,28 @@
-import { useRef, useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
-  CircularProgress,
+  Collapse,
   Divider,
   IconButton,
-  Paper,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import StopIcon from '@mui/icons-material/Stop'
-import SendIcon from '@mui/icons-material/Send'
-import PhotoCameraIcon from '@mui/icons-material/PhotoCamera'
-import RefreshIcon from '@mui/icons-material/Refresh'
+import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
+import StopRoundedIcon from '@mui/icons-material/StopRounded'
+import SendRoundedIcon from '@mui/icons-material/SendRounded'
+import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded'
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
+import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded'
+import ChatBubbleOutlineRoundedIcon from '@mui/icons-material/ChatBubbleOutlineRounded'
+import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
+import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { useAuth } from '../../contexts/AuthContext'
 import {
   repairOrderApi,
@@ -27,24 +32,30 @@ import {
   type RepairOrderSummary,
   type TimeEntry,
 } from '../../lib/repairOrderApi'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { LoadingScreen } from '../../components/ui/LoadingScreen'
+import { useToast } from '../../contexts/ToastContext'
 
-const TOUCH_BTN = { minHeight: 56, minWidth: 56, fontSize: '1rem' }
+const TOUCH_BTN = { minHeight: 52, borderRadius: '10px' }
 
-const STATUS_COLORS: Record<ROStatus, 'default' | 'info' | 'warning' | 'success' | 'error' | 'primary'> = {
-  created: 'default',
-  diagnosis: 'info',
-  in_repair: 'primary',
-  finished: 'warning',
-  delivered: 'success',
-  paused_parts: 'error',
-  paused_approval: 'error',
+const STATUS_ACCENT: Record<ROStatus, string> = {
+  created: '#94A3B8',
+  diagnosis: '#3B82F6',
+  in_repair: '#F59E0B',
+  finished: '#10B981',
+  delivered: '#6366F1',
+  paused_parts: '#EF4444',
+  paused_approval: '#F97316',
 }
+
+// ── ROCard ────────────────────────────────────────────────────────────────────
 
 function ROCard({ ro }: { ro: RepairOrderSummary }) {
   const queryClient = useQueryClient()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [commentText, setCommentText] = useState('')
-  const [timerError, setTimerError] = useState<string | null>(null)
-  const [transitionError, setTransitionError] = useState<string | null>(null)
+  const [commentsOpen, setCommentsOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: timeData } = useQuery({
@@ -53,7 +64,7 @@ function ROCard({ ro }: { ro: RepairOrderSummary }) {
     refetchInterval: 15000,
   })
 
-  const openEntry: TimeEntry | undefined = timeData?.items.find((e) => e.ended_at === null)
+  const openEntry: TimeEntry | undefined = timeData?.items.find(e => e.ended_at === null)
 
   const { data: commentData } = useQuery({
     queryKey: ['comments', ro.id],
@@ -68,19 +79,19 @@ function ROCard({ ro }: { ro: RepairOrderSummary }) {
   const startMutation = useMutation({
     mutationFn: () => repairOrderApi.startTimeEntry(ro.id),
     onSuccess: () => {
-      setTimerError(null)
       queryClient.invalidateQueries({ queryKey: ['time-entries', ro.id] })
+      toastSuccess('Session de travail démarrée')
     },
-    onError: () => setTimerError('Session déjà ouverte.'),
+    onError: () => toastError('Une session est déjà ouverte.'),
   })
 
   const stopMutation = useMutation({
     mutationFn: () => repairOrderApi.stopTimeEntry(ro.id),
     onSuccess: () => {
-      setTimerError(null)
       queryClient.invalidateQueries({ queryKey: ['time-entries', ro.id] })
+      toastSuccess('Session arrêtée')
     },
-    onError: () => setTimerError('Aucune session ouverte.'),
+    onError: () => toastError('Aucune session en cours.'),
   })
 
   const commentMutation = useMutation({
@@ -88,209 +99,332 @@ function ROCard({ ro }: { ro: RepairOrderSummary }) {
     onSuccess: () => {
       setCommentText('')
       queryClient.invalidateQueries({ queryKey: ['comments', ro.id] })
+      toastSuccess('Commentaire ajouté')
     },
+    onError: () => toastError('Impossible d\'ajouter le commentaire.'),
   })
 
   const photoMutation = useMutation({
     mutationFn: (file: File) => repairOrderApi.uploadPhoto(ro.id, file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['photos', ro.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['photos', ro.id] })
+      toastSuccess('Photo ajoutée')
+    },
+    onError: () => toastError('Échec de l\'upload photo.'),
   })
 
   const transitionMutation = useMutation({
     mutationFn: (newStatus: ROStatus) =>
       repairOrderApi.transition(ro.id, { new_status: newStatus }),
     onSuccess: () => {
-      setTransitionError(null)
       queryClient.invalidateQueries({ queryKey: ['tablet-orders'] })
+      toastSuccess('Statut mis à jour')
     },
-    onError: () => setTransitionError('Transition non permise.'),
+    onError: () => toastError('Transition non permise.'),
   })
 
-  const totalMinutes = timeData?.items
-    .filter((e) => e.duration_minutes !== null)
-    .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
+  const totalMinutes =
+    timeData?.items
+      .filter(e => e.duration_minutes !== null)
+      .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
 
   const allowed = ALLOWED_TRANSITIONS[ro.status]
+  const accent = STATUS_ACCENT[ro.status] ?? '#94A3B8'
 
   return (
-    <Paper sx={{ p: 2, mb: 2 }}>
-      <Stack spacing={1.5}>
-        {/* Header */}
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-          <Box>
-            <Typography variant="h6" fontWeight={700} noWrap>
-              {ro.description}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              #{ro.id.slice(-8).toUpperCase()} · Client #{ro.customer_id}
-              {ro.vehicle_id ? ` · Véhicule #${ro.vehicle_id}` : ''}
-            </Typography>
-          </Box>
-          <Chip
-            label={STATUS_LABELS[ro.status]}
-            color={STATUS_COLORS[ro.status]}
-            sx={{ fontWeight: 700 }}
-          />
-        </Stack>
+    <Card
+      sx={{
+        borderTop: `4px solid ${accent}`,
+        transition: 'box-shadow 0.15s',
+        '&:hover': { boxShadow: '0 4px 16px rgba(0,0,0,0.08)' },
+      }}
+    >
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack spacing={2.5}>
 
-        <Divider />
+          {/* ── Header ── */}
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+            <Box flex={1} minWidth={0}>
+              <Typography variant="h6" fontWeight={700} gutterBottom={false} noWrap>
+                {ro.description}
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center" mt={0.5} flexWrap="wrap" useFlexGap>
+                <Typography variant="caption" color="text.disabled" fontFamily="monospace">
+                  #{ro.id.slice(-8).toUpperCase()}
+                </Typography>
+                <Typography variant="caption" color="text.disabled">·</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Client #{ro.customer_id}
+                </Typography>
+                {ro.vehicle_id && (
+                  <>
+                    <Typography variant="caption" color="text.disabled">·</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Véhicule #{ro.vehicle_id}
+                    </Typography>
+                  </>
+                )}
+              </Stack>
+            </Box>
+            <StatusChip status={ro.status} label={STATUS_LABELS[ro.status]} />
+          </Stack>
 
-        {/* Status transition buttons */}
-        {allowed.length > 0 && (
-          <Box>
-            <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
-              Changer le statut
-            </Typography>
-            {transitionError && (
-              <Alert severity="error" sx={{ mb: 1 }} onClose={() => setTransitionError(null)}>
-                {transitionError}
-              </Alert>
-            )}
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {allowed.map((s) => (
-                <Button
-                  key={s}
-                  variant="outlined"
-                  size="large"
-                  sx={TOUCH_BTN}
-                  disabled={transitionMutation.isPending}
-                  onClick={() => transitionMutation.mutate(s)}
-                >
-                  {STATUS_LABELS[s]}
-                </Button>
-              ))}
-            </Stack>
-          </Box>
-        )}
-
-        {/* Timer */}
-        <Box>
-          <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
-            Pointage
-            {totalMinutes > 0 && ` · ${Math.floor(totalMinutes / 60)}h${String(totalMinutes % 60).padStart(2, '0')} total`}
-          </Typography>
-          {timerError && (
-            <Alert severity="error" sx={{ mb: 1 }} onClose={() => setTimerError(null)}>
-              {timerError}
-            </Alert>
+          {/* ── Status transitions ── */}
+          {allowed.length > 0 && (
+            <Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                fontWeight={600}
+                display="block"
+                mb={1}
+              >
+                Changer le statut
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {allowed.map(s => (
+                  <Button
+                    key={s}
+                    variant="outlined"
+                    size="large"
+                    sx={{ ...TOUCH_BTN, flex: '1 1 140px' }}
+                    disabled={transitionMutation.isPending}
+                    onClick={() => transitionMutation.mutate(s)}
+                  >
+                    {STATUS_LABELS[s]}
+                  </Button>
+                ))}
+              </Stack>
+            </Box>
           )}
-          {openEntry ? (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip
-                icon={<PlayArrowIcon />}
-                label={`En cours depuis ${new Date(openEntry.started_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`}
-                color="success"
-                variant="outlined"
-              />
+
+          <Divider />
+
+          {/* ── Timer ── */}
+          <Box>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                <AccessTimeRoundedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Pointage
+                </Typography>
+              </Stack>
+              {totalMinutes > 0 && (
+                <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                  {Math.floor(totalMinutes / 60)}h{String(totalMinutes % 60).padStart(2, '0')} total
+                </Typography>
+              )}
+            </Stack>
+
+            {openEntry ? (
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Stack direction="row" alignItems="center" spacing={0.75} flex={1}>
+                  <RadioButtonCheckedRoundedIcon
+                    sx={{ fontSize: 14, color: 'success.main', animation: 'pulse 2s infinite' }}
+                  />
+                  <Typography variant="body2" fontWeight={600} color="success.dark">
+                    En cours depuis {new Date(openEntry.started_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </Typography>
+                </Stack>
+                <Button
+                  variant="contained"
+                  color="error"
+                  size="large"
+                  startIcon={<StopRoundedIcon />}
+                  sx={TOUCH_BTN}
+                  disabled={stopMutation.isPending}
+                  onClick={() => stopMutation.mutate()}
+                >
+                  Arrêter
+                </Button>
+              </Stack>
+            ) : (
               <Button
                 variant="contained"
-                color="error"
+                color="success"
                 size="large"
-                startIcon={<StopIcon />}
+                fullWidth
+                startIcon={<PlayArrowRoundedIcon />}
                 sx={TOUCH_BTN}
-                disabled={stopMutation.isPending}
-                onClick={() => stopMutation.mutate()}
+                disabled={startMutation.isPending}
+                onClick={() => startMutation.mutate()}
               >
-                Arrêter
+                Démarrer une session
               </Button>
-            </Stack>
-          ) : (
-            <Button
-              variant="contained"
-              color="success"
-              size="large"
-              startIcon={<PlayArrowIcon />}
-              sx={TOUCH_BTN}
-              disabled={startMutation.isPending}
-              onClick={() => startMutation.mutate()}
-            >
-              Démarrer une session
-            </Button>
-          )}
-        </Box>
+            )}
+          </Box>
 
-        {/* Comment input */}
-        <Box>
-          <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
-            Commentaire ({commentData?.total ?? 0})
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="flex-end">
-            <TextField
-              multiline
-              size="small"
-              placeholder="Ajouter une note..."
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              sx={{ flex: 1 }}
-              inputProps={{ style: { fontSize: '1rem', minHeight: 44 } }}
+          <Divider />
+
+          {/* ── Photos ── */}
+          <Box>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                <PhotoCameraRoundedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Photos
+                </Typography>
+                {(photoData?.total ?? 0) > 0 && (
+                  <Chip
+                    label={photoData!.total}
+                    size="small"
+                    sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#F1F5F9', fontWeight: 600 }}
+                  />
+                )}
+              </Stack>
+            </Stack>
+
+            {photoData && photoData.items.length > 0 && (
+              <Stack direction="row" spacing={1} mb={1.5} flexWrap="wrap" useFlexGap>
+                {photoData.items.slice(-6).map(p => (
+                  <Box
+                    key={p.id}
+                    component="img"
+                    src={p.url}
+                    alt={p.filename}
+                    sx={{
+                      width: 96, height: 96,
+                      objectFit: 'cover',
+                      borderRadius: 1.5,
+                      border: '1px solid #E2E8F0',
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) photoMutation.mutate(file)
+                e.target.value = ''
+              }}
             />
-            <IconButton
-              color="primary"
+            <Button
+              variant="outlined"
               size="large"
-              sx={{ ...TOUCH_BTN, bgcolor: 'primary.main', color: 'white', borderRadius: 2, '&:hover': { bgcolor: 'primary.dark' } }}
-              disabled={commentMutation.isPending || !commentText.trim()}
-              onClick={() => commentMutation.mutate()}
+              fullWidth
+              startIcon={<PhotoCameraRoundedIcon />}
+              sx={TOUCH_BTN}
+              disabled={photoMutation.isPending}
+              onClick={() => fileRef.current?.click()}
             >
-              <SendIcon />
-            </IconButton>
-          </Stack>
-          {commentData && commentData.items.length > 0 && (
-            <Stack spacing={0.5} mt={1}>
-              {commentData.items.slice(-3).map((c) => (
-                <Box key={c.id} sx={{ px: 1, py: 0.5, bgcolor: 'action.hover', borderRadius: 1 }}>
-                  <Typography variant="body2">{c.body}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(c.created_at).toLocaleString('fr-FR')}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </Box>
+              {photoMutation.isPending ? 'Envoi en cours…' : 'Prendre une photo'}
+            </Button>
+          </Box>
 
-        {/* Photo upload */}
-        <Box>
-          <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
-            Photos ({photoData?.total ?? 0})
-          </Typography>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) photoMutation.mutate(file)
-              e.target.value = ''
-            }}
-          />
-          <Button
-            variant="outlined"
-            size="large"
-            startIcon={<PhotoCameraIcon />}
-            sx={TOUCH_BTN}
-            disabled={photoMutation.isPending}
-            onClick={() => fileRef.current?.click()}
-          >
-            {photoMutation.isPending ? 'Envoi...' : 'Prendre une photo'}
-          </Button>
-          {photoData && photoData.items.length > 0 && (
-            <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
-              {photoData.items.slice(-4).map((p) => (
-                <Box
-                  key={p.id}
-                  component="img"
-                  src={p.url}
-                  alt={p.filename}
-                  sx={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 1 }}
-                />
-              ))}
+          <Divider />
+
+          {/* ── Comments ── */}
+          <Box>
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              mb={commentsOpen ? 1.5 : 0}
+              sx={{ cursor: 'pointer', userSelect: 'none' }}
+              onClick={() => setCommentsOpen(v => !v)}
+            >
+              <Stack direction="row" alignItems="center" spacing={0.75}>
+                <ChatBubbleOutlineRoundedIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  Commentaires
+                </Typography>
+                {(commentData?.total ?? 0) > 0 && (
+                  <Chip
+                    label={commentData!.total}
+                    size="small"
+                    sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#F1F5F9', fontWeight: 600 }}
+                  />
+                )}
+              </Stack>
+              {commentsOpen
+                ? <ExpandLessRoundedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                : <ExpandMoreRoundedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+              }
             </Stack>
-          )}
-        </Box>
-      </Stack>
-    </Paper>
+
+            <Collapse in={commentsOpen}>
+              {commentData && commentData.items.length > 0 && (
+                <Stack spacing={0.75} mb={1.5}>
+                  {commentData.items.slice(-5).map(c => (
+                    <Box
+                      key={c.id}
+                      sx={{
+                        px: 1.5, py: 1,
+                        bgcolor: '#F8FAFC',
+                        borderRadius: 1.5,
+                        border: '1px solid #E2E8F0',
+                      }}
+                    >
+                      <Typography variant="body2">{c.body}</Typography>
+                      <Typography variant="caption" color="text.disabled">
+                        {new Date(c.created_at).toLocaleString('fr-FR', {
+                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+
+              <Stack direction="row" spacing={1} alignItems="flex-end">
+                <TextField
+                  multiline
+                  size="small"
+                  placeholder="Ajouter une note…"
+                  value={commentText}
+                  onChange={e => setCommentText(e.target.value)}
+                  sx={{ flex: 1 }}
+                  inputProps={{ style: { fontSize: '1rem', minHeight: 44 } }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && e.ctrlKey && commentText.trim()) {
+                      commentMutation.mutate()
+                    }
+                  }}
+                />
+                <IconButton
+                  color="primary"
+                  size="large"
+                  sx={{
+                    ...TOUCH_BTN,
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'primary.dark' },
+                    '&:disabled': { bgcolor: 'action.disabledBackground' },
+                  }}
+                  disabled={commentMutation.isPending || !commentText.trim()}
+                  onClick={() => commentMutation.mutate()}
+                >
+                  <SendRoundedIcon />
+                </IconButton>
+              </Stack>
+            </Collapse>
+          </Box>
+
+        </Stack>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Live clock ─────────────────────────────────────────────────────────────────
+
+function LiveClock() {
+  const [time, setTime] = useState(new Date())
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 60000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <Typography variant="h6" fontFamily="monospace" fontWeight={600} color="text.secondary">
+      {time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+    </Typography>
   )
 }
 
@@ -304,6 +438,8 @@ function getInternalUserId(): number | undefined {
     return undefined
   }
 }
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export function TabletViewPage() {
   const { user } = useAuth()
@@ -320,54 +456,115 @@ export function TabletViewPage() {
     enabled: !!internalUserId,
   })
 
-  const openOrders = data?.items.filter(
-    (ro) => ro.status !== 'delivered'
-  ) ?? []
+  const openOrders = data?.items.filter(ro => ro.status !== 'delivered') ?? []
 
   return (
     <Box
       sx={{
-        p: 2,
-        maxWidth: 800,
-        mx: 'auto',
         minHeight: '100vh',
-        bgcolor: 'background.default',
+        bgcolor: '#F1F5F9',
+        pb: 4,
       }}
     >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Mes ordres de réparation
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {user?.full_name} · {openOrders.length} ordre{openOrders.length !== 1 ? 's' : ''} en cours
-          </Typography>
-        </Box>
-        <IconButton size="large" onClick={() => refetch()} sx={TOUCH_BTN}>
-          <RefreshIcon />
-        </IconButton>
-      </Stack>
+      {/* Header */}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          bgcolor: '#0F172A',
+          px: 3,
+          py: 2,
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack spacing={0.25}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              {/* X logo mark */}
+              <Box
+                sx={{
+                  width: 32, height: 32,
+                  borderRadius: '8px',
+                  bgcolor: '#2563EB',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Typography fontWeight={800} fontSize="1rem" color="white" lineHeight={1}>
+                  X
+                </Typography>
+              </Box>
+              <Typography variant="h6" fontWeight={700} color="white">
+                {user?.full_name ?? 'Mécanicien'}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="rgba(255,255,255,0.5)" pl={0.5}>
+              {openOrders.length} ordre{openOrders.length !== 1 ? 's' : ''} en cours
+            </Typography>
+          </Stack>
 
-      {isLoading && (
-        <Box display="flex" justifyContent="center" pt={8}>
-          <CircularProgress size={60} />
-        </Box>
-      )}
-      {isError && (
-        <Alert severity="error">Impossible de charger vos ordres de réparation.</Alert>
-      )}
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <LiveClock />
+            <IconButton
+              size="large"
+              onClick={() => refetch()}
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.08)',
+                borderRadius: '10px',
+                minHeight: 44,
+                minWidth: 44,
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' },
+              }}
+            >
+              <RefreshRoundedIcon />
+            </IconButton>
+          </Stack>
+        </Stack>
+      </Box>
 
-      {!isLoading && openOrders.length === 0 && (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">
-            Aucun ordre de réparation assigné pour le moment.
-          </Typography>
-        </Paper>
-      )}
+      {/* Content */}
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 840, mx: 'auto' }}>
+        {isLoading && <LoadingScreen message="Chargement de vos ordres…" />}
 
-      {openOrders.map((ro) => (
-        <ROCard key={ro.id} ro={ro} />
-      ))}
+        {isError && (
+          <Box
+            sx={{
+              bgcolor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              borderRadius: 2,
+              p: 2.5,
+              mt: 2,
+            }}
+          >
+            <Typography color="error.dark" fontWeight={600}>
+              Impossible de charger vos ordres de réparation.
+            </Typography>
+            <Button
+              size="small"
+              onClick={() => refetch()}
+              sx={{ mt: 1 }}
+              startIcon={<RefreshRoundedIcon />}
+            >
+              Réessayer
+            </Button>
+          </Box>
+        )}
+
+        {!isLoading && !isError && openOrders.length === 0 && (
+          <EmptyState
+            title="Aucun ordre assigné"
+            description="Vous n'avez pas d'ordre de réparation en cours pour le moment."
+          />
+        )}
+
+        <Stack spacing={2.5} mt={isLoading || isError ? 0 : 1}>
+          {openOrders.map(ro => (
+            <ROCard key={ro.id} ro={ro} />
+          ))}
+        </Stack>
+      </Box>
     </Box>
   )
 }

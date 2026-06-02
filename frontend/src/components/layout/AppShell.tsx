@@ -1,15 +1,33 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Box, useMediaQuery, useTheme } from '@mui/material'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar, DRAWER_WIDTH, COLLAPSED_WIDTH } from './Sidebar'
 import { TopBar } from './TopBar'
+import { useCommandPalette } from '../CommandPalette'
+
+// 130ms ease-out fade — masks React re-render flash, adds perceived polish.
+// Deliberately subtle: users should feel snappy, not notice the animation.
+const pageVariants = {
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0 },
+  exit:    { opacity: 0, y: -4 },
+}
+
+const pageTransition = {
+  duration: 0.13,
+  ease: [0.4, 0, 0.2, 1], // MUI standard easing
+}
 
 export function AppShell() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const location = useLocation()
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const { palette, setOpen: openPalette } = useCommandPalette()
 
   const handleMenuClick = () => {
     if (isMobile) {
@@ -44,7 +62,11 @@ export function AppShell() {
           }),
         }}
       >
-        <TopBar onMenuClick={handleMenuClick} sidebarOpen={sidebarOpen} />
+        <TopBar
+          onMenuClick={handleMenuClick}
+          sidebarOpen={sidebarOpen}
+          onSearchClick={() => openPalette(true)}
+        />
 
         <Box
           component="main"
@@ -55,9 +77,24 @@ export function AppShell() {
             minHeight: 0,
           }}
         >
-          <Outlet />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={pageTransition}
+              style={{ height: '100%' }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </Box>
       </Box>
+
+      {/* Command palette — portal, available on every page */}
+      {palette}
     </Box>
   )
 }

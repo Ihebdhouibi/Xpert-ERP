@@ -23,6 +23,9 @@ export interface Column<T> {
   width?: string | number
   minWidth?: string | number
   sortable?: boolean
+  // Mark a column as "actions" — hidden until the row is hovered.
+  // Stripe/Linear pattern: reduces visual clutter from N rows × N icons.
+  actions?: boolean
 }
 
 interface DataTableProps<T> {
@@ -68,8 +71,8 @@ export function DataTable<T>({
   sortOrder = 'asc',
   onSort,
 }: DataTableProps<T>) {
-  const showPagination =
-    total != null && page != null && onPageChange != null
+  const showPagination = total != null && page != null && onPageChange != null
+  const hasActionCol = columns.some(c => c.actions)
 
   return (
     <Paper
@@ -84,10 +87,15 @@ export function DataTable<T>({
                 <TableCell
                   key={col.id}
                   align={col.align ?? 'left'}
-                  sx={{ width: col.width, minWidth: col.minWidth }}
+                  sx={{
+                    width: col.width,
+                    minWidth: col.minWidth,
+                    // Action columns: right-align header, no label needed
+                    ...(col.actions && { width: 48, padding: '10px 12px' }),
+                  }}
                   sortDirection={sortBy === col.id ? sortOrder : false}
                 >
-                  {col.sortable && onSort ? (
+                  {col.actions ? null : col.sortable && onSort ? (
                     <TableSortLabel
                       active={sortBy === col.id}
                       direction={sortBy === col.id ? sortOrder : 'asc'}
@@ -95,11 +103,14 @@ export function DataTable<T>({
                     >
                       {col.label}
                     </TableSortLabel>
-                  ) : col.label}
+                  ) : (
+                    col.label
+                  )}
                 </TableCell>
               ))}
             </TableRow>
           </TableHead>
+
           <TableBody>
             {loading && (
               <TableLoadingSkeleton cols={columns.length} rows={pageSize > 10 ? 8 : 4} />
@@ -134,11 +145,35 @@ export function DataTable<T>({
                   key={getRowKey(row)}
                   hover={!!onRowClick}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  sx={{ cursor: onRowClick ? 'pointer' : 'default' }}
+                  sx={{
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    // Hover reveals action columns with a smooth fade
+                    ...(hasActionCol && {
+                      '& .DataTable-actions': {
+                        opacity: 0,
+                        transition: 'opacity 0.15s ease',
+                      },
+                      '&:hover .DataTable-actions': {
+                        opacity: 1,
+                      },
+                    }),
+                  }}
                 >
                   {columns.map(col => (
-                    <TableCell key={col.id} align={col.align ?? 'left'}>
-                      {col.render(row)}
+                    <TableCell
+                      key={col.id}
+                      align={col.align ?? 'left'}
+                      sx={col.actions ? { padding: '8px 12px', width: 48 } : undefined}
+                      // Stop row click from firing when clicking action buttons
+                      onClick={col.actions ? e => e.stopPropagation() : undefined}
+                    >
+                      {col.actions ? (
+                        <Box className="DataTable-actions">
+                          {col.render(row)}
+                        </Box>
+                      ) : (
+                        col.render(row)
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -158,9 +193,7 @@ export function DataTable<T>({
             rowsPerPageOptions={[10, 20, 50, 100]}
             onRowsPerPageChange={
               onPageSizeChange
-                ? e => {
-                    onPageSizeChange(parseInt(e.target.value, 10))
-                  }
+                ? e => onPageSizeChange(parseInt(e.target.value, 10))
                 : undefined
             }
             labelRowsPerPage="Lignes :"

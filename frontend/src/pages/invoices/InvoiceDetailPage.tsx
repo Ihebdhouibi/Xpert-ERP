@@ -1,0 +1,547 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Divider,
+  Grid,
+  LinearProgress,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import PublishRoundedIcon from '@mui/icons-material/PublishRounded'
+import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
+import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
+import {
+  invoiceApi,
+  INVOICE_STATUS_LABELS,
+  type InvoiceLineKind,
+} from '../../lib/invoiceApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { LoadingScreen } from '../../components/ui/LoadingScreen'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { useToast } from '../../contexts/ToastContext'
+
+const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
+  labor: "Main d'œuvre",
+  part: 'Pièce',
+  service: 'Prestation',
+  other: 'Autre',
+}
+
+const KIND_COLORS: Record<string, { bg: string; color: string }> = {
+  labor: { bg: '#EFF6FF', color: '#2563EB' },
+  part: { bg: '#FFFBEB', color: '#D97706' },
+  service: { bg: '#F0FDF4', color: '#16A34A' },
+  other: { bg: '#F1F5F9', color: '#64748B' },
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" py={1.25} gap={2}>
+      <Typography variant="body2" color="text.secondary" fontWeight={500} flexShrink={0}>
+        {label}
+      </Typography>
+      <Box textAlign="right">
+        {value ?? <Typography variant="body2" color="text.disabled">—</Typography>}
+      </Box>
+    </Stack>
+  )
+}
+
+function TotalRow({
+  label,
+  value,
+  bold,
+  color,
+}: {
+  label: string
+  value: string
+  bold?: boolean
+  color?: string
+}) {
+  return (
+    <Stack direction="row" justifyContent="space-between" alignItems="center" py={0.75}>
+      <Typography variant="body2" color="text.secondary" fontWeight={bold ? 600 : 400}>
+        {label}
+      </Typography>
+      <Typography variant="body2" fontWeight={bold ? 700 : 500} color={color}>
+        {value}
+      </Typography>
+    </Stack>
+  )
+}
+
+export function InvoiceDetailPage() {
+  const { publicId } = useParams<{ publicId: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { success, error: toastError } = useToast()
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const { data: invoice, isLoading, isError } = useQuery({
+    queryKey: ['invoice', publicId],
+    queryFn: () => invoiceApi.get(publicId!),
+    enabled: !!publicId,
+  })
+
+  const issueMutation = useMutation({
+    mutationFn: () => invoiceApi.issue(publicId!, invoice!.version),
+    onSuccess: () => {
+      success('Facture émise')
+      queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: () => toastError('Impossible d\'émettre la facture.'),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: () => invoiceApi.cancel(publicId!, invoice!.version),
+    onSuccess: () => {
+      success('Facture annulée')
+      setCancelOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: () => {
+      toastError('Impossible d\'annuler la facture.')
+      setCancelOpen(false)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => invoiceApi.remove(publicId!),
+    onSuccess: () => {
+      success('Facture supprimée')
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      navigate('/invoices', { replace: true })
+    },
+    onError: () => toastError('Impossible de supprimer la facture.'),
+  })
+
+  if (isLoading) return <LoadingScreen />
+  if (isError || !invoice) {
+    return (
+      <Box>
+        <PageHeader title="Facture" breadcrumbs={[{ label: 'Factures', href: '/invoices' }, { label: '—' }]} />
+        <Typography color="error">Impossible de charger cette facture.</Typography>
+      </Box>
+    )
+  }
+
+  const paidPct = invoice.total_minor > 0
+    ? Math.min((invoice.paid_amount_minor / invoice.total_minor) * 100, 100)
+    : 0
+  const isOverdue =
+    invoice.due_at &&
+    new Date(invoice.due_at) < new Date() &&
+    invoice.status !== 'paid' &&
+    invoice.status !== 'cancelled'
+  const anyMutating = issueMutation.isPending || cancelMutation.isPending
+
+  return (
+    <Box>
+      <PageHeader
+        title={invoice.doc_number ?? 'Facture brouillon'}
+        subtitle={`Client #${invoice.customer_id}`}
+        breadcrumbs={[
+          { label: 'Factures', href: '/invoices' },
+          { label: invoice.doc_number ?? 'Brouillon' },
+        ]}
+        actions={
+          invoice.status === 'draft' ? (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteRoundedIcon />}
+              onClick={() => setDeleteOpen(true)}
+              size="small"
+            >
+              Supprimer
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <Grid container spacing={3}>
+        {/* Left — details + lines */}
+        <Grid item xs={12} md={8}>
+          <Stack spacing={3}>
+            {/* Info card */}
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5} mb={2}>
+                  <Box sx={{ color: 'primary.main' }}>
+                    <InfoRoundedIcon sx={{ fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    Informations
+                  </Typography>
+                </Stack>
+                <Divider sx={{ mb: 0.5 }} />
+                <InfoRow label="Numéro" value={
+                  invoice.doc_number
+                    ? <Typography variant="body2" fontWeight={700} fontFamily="monospace">{invoice.doc_number}</Typography>
+                    : <Chip label="Brouillon" size="small" sx={{ bgcolor: '#F1F5F9', color: '#64748B', fontWeight: 600 }} />
+                } />
+                <Divider />
+                <InfoRow label="Client" value={
+                  <Typography variant="body2" fontWeight={500}>Client #{invoice.customer_id}</Typography>
+                } />
+                {invoice.vehicle_id && (
+                  <>
+                    <Divider />
+                    <InfoRow label="Véhicule" value={
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => navigate(`/vehicles/${invoice.vehicle_id}`)}
+                        sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.8125rem' }}
+                      >
+                        Véhicule #{invoice.vehicle_id}
+                      </Button>
+                    } />
+                  </>
+                )}
+                {invoice.repair_order_id && (
+                  <>
+                    <Divider />
+                    <InfoRow label="Ordre de réparation" value={
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => navigate(`/repair-orders/${invoice.repair_order_id}`)}
+                        sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.8125rem' }}
+                      >
+                        OT #{invoice.repair_order_id}
+                      </Button>
+                    } />
+                  </>
+                )}
+                {invoice.quotation_id && (
+                  <>
+                    <Divider />
+                    <InfoRow label="Devis source" value={
+                      <Typography variant="body2" color="text.secondary">
+                        Devis #{invoice.quotation_id}
+                      </Typography>
+                    } />
+                  </>
+                )}
+                <Divider />
+                <InfoRow label="Date d'émission" value={
+                  invoice.issued_at
+                    ? <Typography variant="body2">{new Date(invoice.issued_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</Typography>
+                    : null
+                } />
+                <Divider />
+                <InfoRow label="Échéance" value={
+                  invoice.due_at ? (
+                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                      {isOverdue && <WarningAmberRoundedIcon sx={{ fontSize: 14, color: 'error.main' }} />}
+                      <Typography
+                        variant="body2"
+                        fontWeight={isOverdue ? 700 : 500}
+                        color={isOverdue ? 'error.main' : 'text.primary'}
+                      >
+                        {new Date(invoice.due_at).toLocaleDateString('fr-FR')}
+                        {isOverdue && ' — En retard'}
+                      </Typography>
+                    </Stack>
+                  ) : null
+                } />
+                <Divider />
+                <InfoRow label="Exporté comptabilité" value={
+                  <Chip
+                    label={invoice.is_exported ? 'Exporté' : 'Non exporté'}
+                    size="small"
+                    color={invoice.is_exported ? 'success' : 'default'}
+                    sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+                  />
+                } />
+                {invoice.notes && (
+                  <>
+                    <Divider />
+                    <Box pt={1.5} pb={0.5}>
+                      <Typography variant="caption" color="text.secondary" display="block" mb={0.75} fontWeight={500}>
+                        Notes
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {invoice.notes}
+                      </Typography>
+                    </Box>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Lines card */}
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5} mb={2}>
+                  <Box sx={{ color: 'primary.main' }}>
+                    <ReceiptRoundedIcon sx={{ fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="subtitle1" fontWeight={700}>
+                    Lignes de la facture
+                  </Typography>
+                  <Chip
+                    label={invoice.lines.length}
+                    size="small"
+                    sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 600, ml: 'auto !important' }}
+                  />
+                </Stack>
+                <Divider sx={{ mb: 0 }} />
+                {invoice.lines.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" py={3} textAlign="center">
+                    Aucune ligne dans cette facture.
+                  </Typography>
+                ) : (
+                  <Box sx={{ overflowX: 'auto' }}>
+                    <Table size="small" sx={{ minWidth: 560 }}>
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: '#F8FAFC' }}>
+                          {['Type', 'Description', 'Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'].map(h => (
+                            <TableCell
+                              key={h}
+                              align={['Qté', 'P.U. HT', 'Remise', 'TVA', 'Total HT'].includes(h) ? 'right' : 'left'}
+                              sx={{ fontSize: '0.6875rem', fontWeight: 600, color: 'text.secondary', py: 1.25 }}
+                            >
+                              {h}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {invoice.lines.map(line => {
+                          const kindCfg = KIND_COLORS[line.kind] ?? KIND_COLORS.other
+                          return (
+                            <TableRow
+                              key={line.id}
+                              sx={{ '&:hover': { bgcolor: '#F9FAFB' } }}
+                            >
+                              <TableCell sx={{ py: 1.5 }}>
+                                <Chip
+                                  label={LINE_KIND_LABELS[line.kind]}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: kindCfg.bg,
+                                    color: kindCfg.color,
+                                    fontWeight: 600,
+                                    fontSize: '0.6875rem',
+                                    height: 22,
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell sx={{ py: 1.5, maxWidth: 240 }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  {line.description}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ py: 1.5 }}>
+                                <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+                                  {line.quantity}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ py: 1.5 }}>
+                                <Typography variant="body2" fontFamily="monospace">
+                                  {formatMinor(line.unit_price_minor, invoice.currency)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ py: 1.5 }}>
+                                <Typography
+                                  variant="body2"
+                                  color={parseFloat(line.discount_percent) > 0 ? 'warning.dark' : 'text.disabled'}
+                                  fontWeight={parseFloat(line.discount_percent) > 0 ? 600 : 400}
+                                >
+                                  {parseFloat(line.discount_percent) > 0
+                                    ? `${parseFloat(line.discount_percent)}%`
+                                    : '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ py: 1.5 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  {parseFloat(line.vat_rate)}%
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ py: 1.5 }}>
+                                <Typography variant="body2" fontWeight={700} fontFamily="monospace">
+                                  {formatMinor(line.line_total_minor, invoice.currency)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+
+        {/* Right — sticky payment summary + actions */}
+        <Grid item xs={12} md={4}>
+          <Box sx={{ position: 'sticky', top: 24 }}>
+            <Card>
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2.5}>
+                  <Typography variant="subtitle1" fontWeight={700}>Paiement</Typography>
+                  <StatusChip status={invoice.status} label={INVOICE_STATUS_LABELS[invoice.status]} />
+                </Stack>
+
+                {/* Payment progress */}
+                {invoice.status !== 'draft' && invoice.status !== 'cancelled' && (
+                  <Box mb={2.5}>
+                    <Stack direction="row" justifyContent="space-between" mb={0.75}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                        Progression du paiement
+                      </Typography>
+                      <Typography variant="caption" fontWeight={700} color={paidPct === 100 ? 'success.main' : 'text.primary'}>
+                        {Math.round(paidPct)}%
+                      </Typography>
+                    </Stack>
+                    <Tooltip title={`${formatMinor(invoice.paid_amount_minor, invoice.currency)} payé sur ${formatMinor(invoice.total_minor, invoice.currency)}`}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={paidPct}
+                        color={paidPct === 100 ? 'success' : paidPct > 0 ? 'warning' : 'primary'}
+                        sx={{ height: 8, borderRadius: 999 }}
+                      />
+                    </Tooltip>
+                  </Box>
+                )}
+
+                {/* Financial breakdown */}
+                <Box sx={{ bgcolor: '#F8FAFC', borderRadius: 1.5, p: 2, mb: 2.5 }}>
+                  <TotalRow
+                    label="Sous-total HT"
+                    value={formatMinor(invoice.subtotal_minor, invoice.currency)}
+                  />
+                  {invoice.discount_minor > 0 && (
+                    <TotalRow
+                      label="Remise"
+                      value={`− ${formatMinor(invoice.discount_minor, invoice.currency)}`}
+                      color="warning.dark"
+                    />
+                  )}
+                  <TotalRow
+                    label="TVA"
+                    value={formatMinor(invoice.vat_minor, invoice.currency)}
+                  />
+                  <Divider sx={{ my: 1 }} />
+                  <TotalRow
+                    label="Total TTC"
+                    value={formatMinor(invoice.total_minor, invoice.currency)}
+                    bold
+                  />
+                  {invoice.status !== 'draft' && (
+                    <>
+                      <Divider sx={{ my: 1 }} />
+                      <TotalRow
+                        label="Payé"
+                        value={formatMinor(invoice.paid_amount_minor, invoice.currency)}
+                        color="success.main"
+                      />
+                      <TotalRow
+                        label="Restant dû"
+                        value={invoice.outstanding_minor > 0
+                          ? formatMinor(invoice.outstanding_minor, invoice.currency)
+                          : '—'}
+                        bold={invoice.outstanding_minor > 0}
+                        color={invoice.outstanding_minor > 0 ? 'error.main' : 'text.secondary'}
+                      />
+                    </>
+                  )}
+                </Box>
+
+                {/* Actions by status */}
+                <Stack spacing={1.25}>
+                  {invoice.status === 'draft' && (
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      startIcon={<PublishRoundedIcon />}
+                      onClick={() => issueMutation.mutate()}
+                      disabled={anyMutating}
+                    >
+                      Émettre la facture
+                    </Button>
+                  )}
+
+                  {(invoice.status === 'issued' || invoice.status === 'partial') && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      fullWidth
+                      startIcon={<CancelRoundedIcon />}
+                      onClick={() => setCancelOpen(true)}
+                      disabled={anyMutating}
+                    >
+                      Annuler la facture
+                    </Button>
+                  )}
+
+                  {invoice.status === 'paid' && (
+                    <Box sx={{ bgcolor: '#F0FDF4', borderRadius: 1.5, p: 2, textAlign: 'center' }}>
+                      <Typography variant="body2" color="success.dark" fontWeight={600}>
+                        Facture entièrement payée
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {invoice.status === 'cancelled' && (
+                    <Box sx={{ bgcolor: '#FEF2F2', borderRadius: 1.5, p: 2, textAlign: 'center' }}>
+                      <Typography variant="body2" color="error.dark" fontWeight={600}>
+                        Facture annulée
+                      </Typography>
+                    </Box>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Box>
+        </Grid>
+      </Grid>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        title="Annuler cette facture ?"
+        message="La facture sera marquée comme annulée. Cette action est irréversible."
+        confirmLabel="Annuler la facture"
+        dangerous
+        loading={cancelMutation.isPending}
+        onConfirm={() => cancelMutation.mutate()}
+        onCancel={() => setCancelOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Supprimer cette facture ?"
+        message="Cette action est irréversible. La facture sera définitivement supprimée."
+        confirmLabel="Supprimer"
+        dangerous
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => setDeleteOpen(false)}
+      />
+    </Box>
+  )
+}

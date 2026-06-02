@@ -281,69 +281,149 @@ Both list views now use useQuery with placeholderData: prev => prev for stale-wh
 DataTable now accepts sortable?: boolean per column, plus sortBy, sortOrder, onSort props. Uses MUI's TableSortLabel for the visual indicator. Sort is client-side (current page only) — correct tradeoff for a paginated table where the backend sort isn't confirmed. Customers: sort by name, outstanding, status. Repair orders: sort by date (default desc), priority, estimated cost.
 
 ----------------------------------------------------------------------------
--------------------------------------------------------------------
-before starting phase 3. tell me what else we have before we finish the gameplan you elaborated
-Here's the full honest accounting against the gameplan:
+------------------------------------------------------------------------------------------------
+Phase 4 is complete. Build clean. Here's the full delivery:
 
-Phase 1 — App Shell ✅ Complete
-Phase 2 — Missing Core Pages ✅ Mostly complete
-Three detail pages were noted as missing and still are:
+Phase 4 — Complete
+CustomerDetailPage — Full redesign. Two-column Card layout: Identity + Coordonnées left, Finance/Fidélité + Adresse right. InfoRow pattern throughout, clickable email/tel links, contacts list with primary badge, ConfirmDialog for archive, useToast for all feedback, LoadingScreen for loading state, Rounded icons, formatMinor for money.
 
-/vehicles/new — route exists in nav but no VehicleCreatePage built
-/quotations/:id — quotation detail page not built
-/invoices/:id — invoice detail page not built
-Phase 3 — Admin Pages 🔲 Not started
-/users — user management
-/roles — permission matrix editor
-/settings — garage config (tax rates, document sequences, email)
-/audit-logs — audit trail viewer
-/documents — GED viewer
-Phase 4 — Polish 🔲 Partially done
-List/complex pages are polished. These never got touched:
+CustomerCreatePage — PageHeader with breadcrumbs replaces raw h4. All form logic untouched.
 
-CustomerDetailPage — high traffic, still raw Grid layout
-CustomerCreatePage + CustomerEditPage — forms, no PageHeader
-RepairOrderCreatePage — form, no PageHeader
-InspectionTemplatesPage — never polished
-InspectionExecutionPage — specifically called out in the gameplan: "photo upload UX, offline indicator badge"
-TemplatesPage (notifications) — never polished
-Phase 5 — Mobile / PWA 🔲 Not started
-PWA manifest + service worker (installable on tablet)
-Tablet layout for Workshop Kanban and Inspection Execution
-Wire up the offline inspection store (inspectionOfflineStore.ts partially written)
-Mobile-first flow for mechanics (check-in, job done, photo capture)
-Summary
-Phase	Status
-Phase 1 — Shell & design system	✅ Done
-Phase 2 — Core pages	✅ Done minus 3 detail pages
-Phase 3 — Admin pages	🔲 Not started
-Phase 4 — Polish	🟡 ~60% — 6 pages untouched
-Phase 5 — Mobile/PWA	🔲 Not started
-My recommendation for sequencing:
+CustomerEditPage — PageHeader with 3-level breadcrumbs (Clients → name → Modifier), LoadingScreen replaces CircularProgress.
 
-Phase 3 (Admin) — needed for any real deployment
-The 3 missing Phase 2 detail pages (vehicles/new, quotations/:id, invoices/:id) — complete the billing flow
-Phase 4 remaining polish (CustomerDetail, forms, InspectionExecution)
-Phase 5 PWA — last, once desktop is solid
-Phase 5 is the only phase that's genuinely optional for a first client demo. Everything else has visible gaps.
+RepairOrderCreatePage — PageHeader with Cancel/Créer in the actions slot. Two-column form layout. Live cost preview: typing 15000 now shows ≈ 150,00 EUR as the helper text, updated on every keystroke. Priority items show a colored dot in the dropdown.
 
+InspectionTemplatesPage — PageHeader, ConfirmDialog, TableLoadingSkeleton, EmptyState, Card hover lift. Template cards show section chips (up to 3 + overflow count). Section editor styled with border/bg instead of flat Paper.
+
+InspectionExecutionPage — Persistent offline banner sticks to the top of the scroll area (amber, always visible). Section headers use design-system tokens (#FEF2F2/#F0FDF4/#F8FAFC) instead of MUI palette aliases. Snackbar → useToast. Complete dialog → ConfirmDialog. Progress bar added to the header. Zero changes to offline sync logic.
+
+TemplatesPage — PageHeader with live stat subtitle. Trigger cards use Card pattern with NotificationsRounded icon. Template rows show proper color-coded ChannelChip. Edit dialog replaced with a custom inline modal (avoids Dialog-in-Dialog nesting issue). LoadingScreen replaces CircularProgress.
+
+Phase status now: Phases 1–4 complete. Ready for Phase 5 (PWA / mobile) whenever you are.
+
+--------------------------------------------------------------------------------
+Phase 5 (PWA / mobile)
+plan is :
+Phase 5 — Honest State Assessment First
+Already done (no work needed):
+
+inspectionOfflineStore.ts — 100% complete. IndexedDB, saveResult, getPending, markSynced, clearSynced — all implemented. It's already wired into InspectionExecutionPage. This bullet point from the plan is finished.
+InspectionExecutionPage tablet UX — We just polished this in Phase 4: touch buttons, offline badge, progress bar, offline sync. Done.
+MediaUploadButton — Complete with compression, EXIF strip, chunked upload, camera capture (capture="environment"). Done.
+TabletViewPage at /tablet — Exists with timer start/stop, status transitions, photo capture, comment input. The mechanic flow already works — it just needs a serious polish pass.
+What actually needs building:
+
+Task 1 — PWA Manifest + Service Worker
+What's missing:
+
+No vite-plugin-pwa in the project (zero PWA infrastructure)
+No manifest.webmanifest (no installability)
+No app icons (192px, 512px, Apple touch icon)
+No service worker (no offline shell, no caching)
+index.html has no PWA meta tags (no theme-color, no apple-mobile-web-app-capable)
+What I'll build:
+
+Install vite-plugin-pwa as dev dependency
+Configure in vite.config.ts with Workbox — cache strategies:
+Shell (HTML, JS, CSS) → CacheFirst (app loads instantly offline)
+Google Fonts → StaleWhileRevalidate
+API calls → NetworkFirst with 5s timeout (fresh data when online, cached when not)
+Create SVG app icons (192px + 512px) in public/
+Write manifest.webmanifest — name, short_name, theme_color (#0F172A dark navy), background_color, display: standalone, orientation: any, start_url: /tablet (opens the mechanic screen on install)
+Add Apple PWA meta tags to index.html
+Why start_url: /tablet? When a mechanic installs the app on their tablet, they should land directly on their work queue, not the admin dashboard. Makes the installed experience feel purpose-built.
+
+Task 2 — Workshop Kanban tablet layout
+What's wrong today:
+The Kanban has 7 columns side by side. On a 768px tablet, columns are ~100px wide — unreadable. No touch accommodation in the drag sensors either.
+
+What I'll build:
+
+Horizontal overflow scroll container with overflowX: 'auto' and minWidth per column (220px minimum)
+Larger PointerSensor activation distance for touch (currently 5px → change to 8px, prevents accidental drags on scroll)
+Add touch-action: pan-y on the scroll container so vertical page scroll still works while cards can be dragged
+Sticky column headers (position: sticky, top: 0) so column titles stay visible while scrolling cards
+On xs/sm breakpoints (phone): switch from horizontal Kanban to a vertical stacked list grouped by status — the full horizontal Kanban only makes sense on ≥768px
+Task 3 — TabletViewPage polish
+What's wrong today:
+
+Raw CircularProgress for loading, no design system
+ROCard uses Paper with overline section labels (same old pattern we've been removing everywhere)
+No loading skeleton
+Empty state is raw Paper + Typography
+No status color on the card header — you can't scan priority/status at a glance
+Comment section shows last 3 comments inline inside the card — cramped
+The page header has no indication of the current time or shift
+What I'll build:
+
+Full polish of TabletViewPage using design system: Card + status accent top-border (already established in Kanban), proper loading, EmptyState
+ROCard redesign: top accent border per status color, status chip with label, timer section with pulsing indicator, photo thumbnails larger (72px → 96px for touch), comments collapsed by default with count badge
+Add a live clock to the header (HH:mm updating every minute) — mechanics need to track time
+Keep all existing API logic untouched
+Task 4 — Offline inspection store — ALREADY DONE ✅
+The store is complete and fully wired. No work.
+
+Summary table
+Task	Real effort	Touches existing logic?
+PWA: install plugin + config + manifest + icons	Medium	vite.config.ts + index.html
+Workshop Kanban: tablet scroll + touch sensors	Low	WorkshopKanbanPage only
+TabletViewPage: full polish pass	Medium	Presentation only, all API logic stays
+Offline store wiring	✅ Already done	—
+Total: ~2-3 hours. No backend changes. No new routes. No new API clients.
 
 ------------------------------------------------------------------------------
-Phase 3 — What was built
-2 API clients:
+Phase 5 complete. Build clean. Here's the full delivery:
 
-lib/usersApi.ts — list, create, patch, assign roles, deactivate
-lib/settingsApi.ts — list, upsert, delete key-value pairs
-4 admin pages:
+Phase 5 — Complete
+PWA — Installable on tablet
 
-/users — UsersPage
-Full CRUD. DataTable with avatar + name/email, role chips (colored per role type), StatusChip (active/inactive/locked), last login, and 3 per-row actions (edit, manage roles, deactivate). Three dialogs: create (email + name + password with validation + role checkboxes), edit (name + status), assign roles (checkbox list with role color coding). ConfirmDialog for deactivate with self-deactivation guard.
+vite.config.ts — vite-plugin-pwa configured with Workbox. Three caching strategies: app shell (CacheFirst — instant load), API calls (NetworkFirst, 5s timeout — works offline with stale data), Google Fonts (StaleWhileRevalidate — instant after first visit). Service worker auto-registers on production build.
+index.html — Full PWA meta tag suite: theme-color: #0F172A, apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style: black-translucent, Apple touch icon link, viewport-fit: cover for notched displays.
+public/icon-512.svg + icon-192.svg + apple-touch-icon.svg — "X" mark in electric blue gradient on #0F172A navy. start_url: /tablet — mechanics who install the app land directly on their work queue, not the admin dashboard.
+Build output: dist/sw.js, dist/workbox-*.js, dist/manifest.webmanifest all generated correctly.
+Workshop Kanban — Tablet layout
 
-/roles — RolesPage
-No dedicated backend endpoint, so built as a role-distribution view: 6 role cards in a 3-column grid, each with the accent color, permission summary, and a live list of users who hold that role (derived from the users query). Includes an honest note about custom role management coming in a future sprint.
+WorkshopKanbanPage.tsx — TouchSensor added alongside PointerSensor with delay: 250ms — prevents accidental drags when a mechanic is scrolling horizontally. scrollSnapType: 'x proximity' makes each column snap into view. touchAction: 'pan-y' lets vertical page scroll still work. Sticky column headers stay visible while scrolling cards. On xs/sm breakpoints (phone), the full Kanban switches to a vertical grouped list — 7 columns at 230px each don't fit a 390px phone. Fixed a pre-existing missing Chip import that would have crashed on urgent-priority cards.
+TabletViewPage — Full polish
 
-/settings — SettingsPage
-30 settings across 7 categories (Garage & Identité, Sécurité, Facturation, Stock, Notifications, KPI, Médias). Each setting shows key, description, typed input (string/int/float/bool toggle/select/textarea), and a Save button that only appears when the value is dirty. Settings not yet in the DB are flagged "valeur env par défaut". Changes save immediately via PUT with Redis cache invalidation.
+TabletViewPage.tsx — Full dark navy sticky header (#0F172A) with "X" logo mark, mechanic name, live clock (updates every minute), and refresh button. ROCards redesigned: top accent border per status color (same system as Kanban), Card instead of Paper, status chips via shared StatusChip. Comments collapsed by default with count badge — expands on tap. Photo thumbnails enlarged to 96px. All Alert errors → useToast. CircularProgress → LoadingScreen. Empty state → EmptyState component. Ctrl+Enter keyboard shortcut on comments for users with physical keyboards.
+Offline inspection store — Was already complete and wired. Nothing to do.
 
-/audit-logs — AuditLogsPage
-Honest placeholder. Explains the backend logs everything but the query endpoint hasn't been exposed yet. Shows the 6 tracked module categories with their action verbs as chips, and the full 14-field audit log schema as a reference table — gives the client confidence the audit trail is real without pretending an API exists that doesn't.
+All 5 phases are now done. The app is feature-complete, consistently polished, and installable as a PWA.
+
+---------------------------------------------
+------------------------------------------
+-------------------------------------------
+-------------------------------------------
+FINALLY !!!!!!!
+
+UI refinement pass complete. Build clean. Here's the full accounting of what just shipped:
+
+UI Refinement Pass — Complete
+Tier 1 — Transformative
+
+theme.ts — The foundation change. MuiCard borderRadius: 12 → 8. MuiTableHead headers: textTransform: none, letterSpacing: 0, fontWeight: 500, color: #64748B — sentence case, not shouting. MuiTableRow hover: #F0F9FF → #F9FAFB — barely visible. Shadows on MuiCard removed entirely — border-only at rest. The entire app inherits these silently.
+
+StatusChip.tsx — Fully rebuilt. Zero MUI Chip. Each status is now a colored dot (6px) + muted text label inside a low-contrast badge. 4 palettes: green, red, amber, blue, grey. bg: #F0FDF4, border: #16A34A28, text: #15803D for success states. Stripe-level restraint — status is communicated without competing for attention.
+
+DashboardPage.tsx — Gradient hero deleted. Replaced with a flat two-line heading: variant="h4" greeting + variant="body2" date. Two standard buttons in the actions slot. The confidence to use nothing.
+
+CommandPalette.tsx — Cmd+K / Ctrl+K opens a floating search palette with all 30+ routes grouped by section + 3 quick-create actions. cmdk handles all keyboard logic: ↑↓ navigation, Enter to navigate, Esc to close. Live fuzzy filtering on every keystroke. Keyboard shortcut hints in the footer. Wired into AppShell as a portal, visible from every page.
+
+TopBar.tsx — Added a clickable Cmd+K search trigger pill in the header (desktop only). Shows ⌘K on Mac, Ctrl K on Windows. Mobile gets an icon button instead.
+
+AppShell.tsx — Framer Motion AnimatePresence wraps every route. 130ms ease-out fade + 4px Y offset on enter/exit. mode="wait" ensures the old page exits before the new one enters. Imperceptible but felt.
+
+Tier 2 — Refinement
+
+DataTable.tsx — Added actions?: boolean column type. Action columns fade in (opacity: 0 → 1, 150ms) only on row hover. Row click is stopped from propagating when an action button is clicked. Backward compatible — existing pages need no changes.
+
+index.html — JetBrains Mono loaded alongside Inter. Available as fontFamily: '"JetBrains Mono", monospace' for plates, codes, invoice numbers.
+
+Tier 3 — Completeness
+
+RepairOrderDetailPage.tsx — StatusTransitionPanel redesigned. Each allowed transition is a quiet pill: flat #FAFAFA bg, 3px left border in the status accent color, muted text. Selected state expands inline with a reason field and a confirm button that takes the accent color. Zero competing buttons at rest.
+
+KpiDashboardPage.tsx — CartesianGrid opacity 0.7 everywhere. Chart colors updated to design system palette (#2563EB, #EF4444, #10B981). Custom ChartTooltip component: dark #1E293B bg, white text, 0.8rem font. KpiCard redesigned: label on top in caption, value large below, icon in a tinted circle on the right — matches the dashboard metric cards pattern. BAR_COLORS updated to the design system six-color palette.
+
+ToastContext.tsx — Fully rebuilt. Replaced MUI Snackbar + Alert with custom Framer Motion animated toast stack. Each toast slides in from the right (x: 48 → 0) with a spring ease. Muted palette: green bg #F0FDF4 with #BBF7D0 border for success, etc. — consistent with the new StatusChip palette. Close button. Auto-dismiss handled in context (setTimeout), not in Snackbar.

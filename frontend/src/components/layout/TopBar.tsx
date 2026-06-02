@@ -7,6 +7,7 @@ import {
   Box,
   Divider,
   IconButton,
+  InputBase,
   ListItemIcon,
   Menu,
   MenuItem,
@@ -16,6 +17,7 @@ import {
 } from '@mui/material'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded'
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
@@ -41,9 +43,10 @@ function getPageTitle(pathname: string): string {
 interface TopBarProps {
   onMenuClick: () => void
   sidebarOpen: boolean
+  onSearchClick: () => void
 }
 
-export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
+export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -65,6 +68,9 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
     navigate('/login', { replace: true })
   }
 
+  // Detect Mac for the shortcut hint
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+
   return (
     <AppBar
       position="sticky"
@@ -81,28 +87,17 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
         <IconButton
           onClick={onMenuClick}
           size="small"
-          sx={{
-            display: { xs: 'flex', md: 'none' },
-            color: 'text.secondary',
-            mr: 0.5,
-          }}
+          sx={{ display: { xs: 'flex', md: 'none' }, color: 'text.secondary', mr: 0.5 }}
         >
           <MenuRoundedIcon />
         </IconButton>
 
         {/* Desktop sidebar toggle */}
-        <Tooltip
-          title={sidebarOpen ? 'Réduire' : 'Développer'}
-          placement="bottom"
-        >
+        <Tooltip title={sidebarOpen ? 'Réduire' : 'Développer'} placement="bottom">
           <IconButton
             onClick={onMenuClick}
             size="small"
-            sx={{
-              display: { xs: 'none', md: 'flex' },
-              color: 'text.secondary',
-              mr: 0.5,
-            }}
+            sx={{ display: { xs: 'none', md: 'flex' }, color: 'text.secondary', mr: 0.5 }}
           >
             {sidebarOpen ? <MenuOpenRoundedIcon /> : <MenuRoundedIcon />}
           </IconButton>
@@ -114,10 +109,97 @@ export function TopBar({ onMenuClick, sidebarOpen }: TopBarProps) {
           fontWeight={600}
           fontSize="1rem"
           letterSpacing="-0.01em"
-          sx={{ flex: 1, color: 'text.primary' }}
+          sx={{ color: 'text.primary', display: { xs: 'none', sm: 'block' } }}
         >
           {pageTitle}
         </Typography>
+
+        {/* Cmd+K search trigger — desktop only */}
+        <Box
+          onClick={onSearchClick}
+          sx={{
+            display: { xs: 'none', md: 'flex' },
+            alignItems: 'center',
+            gap: 1,
+            ml: 2,
+            px: 1.5,
+            py: 0.625,
+            borderRadius: 1.5,
+            border: '1px solid #E2E8F0',
+            bgcolor: '#F8FAFC',
+            cursor: 'pointer',
+            minWidth: 200,
+            transition: 'border-color 0.15s, background-color 0.15s',
+            '&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' },
+          }}
+        >
+          <SearchRoundedIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+          <InputBase
+            placeholder="Rechercher…"
+            readOnly
+            onClick={onSearchClick}
+            sx={{
+              flex: 1,
+              pointerEvents: 'none',
+              '& input': {
+                p: 0,
+                fontSize: '0.8125rem',
+                color: '#94A3B8',
+                cursor: 'pointer',
+              },
+            }}
+          />
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.375,
+              flexShrink: 0,
+            }}
+          >
+            <Box
+              component="kbd"
+              sx={{
+                px: 0.5, py: 0.25,
+                bgcolor: 'white',
+                border: '1px solid #E2E8F0',
+                borderRadius: '4px',
+                fontSize: '0.6875rem',
+                fontFamily: 'inherit',
+                color: '#94A3B8',
+                lineHeight: 1.4,
+              }}
+            >
+              {isMac ? '⌘' : 'Ctrl'}
+            </Box>
+            <Box
+              component="kbd"
+              sx={{
+                px: 0.5, py: 0.25,
+                bgcolor: 'white',
+                border: '1px solid #E2E8F0',
+                borderRadius: '4px',
+                fontSize: '0.6875rem',
+                fontFamily: 'inherit',
+                color: '#94A3B8',
+                lineHeight: 1.4,
+              }}
+            >
+              K
+            </Box>
+          </Box>
+        </Box>
+
+        {/* Mobile search icon */}
+        <IconButton
+          size="small"
+          onClick={onSearchClick}
+          sx={{ display: { xs: 'flex', md: 'none' }, color: 'text.secondary', ml: 'auto' }}
+        >
+          <SearchRoundedIcon sx={{ fontSize: 20 }} />
+        </IconButton>
+
+        <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
 
         {/* Tablet view shortcut */}
         <Tooltip title="Vue mécanicien (tablette)" placement="bottom">

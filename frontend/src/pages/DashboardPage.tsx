@@ -6,7 +6,6 @@ import {
   Card,
   CardActionArea,
   CardContent,
-  Chip,
   Divider,
   Grid,
   Skeleton,
@@ -24,7 +23,6 @@ import FindInPageRoundedIcon from '@mui/icons-material/FindInPageRounded'
 import InventoryRoundedIcon from '@mui/icons-material/InventoryRounded'
 import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
-import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import { kpiApi } from '../lib/kpiApi'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMinor } from '../components/ui/CurrencyDisplay'
@@ -258,126 +256,46 @@ export function DashboardPage() {
 
   return (
     <Box>
-      {/* ── Hero / greeting ─────────────────────────────────────────────────── */}
-      <Box
-        sx={{
-          borderRadius: 3,
-          background: 'linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 60%, #2563EB 100%)',
-          p: { xs: 3, md: 4 },
-          mb: 3,
-          position: 'relative',
-          overflow: 'hidden',
-        }}
+      {/* ── Flat typographic hero — no gradient, typography does the work ─── */}
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        gap={2}
+        mb={3}
       >
-        {/* Decorative circles */}
-        <Box
-          sx={{
-            position: 'absolute',
-            right: -60,
-            top: -60,
-            width: 280,
-            height: 280,
-            borderRadius: '50%',
-            bgcolor: 'rgba(255,255,255,0.05)',
-            pointerEvents: 'none',
-          }}
-        />
-        <Box
-          sx={{
-            position: 'absolute',
-            right: 60,
-            bottom: -80,
-            width: 200,
-            height: 200,
-            borderRadius: '50%',
-            bgcolor: 'rgba(255,255,255,0.04)',
-            pointerEvents: 'none',
-          }}
-        />
+        <Box>
+          <Typography
+            variant="h4"
+            fontWeight={700}
+            letterSpacing="-0.02em"
+            color="text.primary"
+            mb={0.375}
+          >
+            {greeting()}, {firstName}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {todayLabel()}
+          </Typography>
+        </Box>
 
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', sm: 'center' }}
-          gap={2}
-          position="relative"
-        >
-          <Box>
-            <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
-              <Box
-                sx={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: '12px',
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <DirectionsCarRoundedIcon sx={{ color: '#fff', fontSize: 22 }} />
-              </Box>
-              <Chip
-                label="Xpert ERP"
-                size="small"
-                sx={{
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  color: '#fff',
-                  fontWeight: 600,
-                  fontSize: '0.75rem',
-                  borderRadius: '6px',
-                }}
-              />
-            </Stack>
-            <Typography
-              variant="h4"
-              fontWeight={700}
-              color="#fff"
-              letterSpacing="-0.02em"
-              mb={0.5}
-            >
-              {greeting()}, {firstName} 👋
-            </Typography>
-            <Typography sx={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.875rem' }}>
-              {todayLabel()}
-            </Typography>
-          </Box>
-
-          <Stack direction="row" spacing={1.5}>
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              onClick={() => navigate('/repair-orders/new')}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.18)',
-                color: '#fff',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                fontWeight: 600,
-                background: 'none',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.28)' },
-              }}
-            >
-              Nouvel OT
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              onClick={() => navigate('/customers/new')}
-              sx={{
-                bgcolor: 'rgba(255,255,255,0.12)',
-                color: '#fff',
-                border: '1px solid rgba(255,255,255,0.2)',
-                fontWeight: 600,
-                background: 'none',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.22)' },
-              }}
-            >
-              Nouveau client
-            </Button>
-          </Stack>
+        <Stack direction="row" spacing={1.25} flexShrink={0}>
+          <Button
+            variant="outlined"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => navigate('/repair-orders/new')}
+          >
+            Nouvel OT
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => navigate('/customers/new')}
+          >
+            Nouveau client
+          </Button>
         </Stack>
-      </Box>
+      </Stack>
 
       {/* ── KPI metrics row ──────────────────────────────────────────────────── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>

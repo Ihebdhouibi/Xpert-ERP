@@ -101,8 +101,8 @@ export const navSections: NavSection[] = [
     label: 'Finance',
     items: [
       {
-        label: 'Paiements',
-        path: '/payments',
+        label: 'Avances & Paiements',
+        path: '/advance-payments',
         icon: PaymentsRoundedIcon,
         permission: 'payment.read',
       },

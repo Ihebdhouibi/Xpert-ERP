@@ -25,8 +25,11 @@ import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPa
 import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 import { VehiclesPage } from './pages/vehicles/VehiclesPage'
 import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage'
+import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
 import { QuotationsPage } from './pages/quotations/QuotationsPage'
+import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
+import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
 import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
 import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
@@ -101,11 +104,14 @@ export const router = createBrowserRouter([
 
       // Vehicles
       { path: 'vehicles', element: <VehiclesPage /> },
+      { path: 'vehicles/new', element: <VehicleCreatePage /> },
       { path: 'vehicles/:id', element: <VehicleDetailPage /> },
 
       // Billing — quotations & invoices
       { path: 'quotations', element: <QuotationsPage /> },
+      { path: 'quotations/:publicId', element: <QuotationDetailPage /> },
       { path: 'invoices', element: <InvoicesPage /> },
+      { path: 'invoices/:publicId', element: <InvoiceDetailPage /> },
 
       // Finance utilities
       { path: 'advance-payments', element: <AdvancePaymentsPage /> },
