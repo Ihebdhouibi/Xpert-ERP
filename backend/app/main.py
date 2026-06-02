@@ -45,12 +45,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         alembic_cfg = AlembicConfig(str(backend_dir / "alembic.ini"))
         # Resolve script_location relative to the backend dir, not CWD
         alembic_cfg.set_main_option("script_location", str(backend_dir / "migrations"))
-        # Use sync URL (psycopg2) for Alembic
-        sync_url = settings.database_url.replace(
-            "postgresql+asyncpg://", "postgresql+psycopg2://", 1
-        )
-        alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
-        command.upgrade(alembic_cfg, "head")
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        # Run via run_sync so we reuse the existing event loop (no nested asyncio.run)
+        from app.core.database import engine as _db_engine
+        from alembic import command as _alembic_command
+
+        def _run_upgrade(sync_conn) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            _alembic_command.upgrade(alembic_cfg, "head")
+
+        async with _db_engine.begin() as _conn:
+            await _conn.run_sync(_run_upgrade)
         logger.info("migrations_applied")
     except Exception as exc:
         logger.error("migrations_failed", error=str(exc))
