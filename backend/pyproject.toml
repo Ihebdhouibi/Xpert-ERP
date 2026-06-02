@@ -8,7 +8,8 @@ version = "0.1.0"
 requires-python = "==3.11.*"
 dependencies = [
     # Web framework
-    "fastapi==0.115.12",
+    "fastapi==0.136.3",
+    "starlette==1.2.0",
     "uvicorn[standard]==0.34.3",
     "gunicorn==23.0.0",
     # Database
@@ -20,8 +21,8 @@ dependencies = [
     "pydantic-settings==2.9.1",
     # Security
     "argon2-cffi==23.1.0",
-    "python-jose[cryptography]==3.3.0",
-    "cryptography==44.0.3",
+    "PyJWT==2.13.0",
+    "cryptography==46.0.7",
     # Redis
     "redis[hiredis]==5.2.1",
     # HTTP client
@@ -36,9 +37,9 @@ dependencies = [
     # Excel
     "openpyxl==3.1.5",
     # PDF
-    "weasyprint==65.1",
+    "weasyprint==68.0",
     # Form parsing (multipart)
-    "python-multipart==0.0.20",
+    "python-multipart==0.0.27",
     # Image processing (EXIF stripping, server-side re-encode)
     "Pillow==11.2.1",
     # Scheduler

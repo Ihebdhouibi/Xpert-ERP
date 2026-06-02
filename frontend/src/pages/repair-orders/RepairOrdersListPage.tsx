@@ -4,24 +4,13 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import {
   Box,
   Button,
-  Chip,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -29,38 +18,147 @@ import {
   type ROStatus,
   type RepairOrderSummary,
 } from '../../lib/repairOrderApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { DataTable, type Column } from '../../components/ui/DataTable'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
-const STATUS_COLORS: Record<ROStatus, 'default' | 'info' | 'warning' | 'success' | 'error' | 'primary'> = {
-  created: 'default',
-  diagnosis: 'info',
-  in_repair: 'primary',
-  finished: 'warning',
-  delivered: 'success',
-  paused_parts: 'error',
-  paused_approval: 'error',
+const PRIORITY_COLOR: Record<string, string> = {
+  low: '#64748B',
+  normal: '#2563EB',
+  high: '#F59E0B',
+  urgent: '#EF4444',
 }
 
-function StatusChip({ status }: { status: ROStatus }) {
-  return (
-    <Chip
-      size="small"
-      color={STATUS_COLORS[status]}
-      label={STATUS_LABELS[status]}
-    />
-  )
+const PRIORITY_LABEL: Record<string, string> = {
+  low: 'Basse',
+  normal: 'Normale',
+  high: 'Haute',
+  urgent: 'Urgente',
 }
 
-function formatMoney(minor: number | null, currency: string | null): string {
-  if (minor === null) return '-'
-  if (!currency) return `${minor}`
-  return (minor / 100).toLocaleString('fr-FR', { style: 'currency', currency })
-}
+const columns: Column<RepairOrderSummary>[] = [
+  {
+    id: 'description',
+    label: 'Description',
+    render: row => (
+      <Stack direction="row" alignItems="center" spacing={1.5}>
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            borderRadius: '9px',
+            bgcolor: '#EFF6FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <BuildRoundedIcon sx={{ color: '#2563EB', fontSize: 16 }} />
+        </Box>
+        <Box>
+          <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: 320 }}>
+            {row.description || '—'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+            #{String(row.id).slice(-8).toUpperCase()}
+          </Typography>
+        </Box>
+      </Stack>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Statut',
+    width: 160,
+    render: row => <StatusChip status={row.status} label={STATUS_LABELS[row.status]} />,
+  },
+  {
+    id: 'priority',
+    label: 'Priorité',
+    width: 110,
+    sortable: true,
+    render: row => row.priority ? (
+      <Typography
+        variant="caption"
+        fontWeight={700}
+        sx={{ color: PRIORITY_COLOR[row.priority] ?? 'text.secondary' }}
+      >
+        {PRIORITY_LABEL[row.priority] ?? row.priority}
+      </Typography>
+    ) : (
+      <Typography variant="caption" color="text.disabled">—</Typography>
+    ),
+  },
+  {
+    id: 'estimated',
+    label: 'Estimé',
+    align: 'right',
+    width: 120,
+    sortable: true,
+    render: row => (
+      <Typography variant="body2" color="text.secondary">
+        {row.estimated_cost_minor != null
+          ? formatMinor(row.estimated_cost_minor, row.estimated_cost_currency ?? 'EUR')
+          : '—'}
+      </Typography>
+    ),
+  },
+  {
+    id: 'actual',
+    label: 'Réel',
+    align: 'right',
+    width: 120,
+    render: row => (
+      <Typography variant="body2" fontWeight={row.actual_cost_minor != null ? 600 : 400} color="text.primary">
+        {row.actual_cost_minor != null
+          ? formatMinor(row.actual_cost_minor, row.estimated_cost_currency ?? 'EUR')
+          : '—'}
+      </Typography>
+    ),
+  },
+  {
+    id: 'date',
+    label: 'Créé le',
+    width: 110,
+    sortable: true,
+    render: row => (
+      <Typography variant="caption" color="text.secondary">
+        {new Date(row.created_at).toLocaleDateString('fr-FR')}
+      </Typography>
+    ),
+  },
+]
+
+const STATUS_FILTER_OPTIONS: Array<{ value: ROStatus | ''; label: string }> = [
+  { value: '', label: 'Tous' },
+  { value: 'created', label: 'Créé' },
+  { value: 'diagnosis', label: 'Diagnostic' },
+  { value: 'in_repair', label: 'En réparation' },
+  { value: 'paused_parts', label: 'Attente pièces' },
+  { value: 'paused_approval', label: 'Attente accord' },
+  { value: 'finished', label: 'Terminé' },
+  { value: 'delivered', label: 'Livré' },
+]
 
 export function RepairOrdersListPage() {
   const navigate = useNavigate()
   const [statusFilter, setStatusFilter] = useState<ROStatus | ''>('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
+  const [sortBy, setSortBy] = useState<string>('date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  const handleSort = (col: string) => {
+    if (col === sortBy) {
+      setSortOrder(o => o === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(col)
+      setSortOrder('asc')
+    }
+    setPage(0)
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['repair-orders', { statusFilter, page, pageSize }],
@@ -73,133 +171,91 @@ export function RepairOrdersListPage() {
     placeholderData: keepPreviousData,
   })
 
+  const sortedRows = [...(data?.items ?? [])].sort((a, b) => {
+    const dir = sortOrder === 'asc' ? 1 : -1
+    if (sortBy === 'date') return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    if (sortBy === 'estimated') return dir * ((a.estimated_cost_minor ?? 0) - (b.estimated_cost_minor ?? 0))
+    if (sortBy === 'actual') return dir * ((a.actual_cost_minor ?? 0) - (b.actual_cost_minor ?? 0))
+    if (sortBy === 'priority') {
+      const PRIO: Record<string, number> = { urgent: 4, high: 3, normal: 2, low: 1 }
+      return dir * ((PRIO[a.priority ?? 'normal'] ?? 2) - (PRIO[b.priority ?? 'normal'] ?? 2))
+    }
+    return 0
+  })
+
   return (
-    <Box p={4}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
-        <Typography variant="h4" fontWeight={700}>
-          Ordres de réparation
-        </Typography>
-        <PermissionGate permission="repair_order.create">
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            component={RouterLink}
-            to="/repair-orders/new"
-          >
-            Nouvel ordre
-          </Button>
-        </PermissionGate>
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Ordres de réparation"
+        subtitle={data ? `${data.total} ordre${data.total !== 1 ? 's' : ''}` : 'Gestion des réparations'}
+        actions={
+          <PermissionGate permission="repair_order.create">
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              component={RouterLink}
+              to="/repair-orders/new"
+            >
+              Nouvel ordre
+            </Button>
+          </PermissionGate>
+        }
+      />
 
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Statut</InputLabel>
-          <Select
-            value={statusFilter}
-            label="Statut"
-            onChange={(e) => {
-              setStatusFilter(e.target.value as ROStatus | '')
-              setPage(0)
-            }}
-          >
-            <MenuItem value="">Tous les statuts</MenuItem>
-            {(Object.keys(STATUS_LABELS) as ROStatus[]).map((s) => (
-              <MenuItem key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Paper>
+      <Box mb={2} sx={{ overflowX: 'auto' }}>
+        <ToggleButtonGroup
+          value={statusFilter}
+          exclusive
+          onChange={(_, v) => { if (v !== null || statusFilter !== '') { setStatusFilter(v ?? ''); setPage(0) } }}
+          size="small"
+          sx={{ flexWrap: 'nowrap' }}
+        >
+          {STATUS_FILTER_OPTIONS.map(opt => (
+            <ToggleButton
+              key={opt.value}
+              value={opt.value}
+              sx={{
+                px: 2,
+                py: 0.75,
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                textTransform: 'none',
+                whiteSpace: 'nowrap',
+                border: '1px solid #E2E8F0 !important',
+                borderRadius: '8px !important',
+                mr: 0.75,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'primary.dark' },
+                },
+              }}
+            >
+              {opt.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Description</TableCell>
-              <TableCell>Statut</TableCell>
-              <TableCell>Priorité</TableCell>
-              <TableCell>Coût estimé</TableCell>
-              <TableCell>Coût réel</TableCell>
-              <TableCell>Date</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {isLoading && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <CircularProgress size={24} />
-                </TableCell>
-              </TableRow>
-            )}
-            {isError && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <Typography color="error">
-                    Impossible de charger les ordres de réparation.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {data?.items.length === 0 && !isLoading && (
-              <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <Typography color="text.secondary">
-                    Aucun ordre de réparation.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {data?.items.map((ro: RepairOrderSummary) => (
-              <TableRow
-                key={ro.id}
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/repair-orders/${ro.id}`)}
-              >
-                <TableCell>
-                  <Typography fontWeight={500} noWrap sx={{ maxWidth: 300 }}>
-                    {ro.description}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <StatusChip status={ro.status} />
-                </TableCell>
-                <TableCell>{ro.priority ?? '-'}</TableCell>
-                <TableCell>
-                  {formatMoney(ro.estimated_cost_minor, ro.estimated_cost_currency)}
-                </TableCell>
-                <TableCell>
-                  {formatMoney(ro.actual_cost_minor, ro.estimated_cost_currency)}
-                </TableCell>
-                <TableCell>
-                  {new Date(ro.created_at).toLocaleDateString('fr-FR')}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {data && (
-          <TablePagination
-            component="div"
-            count={data.total}
-            page={page}
-            onPageChange={(_, newPage) => setPage(newPage)}
-            rowsPerPage={pageSize}
-            rowsPerPageOptions={[10, 20, 50]}
-            onRowsPerPageChange={(e) => {
-              setPageSize(parseInt(e.target.value, 10))
-              setPage(0)
-            }}
-            labelRowsPerPage="Lignes par page :"
-          />
-        )}
-      </TableContainer>
+      <DataTable
+        columns={columns}
+        rows={sortedRows}
+        getRowKey={r => String(r.id)}
+        onRowClick={r => navigate(`/repair-orders/${r.id}`)}
+        loading={isLoading}
+        error={isError}
+        errorMessage="Impossible de charger les ordres de réparation."
+        total={data?.total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={size => { setPageSize(size); setPage(0) }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
+        emptyTitle="Aucun ordre de réparation"
+        emptyDescription={statusFilter ? 'Aucun ordre avec ce statut.' : 'Créez votre premier ordre de réparation.'}
+      />
     </Box>
   )
 }

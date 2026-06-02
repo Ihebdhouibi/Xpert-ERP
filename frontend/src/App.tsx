@@ -3,6 +3,8 @@ import { RouterProvider } from 'react-router-dom'
 import { CssBaseline, ThemeProvider } from '@mui/material'
 import { IntlProvider } from 'react-intl'
 import { AuthProvider } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { router } from './router'
 import { theme } from './theme'
 
@@ -20,11 +22,15 @@ export default function App() {
     <IntlProvider locale="fr" defaultLocale="fr">
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <RouterProvider router={router} />
-          </AuthProvider>
-        </QueryClientProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <ToastProvider>
+                <RouterProvider router={router} />
+              </ToastProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </ErrorBoundary>
       </ThemeProvider>
     </IntlProvider>
   )

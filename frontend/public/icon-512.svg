@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Navy rounded square background -->
+  <rect width="512" height="512" rx="96" ry="96" fill="#0F172A"/>
+
+  <!-- Subtle inner highlight for depth -->
+  <rect x="1" y="1" width="510" height="255" rx="95" ry="95" fill="url(#topShine)" opacity="0.06"/>
+
+  <defs>
+    <linearGradient id="topShine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="white"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="xGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+
+  <!-- X mark — two thick strokes crossing at center -->
+  <!-- Stroke width 52, linecap round, electric blue gradient -->
+  <line x1="152" y1="152" x2="360" y2="360" stroke="url(#xGrad)" stroke-width="52" stroke-linecap="round"/>
+  <line x1="360" y1="152" x2="152" y2="360" stroke="url(#xGrad)" stroke-width="52" stroke-linecap="round"/>
+</svg>

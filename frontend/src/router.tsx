@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './pages/auth/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CustomersListPage } from './pages/customers/CustomersListPage'
@@ -22,86 +23,34 @@ import { InspectionsListPage } from './pages/inspections/InspectionsListPage'
 import { InspectionExecutionPage } from './pages/inspections/InspectionExecutionPage'
 import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPage'
 import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
-import { DocumentsPage } from './pages/documents/DocumentsPage'
-import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
+import { VehiclesPage } from './pages/vehicles/VehiclesPage'
+import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage'
+import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
+import { QuotationsPage } from './pages/quotations/QuotationsPage'
+import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
+import { InvoicesPage } from './pages/invoices/InvoicesPage'
+import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
+import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
+import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
+import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
+import { AccountingExportPage } from './pages/accounting/AccountingExportPage'
+import { UsersPage } from './pages/admin/UsersPage'
+import { RolesPage } from './pages/admin/RolesPage'
+import { SettingsPage } from './pages/admin/SettingsPage'
+import { AuditLogsPage } from './pages/admin/AuditLogsPage'
 
 export const router = createBrowserRouter([
+  // Public routes — no shell
   {
     path: '/login',
     element: <LoginPage />,
   },
   {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <DashboardPage />
-      </ProtectedRoute>
-    ),
+    path: '/approve/:token',
+    element: <InspectionApprovalPage />,
   },
-  {
-    path: '/customers',
-    element: (
-      <ProtectedRoute>
-        <CustomersListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/new',
-    element: (
-      <ProtectedRoute>
-        <CustomerCreatePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/:publicId',
-    element: (
-      <ProtectedRoute>
-        <CustomerDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/customers/:publicId/edit',
-    element: (
-      <ProtectedRoute>
-        <CustomerEditPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders',
-    element: (
-      <ProtectedRoute>
-        <RepairOrdersListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders/new',
-    element: (
-      <ProtectedRoute>
-        <RepairOrderCreatePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/repair-orders/:publicId',
-    element: (
-      <ProtectedRoute>
-        <RepairOrderDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/workshop',
-    element: (
-      <ProtectedRoute>
-        <WorkshopKanbanPage />
-      </ProtectedRoute>
-    ),
-  },
+
+  // Tablet view — full screen, no shell
   {
     path: '/tablet',
     element: (
@@ -110,108 +59,77 @@ export const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+
+  // Main app — protected layout with AppShell
   {
-    path: '/parts',
+    path: '/',
     element: (
       <ProtectedRoute>
-        <PartsPage />
+        <AppShell />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: '/stock',
-    element: (
-      <ProtectedRoute>
-        <StockPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/suppliers',
-    element: (
-      <ProtectedRoute>
-        <SupplierPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/purchase-orders',
-    element: (
-      <ProtectedRoute>
-        <PurchaseOrderPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/supplier-invoices',
-    element: (
-      <ProtectedRoute>
-        <SupplierInvoicePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/notification-templates',
-    element: (
-      <ProtectedRoute>
-        <TemplatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspection-templates',
-    element: (
-      <ProtectedRoute>
-        <InspectionTemplatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspections',
-    element: (
-      <ProtectedRoute>
-        <InspectionsListPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/inspections/:publicId',
-    element: (
-      <ProtectedRoute>
-        <InspectionExecutionPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/kpi',
-    element: (
-      <ProtectedRoute>
-        <KpiDashboardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/documents',
-    element: (
-      <ProtectedRoute>
-        <DocumentsPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/ocr/:extractionId',
-    element: (
-      <ProtectedRoute>
-        <OcrReviewPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: '/approve/:token',
-    element: <InspectionApprovalPage />,
-  },
-  {
-    path: '*',
-    element: <Navigate to="/" replace />,
+    children: [
+      { index: true, element: <DashboardPage /> },
+
+      // Customers
+      { path: 'customers', element: <CustomersListPage /> },
+      { path: 'customers/new', element: <CustomerCreatePage /> },
+      { path: 'customers/:publicId', element: <CustomerDetailPage /> },
+      { path: 'customers/:publicId/edit', element: <CustomerEditPage /> },
+
+      // Repair orders
+      { path: 'repair-orders', element: <RepairOrdersListPage /> },
+      { path: 'repair-orders/new', element: <RepairOrderCreatePage /> },
+      { path: 'repair-orders/:publicId', element: <RepairOrderDetailPage /> },
+
+      // Workshop
+      { path: 'workshop', element: <WorkshopKanbanPage /> },
+
+      // Inspections
+      { path: 'inspections', element: <InspectionsListPage /> },
+      { path: 'inspections/:publicId', element: <InspectionExecutionPage /> },
+      { path: 'inspection-templates', element: <InspectionTemplatesPage /> },
+
+      // Parts & stock
+      { path: 'parts', element: <PartsPage /> },
+      { path: 'stock', element: <StockPage /> },
+
+      // Purchasing
+      { path: 'suppliers', element: <SupplierPage /> },
+      { path: 'purchase-orders', element: <PurchaseOrderPage /> },
+      { path: 'supplier-invoices', element: <SupplierInvoicePage /> },
+
+      // Notifications
+      { path: 'notification-templates', element: <TemplatesPage /> },
+
+      // Vehicles
+      { path: 'vehicles', element: <VehiclesPage /> },
+      { path: 'vehicles/new', element: <VehicleCreatePage /> },
+      { path: 'vehicles/:id', element: <VehicleDetailPage /> },
+
+      // Billing — quotations & invoices
+      { path: 'quotations', element: <QuotationsPage /> },
+      { path: 'quotations/:publicId', element: <QuotationDetailPage /> },
+      { path: 'invoices', element: <InvoicesPage /> },
+      { path: 'invoices/:publicId', element: <InvoiceDetailPage /> },
+
+      // Finance utilities
+      { path: 'advance-payments', element: <AdvancePaymentsPage /> },
+      { path: 'cash-sessions', element: <CashSessionsPage /> },
+      { path: 'credit-notes', element: <CreditNotesPage /> },
+      { path: 'accounting-export', element: <AccountingExportPage /> },
+
+      // Analytics
+      { path: 'kpi', element: <KpiDashboardPage /> },
+
+      // Administration
+      { path: 'users', element: <UsersPage /> },
+      { path: 'roles', element: <RolesPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: 'audit-logs', element: <AuditLogsPage /> },
+
+      // Catch-all
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
   },
 ])

@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     auth_max_failed_attempts: int = 5
     auth_lockout_minutes: int = 15
     password_reset_expiry_minutes: int = 30
-    password_min_length: int = 8
+    password_min_length: int = 12
 
     # -------------------------------------------------------------------------
     # CORS
@@ -188,6 +188,11 @@ class Settings(BaseSettings):
     cfg_sms_api_url: str = ""    # base URL for the provider's send endpoint
     cfg_sms_api_key: str = ""    # API key / bearer token
     cfg_sms_from: str = ""       # sender ID or E.164 number
+
+    # -------------------------------------------------------------------------
+    # Runtime settings cache
+    # -------------------------------------------------------------------------
+    cfg_config_cache_ttl_seconds: int = 60  # how long DB-backed CFG_* values are cached in Redis
 
 
 @lru_cache(maxsize=1)

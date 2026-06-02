@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -15,7 +16,6 @@ import {
   MenuItem,
   Paper,
   Select,
-  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -51,6 +51,10 @@ import {
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
 import { apiClient } from '../../lib/apiClient'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { DataTable } from '../../components/ui/DataTable'
+import { useToast } from '../../contexts/ToastContext'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -528,16 +532,16 @@ interface SIDetailProps {
 }
 
 function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
+  const { success: toastSuccess, error: toastError } = useToast()
   const [acting, setActing] = useState(false)
   const [overrideOpen, setOverrideOpen] = useState(false)
   const [accountingOpen, setAccountingOpen] = useState(false)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false, message: '', severity: 'success',
-  })
   const [uploading, setUploading] = useState(false)
 
-  const showSnack = (message: string, severity: 'success' | 'error' = 'success') =>
-    setSnackbar({ open: true, message, severity })
+  const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
+    if (severity === 'success') toastSuccess(message)
+    else toastError(message)
+  }
 
   const doAction = async (fn: () => Promise<SupplierInvoice>, successMsg: string) => {
     setActing(true)
@@ -607,7 +611,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
         <Typography variant="h5" fontWeight={700}>
           Facture fournisseur — {si.number}
         </Typography>
-        <Chip label={STATUS_LABELS[si.status]} color={STATUS_COLORS[si.status]} />
+        <StatusChip status={si.status} label={STATUS_LABELS[si.status]} />
         {si.has_discrepancy && (
           <Chip
             label={si.override_reason ? 'Écart accepté' : 'Écarts détectés'}
@@ -822,16 +826,6 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
         onClose={() => setAccountingOpen(false)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   )
 }
@@ -841,45 +835,37 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
 // ---------------------------------------------------------------------------
 
 export function SupplierInvoicePage() {
-  const [invoices, setInvoices] = useState<SupplierInvoice[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const pageSize = 20
+  const { success: toastSuccess } = useToast()
+  const qc = useQueryClient()
+  const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<SIStatus | ''>('')
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<SupplierInvoice | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false, message: '', severity: 'success',
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['supplier-invoices', statusFilter, search, page],
+    queryFn: () => supplierInvoiceApi.list({
+      status: statusFilter || undefined,
+      search: search || undefined,
+      page: page + 1,
+      page_size: 20,
+    }),
+    placeholderData: (prev) => prev,
   })
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await supplierInvoiceApi.list({
-        status: statusFilter || undefined,
-        search: search || undefined,
-        page,
-        page_size: pageSize,
-      })
-      setInvoices(r.items)
-      setTotal(r.total)
-    } catch {
-      // silently keep stale data
-    } finally {
-      setLoading(false)
-    }
-  }, [statusFilter, search, page])
-
-  useEffect(() => { load() }, [load])
+  const invoices = data?.items ?? []
+  const total = data?.total ?? 0
 
   if (selected) {
     return (
-      <Box p={4}>
+      <Box>
         <SIDetail
           si={selected}
-          onBack={() => { setSelected(null); load() }}
+          onBack={() => {
+            setSelected(null)
+            qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+          }}
           onUpdated={(si) => setSelected(si)}
         />
       </Box>
@@ -887,20 +873,23 @@ export function SupplierInvoicePage() {
   }
 
   return (
-    <Box p={4}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" fontWeight={700}>Factures fournisseurs</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          Nouvelle facture
-        </Button>
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Factures fournisseurs"
+        subtitle={`${total} facture${total !== 1 ? 's' : ''} · Rapprochement 3 voies`}
+        actions={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            Nouvelle facture
+          </Button>
+        }
+      />
 
       <Stack direction="row" spacing={2} mb={2}>
         <TextField
           label="Rechercher (N° facture)"
           size="small"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          onChange={(e) => { setSearch(e.target.value); setPage(0) }}
           sx={{ minWidth: 220 }}
         />
         <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -908,7 +897,7 @@ export function SupplierInvoicePage() {
           <Select
             value={statusFilter}
             label="Statut"
-            onChange={(e) => { setStatusFilter(e.target.value as SIStatus | ''); setPage(1) }}
+            onChange={(e) => { setStatusFilter(e.target.value as SIStatus | ''); setPage(0) }}
           >
             <MenuItem value="">Tous</MenuItem>
             {(Object.keys(STATUS_LABELS) as SIStatus[]).map((s) => (
@@ -918,82 +907,84 @@ export function SupplierInvoicePage() {
         </FormControl>
       </Stack>
 
-      {loading ? (
-        <Box display="flex" justifyContent="center" mt={6}>
-          <CircularProgress />
-        </Box>
-      ) : invoices.length === 0 ? (
-        <Typography color="text.secondary" mt={4} textAlign="center">
-          Aucune facture fournisseur trouvée.
-        </Typography>
-      ) : (
-        <Paper>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>N° Facture</TableCell>
-                <TableCell>Statut</TableCell>
-                <TableCell>Écarts</TableCell>
-                <TableCell align="right">Total HT</TableCell>
-                <TableCell align="right">Total TTC</TableCell>
-                <TableCell>Réception</TableCell>
-                <TableCell>Échéance</TableCell>
-                <TableCell />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {invoices.map((si) => (
-                <TableRow key={si.id} hover sx={{ cursor: 'pointer' }} onClick={() => setSelected(si)}>
-                  <TableCell>
-                    <Typography fontWeight={600}>{si.number}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip size="small" label={STATUS_LABELS[si.status]} color={STATUS_COLORS[si.status]} />
-                  </TableCell>
-                  <TableCell>
-                    {si.status === 'draft' ? (
-                      <Typography variant="caption" color="text.secondary">—</Typography>
-                    ) : si.has_discrepancy ? (
-                      <Chip
-                        size="small"
-                        label={si.override_reason ? 'Accepté' : 'Écarts'}
-                        color={si.override_reason ? 'warning' : 'error'}
-                        icon={si.override_reason ? <GavelIcon /> : <ErrorIcon />}
-                      />
-                    ) : (
-                      <Chip size="small" label="OK" color="success" icon={<CheckCircleIcon />} />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">{fmt(si.total_ht)}</TableCell>
-                  <TableCell align="right">{fmt(si.total_ttc)}</TableCell>
-                  <TableCell>
-                    {si.received_at
-                      ? new Date(si.received_at).toLocaleDateString('fr-FR')
-                      : '—'}
-                  </TableCell>
-                  <TableCell>{si.due_date ?? '—'}</TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Voir le détail">
-                      <IconButton size="small" onClick={() => setSelected(si)}>
-                        <CheckCircleIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {total > pageSize && (
-            <Stack direction="row" justifyContent="center" spacing={1} p={2}>
-              <Button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Préc.</Button>
-              <Typography alignSelf="center">
-                Page {page} / {Math.ceil(total / pageSize)}
+      <DataTable
+        columns={[
+          {
+            id: 'number',
+            label: 'N° Facture',
+            render: si => (
+              <Typography variant="body2" fontWeight={700} fontFamily="monospace">{si.number}</Typography>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Statut',
+            width: 130,
+            render: si => <StatusChip status={si.status} label={STATUS_LABELS[si.status]} />,
+          },
+          {
+            id: 'discrepancy',
+            label: 'Rapprochement',
+            width: 140,
+            render: si => si.status === 'draft' ? (
+              <Typography variant="caption" color="text.secondary">—</Typography>
+            ) : si.has_discrepancy ? (
+              <Chip
+                size="small"
+                label={si.override_reason ? 'Accepté' : 'Écarts'}
+                color={si.override_reason ? 'warning' : 'error'}
+                icon={si.override_reason ? <GavelIcon /> : <ErrorIcon />}
+              />
+            ) : (
+              <Chip size="small" label="OK" color="success" icon={<CheckCircleIcon />} />
+            ),
+          },
+          {
+            id: 'total_ht',
+            label: 'Total HT',
+            align: 'right',
+            width: 120,
+            render: si => <Typography variant="body2">{fmt(si.total_ht)}</Typography>,
+          },
+          {
+            id: 'total_ttc',
+            label: 'Total TTC',
+            align: 'right',
+            width: 120,
+            render: si => <Typography variant="body2" fontWeight={600}>{fmt(si.total_ttc)}</Typography>,
+          },
+          {
+            id: 'received_at',
+            label: 'Réception',
+            width: 110,
+            render: si => (
+              <Typography variant="caption" color="text.secondary">
+                {si.received_at ? new Date(si.received_at).toLocaleDateString('fr-FR') : '—'}
               </Typography>
-              <Button disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)}>Suiv.</Button>
-            </Stack>
-          )}
-        </Paper>
-      )}
+            ),
+          },
+          {
+            id: 'due_date',
+            label: 'Échéance',
+            width: 110,
+            render: si => (
+              <Typography variant="caption" color="text.secondary">{si.due_date ?? '—'}</Typography>
+            ),
+          },
+        ]}
+        rows={invoices}
+        getRowKey={si => si.id}
+        onRowClick={si => setSelected(si)}
+        loading={isLoading}
+        error={isError}
+        errorMessage="Impossible de charger les factures fournisseurs."
+        total={total}
+        page={page}
+        pageSize={20}
+        onPageChange={setPage}
+        emptyTitle="Aucune facture fournisseur"
+        emptyDescription="Créez votre première facture fournisseur pour commencer."
+      />
 
       <CreateDialog
         open={createOpen}
@@ -1001,18 +992,9 @@ export function SupplierInvoicePage() {
         onCreated={(si) => {
           setCreateOpen(false)
           setSelected(si)
-          setSnackbar({ open: true, message: 'Facture créée', severity: 'success' })
+          toastSuccess('Facture fournisseur créée.')
         }}
       />
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-      </Snackbar>
     </Box>
   )
 }

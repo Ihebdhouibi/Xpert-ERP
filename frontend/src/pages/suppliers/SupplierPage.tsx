@@ -42,6 +42,10 @@ import {
   type SupplierStatus,
 } from '../../lib/supplierApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { useToast } from '../../contexts/ToastContext'
 
 const STATUS_COLOR: Record<SupplierStatus, 'success' | 'default'> = {
   active: 'success',
@@ -533,6 +537,7 @@ function PriceComparisonTab() {
 
 export function SupplierPage() {
   const qc = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [tab, setTab] = useState(0)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<SupplierStatus | ''>('')
@@ -557,9 +562,11 @@ export function SupplierPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => supplierApi.delete(id),
     onSuccess: () => {
+      success('Fournisseur supprimé.')
       qc.invalidateQueries({ queryKey: ['suppliers'] })
       setDeleteConfirm(null)
     },
+    onError: () => toastError('Impossible de supprimer ce fournisseur.'),
   })
 
   function openCreate() {
@@ -575,17 +582,18 @@ export function SupplierPage() {
   const items = data?.items ?? []
 
   return (
-    <Box p={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h5" fontWeight={700}>
-          Fournisseurs
-        </Typography>
-        <PermissionGate permission="supplier.write">
-          <Button startIcon={<AddIcon />} variant="contained" onClick={openCreate}>
-            Nouveau fournisseur
-          </Button>
-        </PermissionGate>
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Fournisseurs"
+        subtitle={data ? `${data.total} fournisseur${data.total !== 1 ? 's' : ''}` : 'Gestion des fournisseurs'}
+        actions={
+          <PermissionGate permission="supplier.write">
+            <Button startIcon={<AddIcon />} variant="contained" onClick={openCreate}>
+              Nouveau fournisseur
+            </Button>
+          </PermissionGate>
+        }
+      />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab label="Liste" />
@@ -683,11 +691,7 @@ export function SupplierPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={STATUS_LABELS[s.status]}
-                          size="small"
-                          color={STATUS_COLOR[s.status]}
-                        />
+                        <StatusChip status={s.status} label={STATUS_LABELS[s.status]} />
                       </TableCell>
                       <TableCell align="right">
                         <Tooltip title="Historique des prix">
@@ -722,11 +726,6 @@ export function SupplierPage() {
             </Table>
           )}
 
-          {data && (
-            <Typography variant="caption" color="text.secondary" mt={1}>
-              {data.total} fournisseur{data.total !== 1 ? 's' : ''}
-            </Typography>
-          )}
         </>
       )}
 
@@ -747,26 +746,16 @@ export function SupplierPage() {
         onClose={() => setPriceDialogSupplier(null)}
       />
 
-      {/* Delete confirmation */}
-      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Supprimer le fournisseur</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Supprimer <strong>{deleteConfirm?.name}</strong> ? Cette action est réversible.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Annuler</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={() => deleteMutation.mutate(deleteConfirm!.id)}
-            disabled={deleteMutation.isPending}
-          >
-            Supprimer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Supprimer le fournisseur"
+        message={`Supprimer "${deleteConfirm?.name}" ? Les bons de commande associés seront conservés.`}
+        confirmLabel="Supprimer"
+        dangerous
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteConfirm && deleteMutation.mutate(deleteConfirm.id)}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </Box>
   )
 }

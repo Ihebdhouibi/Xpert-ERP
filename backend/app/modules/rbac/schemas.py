@@ -10,7 +10,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 class UserCreateRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=255)
-    password: str = Field(min_length=8, max_length=256)
+    password: str = Field(min_length=12, max_length=256)
     role_codes: list[str] = Field(default_factory=list)
 
     @field_validator("password")

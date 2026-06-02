@@ -7,6 +7,7 @@ import {
   DragOverlay,
   DragStartEvent,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -20,11 +21,15 @@ import {
   Chip,
   CircularProgress,
   Paper,
-  Snackbar,
   Stack,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
-import RefreshIcon from '@mui/icons-material/Refresh'
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { useToast } from '../../contexts/ToastContext'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -44,21 +49,18 @@ const STATUS_ORDER: ROStatus[] = [
   'delivered',
 ]
 
-const STATUS_COLORS: Record<ROStatus, string> = {
-  created: '#e3f2fd',
-  diagnosis: '#e8f5e9',
-  in_repair: '#fff3e0',
-  finished: '#f3e5f5',
-  delivered: '#e0f2f1',
-  paused_parts: '#fce4ec',
-  paused_approval: '#fce4ec',
+const STATUS_ACCENT: Record<ROStatus, string> = {
+  created: '#94A3B8',
+  diagnosis: '#3B82F6',
+  in_repair: '#F59E0B',
+  finished: '#10B981',
+  delivered: '#6366F1',
+  paused_parts: '#EF4444',
+  paused_approval: '#F97316',
 }
 
-const PRIORITY_COLORS: Record<string, 'default' | 'warning' | 'error'> = {
-  low: 'default',
-  normal: 'default',
-  high: 'warning',
-  urgent: 'error',
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Basse', normal: 'Normale', high: 'Haute', urgent: 'Urgente',
 }
 
 function KanbanCard({
@@ -74,40 +76,46 @@ function KanbanCard({
 
   return (
     <Paper
-      elevation={isDragging ? 8 : 1}
+      elevation={isDragging ? 8 : 0}
       onClick={() => navigate(`/repair-orders/${ro.id}`)}
       sx={{
         p: 1.5,
         cursor: canDrag ? 'grab' : 'pointer',
         opacity: isDragging ? 0.5 : 1,
         userSelect: 'none',
-        '&:hover': { boxShadow: 4 },
+        border: '1px solid #E2E8F0',
         borderLeft: '4px solid',
-        borderColor: ro.priority === 'urgent' ? 'error.main' : ro.priority === 'high' ? 'warning.main' : 'transparent',
+        borderLeftColor: ro.priority === 'urgent'
+          ? 'error.main'
+          : ro.priority === 'high'
+          ? 'warning.main'
+          : 'transparent',
+        transition: 'box-shadow 0.15s',
+        '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.10)' },
       }}
     >
       <Stack spacing={0.5}>
-        <Typography variant="caption" color="text.secondary" noWrap>
+        <Typography variant="caption" color="text.disabled" fontFamily="monospace">
           #{ro.id.slice(-8).toUpperCase()}
         </Typography>
         <Typography variant="body2" fontWeight={600} noWrap title={ro.description}>
           {ro.description}
         </Typography>
-        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
           {ro.priority && ro.priority !== 'normal' && (
             <Chip
               size="small"
-              label={ro.priority}
-              color={PRIORITY_COLORS[ro.priority] ?? 'default'}
-              sx={{ height: 18, fontSize: 10 }}
+              label={PRIORITY_LABELS[ro.priority]}
+              color={ro.priority === 'urgent' ? 'error' : 'warning'}
+              sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }}
             />
           )}
           {ro.vehicle_id && (
             <Chip
               size="small"
-              label={`Véh #${ro.vehicle_id}`}
+              label={`Véh. #${ro.vehicle_id}`}
               variant="outlined"
-              sx={{ height: 18, fontSize: 10 }}
+              sx={{ height: 18, fontSize: '0.65rem' }}
             />
           )}
         </Stack>
@@ -120,13 +128,7 @@ function KanbanCard({
   )
 }
 
-function DraggableCard({
-  ro,
-  canDrag,
-}: {
-  ro: RepairOrderSummary
-  canDrag: boolean
-}) {
+function DraggableCard({ ro, canDrag }: { ro: RepairOrderSummary; canDrag: boolean }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ro.id,
     disabled: !canDrag,
@@ -154,49 +156,73 @@ function KanbanColumn({
   return (
     <Box
       sx={{
+        // Scroll-snap alignment — each column snaps into view on tablet
+        scrollSnapAlign: 'start',
         minWidth: 230,
-        maxWidth: 260,
-        flex: '0 0 230px',
+        width: 250,
+        flex: '0 0 250px',
         display: 'flex',
         flexDirection: 'column',
         gap: 1,
       }}
     >
+      {/* Sticky column header */}
       <Box
         sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
           px: 1.5,
-          py: 1,
-          borderRadius: 1,
-          bgcolor: STATUS_COLORS[status],
-          borderBottom: '2px solid',
-          borderColor: 'divider',
+          py: 1.25,
+          borderRadius: '8px 8px 0 0',
+          bgcolor: 'background.paper',
+          borderTop: '3px solid',
+          borderColor: STATUS_ACCENT[status],
+          borderBottom: '1px solid #E2E8F0',
         }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Typography variant="subtitle2" fontWeight={700}>
+          <Typography variant="subtitle2" fontWeight={700} fontSize="0.8125rem">
             {STATUS_LABELS[status]}
           </Typography>
-          <Chip label={cards.length} size="small" sx={{ height: 20, fontSize: 11 }} />
+          <Box
+            sx={{
+              minWidth: 22, height: 22, borderRadius: '6px',
+              bgcolor: cards.length > 0 ? STATUS_ACCENT[status] : '#E2E8F0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Typography
+              variant="caption"
+              fontWeight={700}
+              fontSize="0.6875rem"
+              color={cards.length > 0 ? 'white' : 'text.disabled'}
+            >
+              {cards.length}
+            </Typography>
+          </Box>
         </Stack>
       </Box>
 
+      {/* Drop zone */}
       <Box
         ref={setNodeRef}
         sx={{
           flex: 1,
           minHeight: 120,
-          p: 0.5,
-          borderRadius: 1,
-          bgcolor: isOver ? 'action.hover' : 'transparent',
-          border: isOver ? '2px dashed' : '2px solid transparent',
-          borderColor: isOver ? 'primary.main' : 'transparent',
+          p: 0.75,
+          borderRadius: '0 0 8px 8px',
+          bgcolor: isOver ? '#EFF6FF' : '#F8FAFC',
+          border: '1px solid',
+          borderTop: 0,
+          borderColor: isOver ? 'primary.light' : '#E2E8F0',
           display: 'flex',
           flexDirection: 'column',
-          gap: 1,
+          gap: 0.75,
           transition: 'background-color 0.15s, border-color 0.15s',
         }}
       >
-        {cards.map((ro) => (
+        {cards.map(ro => (
           <DraggableCard key={ro.id} ro={ro} canDrag={canDrop} />
         ))}
       </Box>
@@ -204,17 +230,71 @@ function KanbanColumn({
   )
 }
 
+// Mobile fallback: grouped vertical list when screen is too narrow for columns
+function MobileGroupedList({ grouped }: { grouped: Record<ROStatus, RepairOrderSummary[]> }) {
+  const navigate = useNavigate()
+  return (
+    <Stack spacing={2}>
+      {STATUS_ORDER.filter(s => grouped[s].length > 0).map(s => (
+        <Box key={s}>
+          <Stack direction="row" alignItems="center" spacing={1.5} mb={1}>
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: STATUS_ACCENT[s], flexShrink: 0 }} />
+            <Typography variant="subtitle2" fontWeight={700}>{STATUS_LABELS[s]}</Typography>
+            <Box
+              sx={{
+                minWidth: 20, height: 20, borderRadius: '5px',
+                bgcolor: STATUS_ACCENT[s], display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Typography variant="caption" fontWeight={700} fontSize="0.625rem" color="white">
+                {grouped[s].length}
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack spacing={1}>
+            {grouped[s].map(ro => (
+              <Paper
+                key={ro.id}
+                elevation={0}
+                onClick={() => navigate(`/repair-orders/${ro.id}`)}
+                sx={{
+                  p: 1.5, cursor: 'pointer',
+                  border: '1px solid #E2E8F0',
+                  borderLeft: `4px solid ${STATUS_ACCENT[s]}`,
+                  '&:hover': { bgcolor: '#F9FAFB' },
+                }}
+              >
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Box flex={1} minWidth={0} mr={1}>
+                    <Typography variant="body2" fontWeight={600} noWrap>{ro.description}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Client #{ro.customer_id} · #{ro.id.slice(-6).toUpperCase()}
+                    </Typography>
+                  </Box>
+                  <StatusChip status={ro.status} label={STATUS_LABELS[s]} />
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        </Box>
+      ))}
+    </Stack>
+  )
+}
+
 export function WorkshopKanbanPage() {
   const queryClient = useQueryClient()
+  const { success: toastSuccess, error: toastError } = useToast()
   const [activeRo, setActiveRo] = useState<RepairOrderSummary | null>(null)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  })
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
+  // PointerSensor for mouse + stylus, TouchSensor for finger (delay prevents
+  // accidental drags when scrolling the horizontal column list on tablet)
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   )
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -228,11 +308,11 @@ export function WorkshopKanbanPage() {
       repairOrderApi.transition(publicId, { new_status: newStatus }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban-repair-orders'] })
-      setSnackbar({ open: true, message: 'Statut mis à jour', severity: 'success' })
+      toastSuccess('Statut mis à jour.')
     },
     onError: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban-repair-orders'] })
-      setSnackbar({ open: true, message: 'Transition invalide ou accès refusé', severity: 'error' })
+      toastError('Transition invalide ou accès refusé.')
     },
   })
 
@@ -252,37 +332,70 @@ export function WorkshopKanbanPage() {
       if (newStatus === ro.status) return
       const allowed = ALLOWED_TRANSITIONS[ro.status]
       if (!allowed.includes(newStatus)) {
-        setSnackbar({ open: true, message: `Transition ${STATUS_LABELS[ro.status]} → ${STATUS_LABELS[newStatus]} non permise`, severity: 'error' })
+        toastError(`Transition ${STATUS_LABELS[ro.status]} → ${STATUS_LABELS[newStatus]} non permise.`)
         return
       }
       transitionMutation.mutate({ publicId: ro.id, newStatus })
     },
-    [transitionMutation]
+    [transitionMutation, toastError]
   )
 
   const groupedByStatus: Record<ROStatus, RepairOrderSummary[]> = STATUS_ORDER.reduce(
     (acc, s) => ({ ...acc, [s]: [] }),
     {} as Record<ROStatus, RepairOrderSummary[]>
   )
-  data?.items.forEach((ro) => {
+  data?.items.forEach(ro => {
     if (groupedByStatus[ro.status]) groupedByStatus[ro.status].push(ro)
   })
 
+  const totalActive = data
+    ? data.items.filter(r => r.status !== 'delivered').length
+    : 0
+
+  const kanbanColumns = (canDrop: boolean) => (
+    <Box
+      sx={{
+        display: 'flex',
+        gap: 2,
+        overflowX: 'auto',
+        pb: 2,
+        flex: 1,
+        // Scroll-snap: each column snaps cleanly into view on tablet
+        scrollSnapType: 'x proximity',
+        // Allow vertical page scroll while enabling horizontal swipe
+        touchAction: 'pan-y',
+        // Custom scrollbar styling
+        '&::-webkit-scrollbar': { height: 6 },
+        '&::-webkit-scrollbar-track': { bgcolor: '#F1F5F9', borderRadius: 999 },
+        '&::-webkit-scrollbar-thumb': { bgcolor: '#CBD5E1', borderRadius: 999 },
+      }}
+    >
+      {STATUS_ORDER.map(s => (
+        <KanbanColumn key={s} status={s} cards={groupedByStatus[s]} canDrop={canDrop} />
+      ))}
+    </Box>
+  )
+
   return (
-    <Box p={3} sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Tableau kanban atelier
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Glissez les cartes pour changer le statut &mdash; actualisation auto toutes les 30 s
-          </Typography>
-        </Box>
-        <Button startIcon={<RefreshIcon />} onClick={() => refetch()} size="small">
-          Actualiser
-        </Button>
-      </Stack>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
+      <PageHeader
+        title="Atelier — Kanban"
+        subtitle={
+          data
+            ? `${totalActive} ordre${totalActive !== 1 ? 's' : ''} actif${totalActive !== 1 ? 's' : ''} · actualisation auto 30 s`
+            : 'Glissez les cartes pour changer le statut'
+        }
+        actions={
+          <Button
+            startIcon={<RefreshRoundedIcon />}
+            onClick={() => refetch()}
+            size="small"
+            variant="outlined"
+          >
+            Actualiser
+          </Button>
+        }
+      />
 
       {isLoading && (
         <Box display="flex" justifyContent="center" pt={8}>
@@ -294,53 +407,32 @@ export function WorkshopKanbanPage() {
       )}
 
       {data && (
-        <PermissionGate
-          permission="repair_order.transition"
-          fallback={
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 2,
-                overflowX: 'auto',
-                pb: 2,
-                flex: 1,
-              }}
+        <>
+          {/* Mobile (xs/sm): vertical grouped list — Kanban columns are unreadable at <600px */}
+          {isMobile ? (
+            <Box sx={{ flex: 1, overflowY: 'auto', pb: 2 }}>
+              <MobileGroupedList grouped={groupedByStatus} />
+            </Box>
+          ) : (
+            <PermissionGate
+              permission="repair_order.transition"
+              fallback={kanbanColumns(false)}
             >
-              {STATUS_ORDER.map((s) => (
-                <KanbanColumn key={s} status={s} cards={groupedByStatus[s]} canDrop={false} />
-              ))}
-            </Box>
-          }
-        >
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 2, flex: 1 }}>
-              {STATUS_ORDER.map((s) => (
-                <KanbanColumn key={s} status={s} cards={groupedByStatus[s]} canDrop />
-              ))}
-            </Box>
-
-            <DragOverlay>
-              {activeRo && <KanbanCard ro={activeRo} canDrag />}
-            </DragOverlay>
-          </DndContext>
-        </PermissionGate>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                {kanbanColumns(true)}
+                <DragOverlay>
+                  {activeRo && <KanbanCard ro={activeRo} canDrag />}
+                </DragOverlay>
+              </DndContext>
+            </PermissionGate>
+          )}
+        </>
       )}
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   )
 }

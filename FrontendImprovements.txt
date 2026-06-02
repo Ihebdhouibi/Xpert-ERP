@@ -1,0 +1,141 @@
+Frontend State Assessment
+What's genuinely good
+The foundation is stronger than most ERP projects at this stage. You have a real design system — Inter, consistent #2563EB primary, #0F172A sidebar, 8px grid, MUI theme overrides that go deep enough. The component library (DataTable, PageHeader, StatusChip, ConfirmDialog) is being used consistently. The dark sidebar against a light content area is a solid, professional structural choice. React Query for server state is the right call.
+
+Design system maturity: ~7/10. That's a respectable number. But 7/10 is not "ultra-professional, visually comparable to Linear." The gap between 7 and 10 is not more features — it's refinement, coherence, and craft on the details you already have.
+
+Where It Falls Short vs. World-Class
+I'm going to be direct. These are the real gaps:
+
+1. The Dashboard Hero is the #1 visual problem
+A blue gradient banner that takes up ~25% of the screen on every single visit to the most-visited page is decorative, not functional. Linear, Vercel, and Stripe use flat surfaces where typography does all the visual work. A gradient says "we ran out of design ideas and used a gradient to fill space." Your own planning file called this out. It hasn't been fixed.
+
+What Stripe does: white page, font-size: 1.75rem, font-weight: 600, greeting in black. That's it. The confidence to use nothing is what separates senior design from junior design.
+
+2. Status chips are too loud
+Every status is a bright colored chip (#10B981 green, #EF4444 red, etc.). When half the column is colored chips, nothing is highlighted — everything is fighting for attention equally. This violates Visual Hierarchy principle #1.
+
+Linear's approach: a small 8px colored dot + plain text label. Stripe's: tiny rounded badge in very muted colors (bg: #F0FDF4, color: #166534). The information is the same. The noise is drastically lower.
+
+3. Card border-radius at 12px feels like a mobile app
+borderRadius: 12px on cards is fine for a consumer mobile product. For an enterprise daily-use ERP used by mechanics and accountants on a desktop, it reads as soft and unserious. Linear uses 6-8px. Stripe uses 8px. Vercel uses 6-8px. Go to 8px across the board and the product immediately reads as more professional.
+
+4. Shadows vs. borders — no clear decision
+The theme mixes both box shadows and borders. World-class products make a deliberate choice. Stripe and Linear are almost entirely border-based (1px #E5E7EB). Shadows are reserved only for elevated floating surfaces — modals, dropdowns, tooltips. Everything else: 1px border. This creates a flat, clean, paper-like quality. When you use shadows on every card, nothing feels elevated — the hierarchy collapses.
+
+5. Row hover is too colorful
+Table row hover is #F0F9FF — a noticeable blue tint. This is distracting. A world-class table row hover is #F9FAFB — barely visible. The signal should be: "you can interact with this." Not: "look at me."
+
+6. No command palette (Cmd+K)
+This is the single biggest missing UX feature. Linear, Vercel, Notion, Stripe, HubSpot — every modern professional tool has a command palette. It's not a nice-to-have anymore. For a daily-use ERP with 30+ routes and dozens of entities, the ability to type "Factures" and jump there, or type a customer name and navigate to their record, is the difference between a product and a tool. This is one feature that immediately shifts perception from "polished CRUD app" to "serious product."
+
+7. Zero page transitions
+When you navigate between routes, it's an instant flash. Linear and Vercel use a 120-150ms fade-in. That's it. But the perceived quality difference is enormous. The product feels "snappy" with the fade because it masks the React re-render flash. Without it, even fast loads feel jarring.
+
+8. Table headers are still uppercase
+textTransform: 'uppercase', letterSpacing: '0.05em' for table headers is a pattern from 2019 admin dashboards. Modern products (Linear, Notion) use slightly smaller, lighter-weight headers in sentence case. It's a subtle shift but "STATUT" in all-caps with letter spacing reads as shouting. Statut in font-size: 0.75rem, font-weight: 500, color: #64748B reads as professional and calm.
+
+9. Contextual row actions are always visible
+Every row likely shows 2-3 icon buttons at all times. Stripe and Linear show row actions only on hover (opacity 0 → 1, 150ms). Always-visible actions on every row create visual clutter proportional to the number of rows. 20 rows × 3 icons = 60 icons visible at once. Hidden-on-hover: 3 icons visible at once, only when needed.
+
+10. No monospace font for technical data
+License plates, invoice numbers, reference codes, amounts — all in Inter. Plates in particular are screaming for a monospace font (JetBrains Mono or Roboto Mono). The VehiclesPage already notes "plate in monospace + bold" as a design decision but it's likely using fontFamily: 'monospace' (browser default fallback) rather than a loaded monospace font. That looks unpolished.
+
+11. The RepairOrder detail — still the most important page, most risk
+The redesign was done and the two-column sticky layout is correct. But based on what I can see: the status transition panel is likely a row of colored MUI Buttons. World-class: each status is a quiet pill with a subtle border and a colored left accent. The current approach probably looks like a colored button bar. When the most-used screen in the whole system has buttons competing for visual dominance, it fatigues users.
+
+12. KPI dashboard — charts are still decorative
+Recharts with default configuration. The key problems with default Recharts: gridlines are too prominent (lower the opacity to 0.3), chart tooltips look generic, the color palette doesn't match the design system. Charts should answer a question. If you can't read the answer at a glance, the chart failed.
+
+The Three-Level Gap Model
+Level	What it means	Where you are
+Functional	Works, data shows up	✅ Done
+Consistent	Same components, same patterns everywhere	✅ Mostly done
+Crafted	Every micro-interaction, spacing, and color choice is intentional	🔲 Not there yet
+The jump from Consistent to Crafted is purely about going back to what you built and removing the default MUI decisions that weren't made consciously.
+
+Prioritized improvement plan (scan only, not doing this yet)
+Tier 1 — Transformative (highest visible impact):
+
+Command palette (Cmd+K) — cmdk library, ~200 lines, immediate perception shift
+Replace dashboard hero gradient with flat typographic layout
+Convert status chips to dot + muted text pattern
+Page route transitions (Framer Motion AnimatePresence, 4 lines per route)
+Tier 2 — Refinement (craft-level polish):
+5. Border-radius audit — 12px → 8px on cards, dialogs can stay at 12px
+6. Shadow audit — replace card shadows with 1px #E2E8F0 borders
+7. Row hover — #F0F9FF → #F9FAFB
+8. Table headers — remove uppercase + letter-spacing, use sentence case
+9. Row actions — hide until hover
+10. Add JetBrains Mono for plates, invoice numbers, codes
+
+Tier 3 — Completeness:
+11. Chart polish on KPI page — gridline opacity, tooltip design, system color palette
+12. RepairOrderDetail status panel redesign
+13. Toast animation refinement (slide-in from bottom-right)
+14. Dark mode CSS variable foundation (even if not switched on)
+
+The honest summary: the architecture and component strategy are strong. The visual debt is almost entirely in the default choices that were never challenged — MUI's border radius, MUI's uppercase table headers, the gradient on the dashboard that was called out months ago and never removed. The upgrade from "good ERP frontend" to "premium product" is a polish pass, not a rebuild. All of the above Tier 1 and Tier 2 items combined are probably 3-4 days of focused work.
+
+Where do you want to start?
+-----------------------------------------------------
+-------------------------------------------------------------
+what was done is the following
+----------------------------------------------------
+----------------------------------------------
+UI refinement pass complete. Build clean. Here's the full accounting of what just shipped:
+
+UI Refinement Pass — Complete
+Tier 1 — Transformative
+
+theme.ts — The foundation change. MuiCard borderRadius: 12 → 8. MuiTableHead headers: textTransform: none, letterSpacing: 0, fontWeight: 500, color: #64748B — sentence case, not shouting. MuiTableRow hover: #F0F9FF → #F9FAFB — barely visible. Shadows on MuiCard removed entirely — border-only at rest. The entire app inherits these silently.
+
+StatusChip.tsx — Fully rebuilt. Zero MUI Chip. Each status is now a colored dot (6px) + muted text label inside a low-contrast badge. 4 palettes: green, red, amber, blue, grey. bg: #F0FDF4, border: #16A34A28, text: #15803D for success states. Stripe-level restraint — status is communicated without competing for attention.
+
+DashboardPage.tsx — Gradient hero deleted. Replaced with a flat two-line heading: variant="h4" greeting + variant="body2" date. Two standard buttons in the actions slot. The confidence to use nothing.
+
+CommandPalette.tsx — Cmd+K / Ctrl+K opens a floating search palette with all 30+ routes grouped by section + 3 quick-create actions. cmdk handles all keyboard logic: ↑↓ navigation, Enter to navigate, Esc to close. Live fuzzy filtering on every keystroke. Keyboard shortcut hints in the footer. Wired into AppShell as a portal, visible from every page.
+
+TopBar.tsx — Added a clickable Cmd+K search trigger pill in the header (desktop only). Shows ⌘K on Mac, Ctrl K on Windows. Mobile gets an icon button instead.
+
+AppShell.tsx — Framer Motion AnimatePresence wraps every route. 130ms ease-out fade + 4px Y offset on enter/exit. mode="wait" ensures the old page exits before the new one enters. Imperceptible but felt.
+
+Tier 2 — Refinement
+
+DataTable.tsx — Added actions?: boolean column type. Action columns fade in (opacity: 0 → 1, 150ms) only on row hover. Row click is stopped from propagating when an action button is clicked. Backward compatible — existing pages need no changes.
+
+index.html — JetBrains Mono loaded alongside Inter. Available as fontFamily: '"JetBrains Mono", monospace' for plates, codes, invoice numbers.
+
+Tier 3 — Completeness
+
+RepairOrderDetailPage.tsx — StatusTransitionPanel redesigned. Each allowed transition is a quiet pill: flat #FAFAFA bg, 3px left border in the status accent color, muted text. Selected state expands inline with a reason field and a confirm button that takes the accent color. Zero competing buttons at rest.
+
+KpiDashboardPage.tsx — CartesianGrid opacity 0.7 everywhere. Chart colors updated to design system palette (#2563EB, #EF4444, #10B981). Custom ChartTooltip component: dark #1E293B bg, white text, 0.8rem font. KpiCard redesigned: label on top in caption, value large below, icon in a tinted circle on the right — matches the dashboard metric cards pattern. BAR_COLORS updated to the design system six-color palette.
+
+ToastContext.tsx — Fully rebuilt. Replaced MUI Snackbar + Alert with custom Framer Motion animated toast stack. Each toast slides in from the right (x: 48 → 0) with a spring ease. Muted palette: green bg #F0FDF4 with #BBF7D0 border for success, etc. — consistent with the new StatusChip palette. Close button. Auto-dismiss handled in context (setTimeout), not in Snackbar.
+
+
+----------------------------------
+Summary
+
+Thanks! Big day — here's what we shipped end to end:
+
+Phase 2 — 3 missing detail pages: VehicleCreatePage, QuotationDetailPage, InvoiceDetailPage
+
+Phase 4 — Full polish pass on 7 pages: CustomerDetailPage (redesigned), CustomerCreate/EditPage, RepairOrderCreatePage, InspectionTemplatesPage, InspectionExecutionPage, TemplatesPage
+
+Phase 5 — PWA/Mobile — Service worker + Workbox caching, SVG icons, installable on tablet, Workshop Kanban tablet scroll + TouchSensor, TabletViewPage full redesign with dark header + live clock
+
+UI Refinement Pass — The big one:
+
+theme.ts: card radius 12→8, border-based cards, sentence-case table headers, subtle row hover
+StatusChip: dot + muted text, zero MUI Chip noise
+Dashboard: gradient hero removed
+Command palette (Cmd+K): 30+ routes, fuzzy search, quick actions, keyboard hints in TopBar
+Page transitions: Framer Motion 130ms fade on every route
+RepairOrderDetail: quiet pill status transitions with colored left accent
+KPI charts: design system colors, dimmed gridlines, custom dark tooltips
+Toast: Framer Motion slide-in, muted palette
+Plus the 3 bug fixes at the end (missing useEffect imports, broken /payments route).
+
+The app is now genuinely at a different level than where we started. When you're ready to keep going — whether that's the visual polish Tier 3 items, a code review, or something new — just say the word.

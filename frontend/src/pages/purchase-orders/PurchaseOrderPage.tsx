@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -23,7 +24,6 @@ import {
   TextField,
   Tooltip,
   Typography,
-  Paper,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import SendIcon from '@mui/icons-material/Send'
@@ -32,8 +32,6 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ReceiptIcon from '@mui/icons-material/Receipt'
-import { Link as RouterLink } from 'react-router-dom'
-
 import {
   purchaseOrderApi,
   PurchaseOrder,
@@ -47,6 +45,11 @@ import {
 } from '../../lib/purchaseOrderApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { partsApi } from '../../lib/partsApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { DataTable } from '../../components/ui/DataTable'
+import { useToast } from '../../contexts/ToastContext'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -488,12 +491,14 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
     } finally { setActioning(false) }
   }
 
+  const [cancelOpen, setCancelOpen] = useState(false)
+
   const handleCancel = async () => {
-    if (!window.confirm('Confirmer l\'annulation ?')) return
     setActioning(true); setError('')
     try {
       const updated = await purchaseOrderApi.cancel(po.id, po.version)
       onUpdated(updated)
+      setCancelOpen(false)
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Erreur')
     } finally { setActioning(false) }
@@ -503,8 +508,8 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
     <Box>
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
         <IconButton onClick={onBack}><ArrowBackIcon /></IconButton>
-        <Typography variant="h6">{po.doc_number ?? 'BC sans numéro'}</Typography>
-        <Chip label={STATUS_LABELS[po.status]} color={STATUS_COLORS[po.status]} size="small" />
+        <Typography variant="h6" fontWeight={700}>{po.doc_number ?? 'BC sans numéro'}</Typography>
+        <StatusChip status={po.status} label={STATUS_LABELS[po.status]} />
       </Stack>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -526,7 +531,7 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
           </Button>
         )}
         {canCancel && (
-          <Button variant="outlined" color="error" startIcon={<CancelIcon />} onClick={handleCancel} disabled={actioning}>
+          <Button variant="outlined" color="error" startIcon={<CancelIcon />} onClick={() => setCancelOpen(true)} disabled={actioning}>
             Annuler
           </Button>
         )}
@@ -594,6 +599,16 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
         onClose={() => setInvoiceOpen(false)}
         onSaved={(updated) => { onUpdated(updated); setInvoiceOpen(false) }}
       />
+      <ConfirmDialog
+        open={cancelOpen}
+        title="Annuler le bon de commande"
+        message={`Annuler le BC ${po.doc_number ?? po.id} ? Cette action est irréversible.`}
+        confirmLabel="Confirmer l'annulation"
+        dangerous
+        loading={actioning}
+        onConfirm={handleCancel}
+        onCancel={() => setCancelOpen(false)}
+      />
     </Box>
   )
 }
@@ -603,37 +618,30 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
 // ---------------------------------------------------------------------------
 
 export function PurchaseOrderPage() {
-  const [pos, setPos] = useState<PurchaseOrder[]>([])
-  const [total, setTotal] = useState(0)
+  const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<POStatus | ''>('')
-  const [loading, setLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await purchaseOrderApi.list({
-        status: statusFilter || undefined,
-        page,
-        page_size: 20,
-      })
-      setPos(r.items)
-      setTotal(r.total)
-    } finally {
-      setLoading(false)
-    }
-  }, [statusFilter, page])
+  const { data, isLoading } = useQuery({
+    queryKey: ['purchase-orders', statusFilter, page],
+    queryFn: () => purchaseOrderApi.list({ status: statusFilter || undefined, page, page_size: 20 }),
+    placeholderData: (prev) => prev,
+  })
 
-  useEffect(() => { load() }, [load])
+  const pos = data?.items ?? []
+  const total = data?.total ?? 0
 
   if (selectedPO) {
     return (
-      <Box p={4}>
+      <Box>
         <PODetail
           po={selectedPO}
-          onBack={() => { setSelectedPO(null); load() }}
+          onBack={() => {
+            setSelectedPO(null)
+            qc.invalidateQueries({ queryKey: ['purchase-orders'] })
+          }}
           onUpdated={(updated) => setSelectedPO(updated)}
         />
       </Box>
@@ -641,19 +649,16 @@ export function PurchaseOrderPage() {
   }
 
   return (
-    <Box p={4}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>Bons de commande</Typography>
-          <Typography variant="body2" color="text.secondary">{total} bon(s) au total</Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Button component={RouterLink} to="/" variant="text">← Tableau de bord</Button>
+    <Box>
+      <PageHeader
+        title="Bons de commande"
+        subtitle={`${total} bon${total !== 1 ? 's' : ''} au total`}
+        actions={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
             Nouveau BC
           </Button>
-        </Stack>
-      </Stack>
+        }
+      />
 
       <Stack direction="row" spacing={2} mb={2} alignItems="center">
         <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -671,64 +676,79 @@ export function PurchaseOrderPage() {
         </FormControl>
       </Stack>
 
-      {loading ? (
-        <CircularProgress />
-      ) : (
-        <Paper variant="outlined">
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>N° document</TableCell>
-                <TableCell>Statut</TableCell>
-                <TableCell>Fournisseur</TableCell>
-                <TableCell>Livraison prévue</TableCell>
-                <TableCell align="right">Total HT</TableCell>
-                <TableCell>Lignes</TableCell>
-                <TableCell>Match</TableCell>
-                <TableCell />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {pos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                    Aucun bon de commande
-                  </TableCell>
-                </TableRow>
-              )}
-              {pos.map((po) => {
-                const hasMismatch = po.lines.some((l) => l.match_flag !== 'ok')
-                return (
-                  <TableRow key={po.id} hover>
-                    <TableCell>{po.doc_number ?? '—'}</TableCell>
-                    <TableCell>
-                      <Chip label={STATUS_LABELS[po.status]} color={STATUS_COLORS[po.status]} size="small" />
-                    </TableCell>
-                    <TableCell>ID {po.supplier_id}</TableCell>
-                    <TableCell>{po.expected_delivery_date ?? '—'}</TableCell>
-                    <TableCell align="right">{formatMoney(po.total_ht)}</TableCell>
-                    <TableCell>{po.lines.length}</TableCell>
-                    <TableCell>
-                      {hasMismatch ? (
-                        <Chip label="Écart" color="warning" size="small" />
-                      ) : (
-                        <Chip label="OK" color="success" size="small" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip title="Voir détail">
-                        <IconButton size="small" onClick={() => setSelectedPO(po)}>
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </Paper>
-      )}
+      <DataTable
+        columns={[
+          {
+            id: 'doc_number',
+            label: 'N° document',
+            render: po => (
+              <Typography variant="body2" fontWeight={600} fontFamily="monospace">
+                {po.doc_number ?? '—'}
+              </Typography>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Statut',
+            width: 150,
+            render: po => <StatusChip status={po.status} label={STATUS_LABELS[po.status]} />,
+          },
+          {
+            id: 'supplier',
+            label: 'Fournisseur',
+            render: po => (
+              <Typography variant="body2" color="text.secondary">ID {po.supplier_id}</Typography>
+            ),
+          },
+          {
+            id: 'delivery',
+            label: 'Livraison prévue',
+            width: 140,
+            render: po => (
+              <Typography variant="body2" color="text.secondary">
+                {po.expected_delivery_date ?? '—'}
+              </Typography>
+            ),
+          },
+          {
+            id: 'total',
+            label: 'Total HT',
+            align: 'right',
+            width: 120,
+            render: po => (
+              <Typography variant="body2" fontWeight={600}>{formatMoney(po.total_ht)}</Typography>
+            ),
+          },
+          {
+            id: 'lines',
+            label: 'Lignes',
+            width: 70,
+            align: 'right',
+            render: po => <Typography variant="body2">{po.lines.length}</Typography>,
+          },
+          {
+            id: 'match',
+            label: 'Match',
+            width: 90,
+            render: po => {
+              const hasMismatch = po.lines.some(l => l.match_flag !== 'ok')
+              return hasMismatch
+                ? <Chip label="Écart" color="warning" size="small" />
+                : <Chip label="OK" color="success" size="small" />
+            },
+          },
+        ]}
+        rows={pos}
+        getRowKey={po => po.id}
+        onRowClick={po => setSelectedPO(po)}
+        loading={isLoading}
+        total={total}
+        page={page - 1}
+        pageSize={20}
+        onPageChange={p => setPage(p + 1)}
+        emptyTitle="Aucun bon de commande"
+        emptyDescription="Créez votre premier bon de commande."
+      />
 
       <CreateDialog
         open={createOpen}
@@ -738,3 +758,5 @@ export function PurchaseOrderPage() {
     </Box>
   )
 }
+
+

@@ -5,7 +5,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -25,7 +24,6 @@ import {
   Typography,
 } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import AddIcon from '@mui/icons-material/Add'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import DoneAllIcon from '@mui/icons-material/DoneAll'
@@ -38,9 +36,13 @@ import {
   type StockMovementType,
 } from '../../lib/stockApi'
 import { type PartSummary } from '../../lib/partsApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { TableLoadingSkeleton } from '../../components/ui/LoadingScreen'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
 function money(minor: number) {
-  return `${(minor / 100).toFixed(2)} DT`
+  return formatMinor(minor, 'EUR')
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +155,7 @@ function StockLevelsTab() {
   const levels = levelsQ.data ?? []
 
   if (levelsQ.isLoading) {
-    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+    return <Table size="small"><TableHead><TableRow>{['Part ID','En stock','Réservé','Disponible','Coût moyen','Mis à jour','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={6} /></TableBody></Table>
   }
 
   return (
@@ -242,7 +244,7 @@ function MovementsTab() {
   }
 
   if (movQ.isLoading) {
-    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+    return <Table size="small"><TableHead><TableRow>{['Date','Type','Part ID','Qté','Coût unit.','Réf.','Raison'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={6} /></TableBody></Table>
   }
 
   return (
@@ -302,12 +304,6 @@ function MovementsTab() {
 // Alerts tab
 // ---------------------------------------------------------------------------
 
-const STATUS_COLOR: Record<LowStockAlertStatus, 'error' | 'warning' | 'default'> = {
-  open: 'error',
-  acknowledged: 'warning',
-  resolved: 'default',
-}
-
 function AlertsTab() {
   const qc = useQueryClient()
   const alertsQ = useQuery({
@@ -331,7 +327,7 @@ function AlertsTab() {
   const alerts = alertsQ.data ?? []
 
   if (alertsQ.isLoading) {
-    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+    return <Table size="small"><TableHead><TableRow>{['Date','Part ID','Stock','Seuil','Réappro.','Statut','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={4} /></TableBody></Table>
   }
 
   return (
@@ -378,11 +374,7 @@ function AlertsTab() {
                   ) : '—'}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    size="small"
-                    label={ALERT_STATUS_LABELS[a.status]}
-                    color={STATUS_COLOR[a.status]}
-                  />
+                  <StatusChip status={a.status} label={ALERT_STATUS_LABELS[a.status]} />
                 </TableCell>
                 <TableCell align="right">
                   <PermissionGate permission="part.update">
@@ -430,7 +422,7 @@ function ValuationTab() {
   })
 
   if (valQ.isLoading) {
-    return <Box p={4} display="flex" justifyContent="center"><CircularProgress /></Box>
+    return <Table size="small"><TableHead><TableRow>{['Part ID','En stock','Coût moyen','Valeur totale'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={4} rows={5} /></TableBody></Table>
   }
 
   const data = valQ.data
@@ -494,16 +486,14 @@ export function StockPage() {
   const alertCount = (alertsQ.data ?? []).filter((a) => a.status === 'open').length
 
   return (
-    <Box p={2}>
-      <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-        <WarningAmberIcon color="warning" />
-        <Typography variant="h5" fontWeight={700}>
-          Gestion du stock
-        </Typography>
-        {alertCount > 0 && (
-          <Chip size="small" label={`${alertCount} alerte(s)`} color="error" />
-        )}
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Gestion du stock"
+        subtitle="Niveaux, mouvements, alertes et valorisation"
+        actions={alertCount > 0 ? (
+          <StatusChip status="open" label={`${alertCount} alerte${alertCount > 1 ? 's' : ''} ouverte${alertCount > 1 ? 's' : ''}`} />
+        ) : undefined}
+      />
 
       <Paper>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>

@@ -1,0 +1,6 @@
+FROM postgres:15-alpine
+
+ARG MC_VERSION=RELEASE.2024-11-21T17-21-54Z
+RUN wget -qO /usr/local/bin/mc \
+    "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.${MC_VERSION}" \
+    && chmod +x /usr/local/bin/mc

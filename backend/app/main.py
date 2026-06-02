@@ -78,12 +78,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    _is_dev = settings.environment not in ("production", "staging")
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        docs_url="/api/v1/docs",
-        redoc_url="/api/v1/redoc",
-        openapi_url="/api/v1/openapi.json",
+        docs_url="/api/v1/docs" if _is_dev else None,
+        redoc_url="/api/v1/redoc" if _is_dev else None,
+        openapi_url="/api/v1/openapi.json" if _is_dev else None,
         lifespan=lifespan,
     )
 
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     from app.modules.kpi.router import router as kpi_router
     from app.modules.accounting_export.router import router as accounting_export_router
     from app.modules.ocr.router import router as ocr_router
+    from app.modules.config.router import router as config_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -158,6 +160,7 @@ def create_app() -> FastAPI:
     app.include_router(kpi_router, prefix="/api/v1")
     app.include_router(accounting_export_router, prefix="/api/v1")
     app.include_router(ocr_router, prefix="/api/v1")
+    app.include_router(config_router, prefix="/api/v1")
 
     return app
 

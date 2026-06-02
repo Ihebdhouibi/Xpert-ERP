@@ -1069,3 +1069,45 @@
 | `cfg_sms_api_url` | Config field (str, default '') | SMS provider base API URL |
 | `cfg_sms_api_key` | Config field (str, default '') | SMS provider API key or bearer token |
 | `cfg_sms_from` | Config field (str, default '') | SMS sender ID or E.164 number |
+| `cfg_config_cache_ttl_seconds` | Config field (int, default 60) | Redis cache TTL in seconds for DB-backed CFG_* settings |
+
+---
+
+### 10. Runtime Config / GarageSetting (Issue 54)
+
+**Python Model (`backend/app/modules/config/models.py`)**
+
+| Variable Name | Type/Location | Brief Description |
+|---|---|---|
+| `GarageSetting` | SQLAlchemy Model | ORM class mapped to `garage_setting` table |
+| `GarageSetting.id` | Model Column (BigIntPK) | Auto-increment primary key |
+| `GarageSetting.garage_id` | Model Column (BigInteger) | Tenant scoping; `0` = global default |
+| `GarageSetting.key` | Model Column (String 100) | CFG_* key name |
+| `GarageSetting.value` | Model Column (Text) | String value (caller casts to correct type) |
+| `GarageSetting.description` | Model Column (Text, nullable) | Human-readable description |
+| `GarageSetting.updated_at` | Model Column (DateTime TZ) | Last write timestamp |
+| `GarageSetting.updated_by` | Model Column (BigInteger, nullable) | User ID who last updated the setting |
+
+**Pydantic Schemas (`backend/app/modules/config/schemas.py`)**
+
+| Variable Name | Type/Location | Brief Description |
+|---|---|---|
+| `GarageSettingOut` | Pydantic BaseModel | API response for a single setting row |
+| `GarageSettingUpsertRequest` | Pydantic BaseModel | Request body for PUT /settings/{key} |
+| `GarageSettingListResponse` | Pydantic BaseModel | Paginated list of settings |
+
+**SettingsService (`backend/app/modules/config/service.py`)**
+
+| Variable Name | Type/Location | Brief Description |
+|---|---|---|
+| `_CACHE_PREFIX` | Python Constant (str) | Redis key prefix: `"cfg"` |
+| `_GLOBAL_GARAGE_ID` | Python Constant (int) | Sentinel for global default garage: `0` |
+| `SettingsService` | Python Class | DB + Redis backed service for runtime settings |
+| `SettingsService.get_setting` | Method | Get string value; checks Redis → DB → env → default |
+| `SettingsService.get_int` | Method | Typed int getter |
+| `SettingsService.get_bool` | Method | Typed bool getter (`true/1/yes/on` → True) |
+| `SettingsService.get_float` | Method | Typed float getter |
+| `SettingsService.upsert_setting` | Method | Write setting to DB and invalidate Redis cache |
+| `SettingsService.delete_setting` | Method | Remove DB row and invalidate cache |
+| `SettingsService.list_settings` | Method | List all settings for a garage_id |
+| `get_settings_service` | Python function | Convenience factory for FastAPI dependency injection |

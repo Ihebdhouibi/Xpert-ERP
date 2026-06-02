@@ -43,6 +43,7 @@ import {
 } from 'recharts'
 import { kpiApi, TopCustomerEntry, TopSupplierEntry, ExportTable } from '../../lib/kpiApi'
 import { useAuth } from '../../contexts/AuthContext'
+import { PageHeader } from '../../components/ui/PageHeader'
 
 // ---------------------------------------------------------------------------
 // Period helpers
@@ -124,19 +125,58 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, icon, color = 'primary.main' }: KpiCardProps) {
   return (
-    <Card sx={{ minWidth: 180, flex: '1 1 180px' }}>
-      <CardContent>
-        <Stack direction="row" alignItems="center" spacing={1.5} mb={1}>
-          <Box sx={{ color }}>{icon}</Box>
-          <Typography variant="body2" color="text.secondary" flex={1}>
-            {label}
-          </Typography>
-        </Stack>
-        <Typography variant="h5" fontWeight={700} color={color}>
-          {value}
+    <Card sx={{ minWidth: 180, flex: '1 1 180px', borderRadius: 2 }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Typography variant="caption" color="text.secondary" fontWeight={500} display="block" mb={1.5}>
+          {label}
         </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography variant="h5" fontWeight={700} color="text.primary" lineHeight={1}>
+            {value}
+          </Typography>
+          <Box
+            sx={{
+              width: 36, height: 36,
+              borderRadius: '9px',
+              bgcolor: `${color === 'error.main' ? '#FEF2F2' : color === 'success.main' ? '#F0FDF4' : color === 'warning.main' ? '#FFFBEB' : '#EFF6FF'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color,
+            }}
+          >
+            {icon}
+          </Box>
+        </Stack>
       </CardContent>
     </Card>
+  )
+}
+
+// Shared custom tooltip style — consistent with design system
+function ChartTooltip({ active, payload, label, formatter }: {
+  active?: boolean
+  payload?: Array<{ value: number; name?: string }>
+  label?: string
+  formatter?: (v: number) => string
+}) {
+  if (!active || !payload?.length) return null
+  return (
+    <Box
+      sx={{
+        bgcolor: '#1E293B',
+        borderRadius: 1.5,
+        px: 1.5, py: 1,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+      }}
+    >
+      {label && (
+        <Box sx={{ color: '#94A3B8', fontSize: '0.6875rem', mb: 0.375 }}>{label}</Box>
+      )}
+      {payload.map((p, i) => (
+        <Box key={i} sx={{ color: 'white', fontSize: '0.8125rem', fontWeight: 600 }}>
+          {formatter ? formatter(p.value) : p.value}
+        </Box>
+      ))}
+    </Box>
   )
 }
 
@@ -265,56 +305,51 @@ export function KpiDashboardPage() {
   }))
   const mechanicData = analytics?.mechanic_productivity ?? []
 
-  const BAR_COLORS = ['#1976d2', '#388e3c', '#f57c00', '#7b1fa2', '#d32f2f', '#0288d1']
+  // Design system palette — consistent with the rest of the app
+  const BAR_COLORS = ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4']
 
   return (
-    <Box p={4}>
-      {/* Header + period selector */}
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
-        <Box>
-          <Typography variant="h4" fontWeight={700}>
-            Tableau de bord analytique
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Actualisé toutes les {Math.round(live.refresh_interval_seconds / 60)} min —{' '}
-            {new Date(live.computed_at).toLocaleTimeString('fr-FR')}
-          </Typography>
-        </Box>
-
-        <Stack direction="column" gap={1} alignItems="flex-end">
-          <ButtonGroup size="small" variant="outlined">
-            {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Period[]).map(p => (
-              <Button
-                key={p}
-                variant={period === p ? 'contained' : 'outlined'}
-                onClick={() => setPeriod(p)}
-              >
-                {PERIOD_LABELS[p]}
-              </Button>
-            ))}
-          </ButtonGroup>
-          {period === 'custom' && (
-            <Stack direction="row" gap={1}>
-              <TextField
-                type="date"
-                size="small"
-                label="Du"
-                value={customFrom}
-                onChange={e => setCustomFrom(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                type="date"
-                size="small"
-                label="Au"
-                value={customTo}
-                onChange={e => setCustomTo(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Stack>
-          )}
-        </Stack>
-      </Stack>
+    <Box>
+      <PageHeader
+        title="Tableau de bord analytique"
+        subtitle={`Actualisé toutes les ${Math.round(live.refresh_interval_seconds / 60)} min — ${new Date(live.computed_at).toLocaleTimeString('fr-FR')}`}
+        actions={
+          <Stack direction="column" gap={1} alignItems="flex-end">
+            <ButtonGroup size="small" variant="outlined">
+              {(['today', 'week', 'month', 'quarter', 'year', 'custom'] as Period[]).map(p => (
+                <Button
+                  key={p}
+                  variant={period === p ? 'contained' : 'outlined'}
+                  onClick={() => setPeriod(p)}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}
+                >
+                  {PERIOD_LABELS[p]}
+                </Button>
+              ))}
+            </ButtonGroup>
+            {period === 'custom' && (
+              <Stack direction="row" gap={1}>
+                <TextField
+                  type="date"
+                  size="small"
+                  label="Du"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  type="date"
+                  size="small"
+                  label="Au"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Stack>
+            )}
+          </Stack>
+        }
+      />
 
       {/* Finance KPI cards — visible to all */}
       <Stack direction="row" flexWrap="wrap" gap={2} mb={3}>
@@ -413,26 +448,28 @@ export function KpiDashboardPage() {
             <AreaChart data={revenueTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1976d2" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#1976d2" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" strokeOpacity={0.7} />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
               <YAxis
                 tick={{ fontSize: 11 }}
                 tickFormatter={v => `${(v / 100).toLocaleString('fr-FR')} €`}
               />
               <Tooltip
-                formatter={(v: number) => [
-                  (v / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }),
-                  'CA',
-                ]}
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    formatter={v => (v / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                  />
+                )}
               />
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#1976d2"
+                stroke="#2563EB"
                 strokeWidth={2}
                 fill="url(#revenueGrad)"
                 dot={false}
@@ -451,26 +488,28 @@ export function KpiDashboardPage() {
             <AreaChart data={outstandingPoints} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="outstandingGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#d32f2f" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#d32f2f" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#EF4444" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" strokeOpacity={0.7} />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
               <YAxis
                 tick={{ fontSize: 11 }}
                 tickFormatter={v => `${(v / 100).toLocaleString('fr-FR')} €`}
               />
               <Tooltip
-                formatter={(v: number) => [
-                  (v / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }),
-                  'Encours',
-                ]}
+                content={(props) => (
+                  <ChartTooltip
+                    {...props}
+                    formatter={v => (v / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                  />
+                )}
               />
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#d32f2f"
+                stroke="#EF4444"
                 strokeWidth={2}
                 fill="url(#outstandingGrad)"
                 dot={false}
@@ -491,11 +530,15 @@ export function KpiDashboardPage() {
           >
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={repairTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" strokeOpacity={0.7} />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                <Tooltip formatter={(v: number) => [v, 'Réparations']} />
-                <Bar dataKey="value" fill="#388e3c" radius={[3, 3, 0, 0]} />
+                <Tooltip
+                  content={(props) => (
+                    <ChartTooltip {...props} formatter={v => `${v} réparation${v > 1 ? 's' : ''}`} />
+                  )}
+                />
+                <Bar dataKey="value" fill="#10B981" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -511,15 +554,13 @@ export function KpiDashboardPage() {
                 layout="vertical"
                 margin={{ top: 5, right: 20, left: 60, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" strokeOpacity={0.7} />
                 <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={60} />
                 <Tooltip
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  formatter={(v: number, _: string, entry: any) => [
-                    `${v} OT${entry.payload.avg_duration_h != null ? ` (moy. ${(entry.payload.avg_duration_h as number).toFixed(1)} h)` : ''}`,
-                    'Terminés',
-                  ]}
+                  content={(props) => (
+                    <ChartTooltip {...props} formatter={v => `${v} OT terminé${v > 1 ? 's' : ''}`} />
+                  )}
                 />
                 <Bar dataKey="completed_count" radius={[0, 3, 3, 0]}>
                   {mechanicData.map((_, i) => (

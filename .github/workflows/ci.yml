@@ -49,6 +49,11 @@ jobs:
         working-directory: backend
         run: pip install -e ".[dev]"
 
+      - name: No hard-coded values check
+        run: |
+          chmod +x .github/scripts/check_hardcoded.sh
+          .github/scripts/check_hardcoded.sh
+
       - name: Lint (ruff check)
         working-directory: backend
         run: ruff check app tests

@@ -4,53 +4,129 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import {
   Box,
   Button,
-  Chip,
-  CircularProgress,
-  IconButton,
-  Paper,
+  InputAdornment,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
   TextField,
   Typography,
-  InputAdornment,
 } from '@mui/material'
-import SearchIcon from '@mui/icons-material/Search'
-import AddIcon from '@mui/icons-material/Add'
+import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
+import BusinessRoundedIcon from '@mui/icons-material/BusinessRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import { customerApi } from '../../lib/customerApi'
-import type { CustomerStatus, CustomerSummary } from '../../lib/customerApi'
+import type { CustomerSummary } from '../../lib/customerApi'
+import { PageHeader } from '../../components/ui/PageHeader'
+import { DataTable, type Column } from '../../components/ui/DataTable'
+import { StatusChip } from '../../components/ui/StatusChip'
+import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
-function formatMoney(minor: number, currency: string | null): string {
-  if (!currency) return minor.toString()
-  return (minor / 100).toLocaleString('fr-FR', {
-    style: 'currency',
-    currency,
-  })
-}
-
-function StatusChip({ status }: { status: CustomerStatus }) {
-  const palette: Record<CustomerStatus, 'success' | 'default' | 'error'> = {
-    active: 'success',
-    inactive: 'default',
-    blocked: 'error',
-  }
-  return <Chip size="small" color={palette[status]} label={status} />
-}
+const columns: Column<CustomerSummary>[] = [
+  {
+    id: 'name',
+    label: 'Nom',
+    sortable: true,
+    render: row => (
+      <Stack direction="row" alignItems="center" spacing={1.5}>
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            borderRadius: '9px',
+            bgcolor: row.type === 'company' ? '#EFF6FF' : '#F0FDF4',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {row.type === 'company'
+            ? <BusinessRoundedIcon sx={{ color: '#2563EB', fontSize: 16 }} />
+            : <PersonRoundedIcon sx={{ color: '#16A34A', fontSize: 16 }} />}
+        </Box>
+        <Box>
+          <Typography variant="body2" fontWeight={600}>{row.full_name}</Typography>
+          {row.company_name && (
+            <Typography variant="caption" color="text.secondary">{row.company_name}</Typography>
+          )}
+        </Box>
+      </Stack>
+    ),
+  },
+  {
+    id: 'type',
+    label: 'Type',
+    width: 120,
+    render: row => (
+      <Typography variant="body2" color="text.secondary">
+        {row.type === 'company' ? 'Société' : 'Particulier'}
+      </Typography>
+    ),
+  },
+  {
+    id: 'phone',
+    label: 'Téléphone',
+    width: 150,
+    render: row => (
+      <Typography variant="body2" fontFamily="monospace">
+        {row.phone_e164 ?? '—'}
+      </Typography>
+    ),
+  },
+  {
+    id: 'email',
+    label: 'Email',
+    render: row => (
+      <Typography variant="body2" color="text.secondary" noWrap>
+        {row.email ?? '—'}
+      </Typography>
+    ),
+  },
+  {
+    id: 'outstanding',
+    label: 'Encours',
+    align: 'right',
+    width: 130,
+    sortable: true,
+    render: row => (
+      <Typography
+        variant="body2"
+        fontWeight={600}
+        color={row.outstanding_minor > 0 ? 'error.main' : 'text.secondary'}
+      >
+        {formatMinor(row.outstanding_minor, row.credit_currency ?? 'EUR')}
+      </Typography>
+    ),
+  },
+  {
+    id: 'status',
+    label: 'Statut',
+    width: 100,
+    sortable: true,
+    render: row => <StatusChip status={row.status} />,
+  },
+]
 
 export function CustomersListPage() {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
+  const [sortBy, setSortBy] = useState<string>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (col: string) => {
+    if (col === sortBy) {
+      setSortOrder(o => o === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(col)
+      setSortOrder('asc')
+    }
+    setPage(0)
+  }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['customers', { q, page, pageSize }],
+    queryKey: ['customers', { q, page, pageSize, sortBy, sortOrder }],
     queryFn: () =>
       customerApi.list({
         q: q || undefined,
@@ -60,140 +136,69 @@ export function CustomersListPage() {
     placeholderData: keepPreviousData,
   })
 
-  return (
-    <Box p={4}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={3}
-      >
-        <Typography variant="h4" fontWeight={700}>
-          Clients
-        </Typography>
-        <PermissionGate permission="customer.create">
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            component={RouterLink}
-            to="/customers/new"
-          >
-            Nouveau client
-          </Button>
-        </PermissionGate>
-      </Stack>
+  const sortedRows = [...(data?.items ?? [])].sort((a, b) => {
+    const dir = sortOrder === 'asc' ? 1 : -1
+    if (sortBy === 'name') return dir * a.full_name.localeCompare(b.full_name, 'fr')
+    if (sortBy === 'outstanding') return dir * (a.outstanding_minor - b.outstanding_minor)
+    if (sortBy === 'status') return dir * a.status.localeCompare(b.status)
+    return 0
+  })
 
-      <Paper sx={{ p: 2, mb: 2 }}>
+  return (
+    <Box>
+      <PageHeader
+        title="Clients"
+        subtitle={data ? `${data.total} client${data.total !== 1 ? 's' : ''}` : 'Gestion des clients'}
+        actions={
+          <PermissionGate permission="customer.create">
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              component={RouterLink}
+              to="/customers/new"
+            >
+              Nouveau client
+            </Button>
+          </PermissionGate>
+        }
+      />
+
+      <Box mb={2}>
         <TextField
-          placeholder="Rechercher par nom, téléphone, email ou identifiant fiscal..."
+          placeholder="Rechercher par nom, téléphone, email ou identifiant fiscal…"
           fullWidth
+          size="small"
           value={q}
-          onChange={(e) => {
-            setQ(e.target.value)
-            setPage(0)
-          }}
+          onChange={e => { setQ(e.target.value); setPage(0) }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon />
+                <SearchRoundedIcon sx={{ color: 'text.disabled', fontSize: 18 }} />
               </InputAdornment>
             ),
           }}
         />
-      </Paper>
+      </Box>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Nom</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Téléphone</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Encours</TableCell>
-              <TableCell>Statut</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {isLoading && (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <CircularProgress size={24} />
-                </TableCell>
-              </TableRow>
-            )}
-            {isError && (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography color="error">
-                    Impossible de charger la liste des clients.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {data?.items.length === 0 && !isLoading && (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography color="text.secondary">
-                    {q ? 'Aucun client trouvé.' : 'Aucun client enregistré.'}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {data?.items.map((c: CustomerSummary) => (
-              <TableRow
-                key={c.id}
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/customers/${c.id}`)}
-              >
-                <TableCell>
-                  <Typography fontWeight={500}>{c.full_name}</Typography>
-                  {c.company_name && (
-                    <Typography variant="caption" color="text.secondary">
-                      {c.company_name}
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell>{c.type === 'company' ? 'Société' : 'Particulier'}</TableCell>
-                <TableCell>{c.phone_e164 ?? '-'}</TableCell>
-                <TableCell>{c.email ?? '-'}</TableCell>
-                <TableCell>
-                  {formatMoney(c.outstanding_minor, c.credit_currency)}
-                </TableCell>
-                <TableCell>
-                  <StatusChip status={c.status} />
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton
-                    component={RouterLink}
-                    to={`/customers/${c.id}`}
-                    size="small"
-                  >
-                    <SearchIcon fontSize="small" />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {data && (
-          <TablePagination
-            component="div"
-            count={data.total}
-            page={page}
-            onPageChange={(_, newPage) => setPage(newPage)}
-            rowsPerPage={pageSize}
-            rowsPerPageOptions={[10, 20, 50, 100]}
-            onRowsPerPageChange={(e) => {
-              setPageSize(parseInt(e.target.value, 10))
-              setPage(0)
-            }}
-            labelRowsPerPage="Lignes par page :"
-          />
-        )}
-      </TableContainer>
+      <DataTable
+        columns={columns}
+        rows={sortedRows}
+        getRowKey={r => String(r.id)}
+        onRowClick={r => navigate(`/customers/${r.id}`)}
+        loading={isLoading}
+        error={isError}
+        errorMessage="Impossible de charger la liste des clients."
+        total={data?.total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={size => { setPageSize(size); setPage(0) }}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
+        emptyTitle={q ? 'Aucun résultat' : 'Aucun client'}
+        emptyDescription={q ? `Aucun client ne correspond à "${q}".` : 'Créez votre premier client pour commencer.'}
+      />
     </Box>
   )
 }
