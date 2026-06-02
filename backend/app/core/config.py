@@ -96,6 +96,7 @@ class Settings(BaseSettings):
         "image/webp",
     ]
     signed_url_expiry_seconds: int = 3600  # 1 hour
+    cfg_document_archive_after_days: int = 365  # days before GED documents move to archive tier
 
     # -------------------------------------------------------------------------
     # PDF / Document printing

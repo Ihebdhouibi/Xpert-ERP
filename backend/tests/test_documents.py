@@ -47,13 +47,21 @@ async def doc_db(db_session: AsyncSession) -> AsyncSession:
     doc_download_perm = Permission(
         code="document.download", resource="document", action="download", description=""
     )
+    doc_read_perm = Permission(
+        code="document.read", resource="document", action="read", description=""
+    )
+    doc_delete_perm = Permission(
+        code="document.delete", resource="document", action="delete", description=""
+    )
     role = Role(code="admin", display_name="Administrator", is_system=True)
-    db_session.add_all([doc_upload_perm, doc_download_perm, role])
+    db_session.add_all([doc_upload_perm, doc_download_perm, doc_read_perm, doc_delete_perm, role])
     await db_session.flush()
 
     db_session.add_all([
         RolePermission(role_id=role.id, permission_id=doc_upload_perm.id),
         RolePermission(role_id=role.id, permission_id=doc_download_perm.id),
+        RolePermission(role_id=role.id, permission_id=doc_read_perm.id),
+        RolePermission(role_id=role.id, permission_id=doc_delete_perm.id),
     ])
 
     user = AppUser(
@@ -105,7 +113,7 @@ def _auth_header(user_id: int, garage_id: int = 1) -> dict[str, str]:
         subject=str(uuid.uuid4()),
         garage_id=garage_id,
         roles=["admin"],
-        permissions=["document.upload", "document.download"],
+        permissions=["document.upload", "document.download", "document.read", "document.delete"],
         user_id=user_id,
     )
     return {"Authorization": f"Bearer {token}"}
@@ -264,3 +272,182 @@ class TestSignedUrl:
             headers=_auth_header(user.id),
         )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# List / filter / FTS tests
+# ---------------------------------------------------------------------------
+
+class TestDocumentList:
+    @patch("app.modules.documents.storage.upload_bytes", new_callable=AsyncMock)
+    async def test_list_returns_uploaded_documents(
+        self, mock_upload: AsyncMock, doc_client: AsyncClient, doc_db: AsyncSession
+    ) -> None:
+        """Documents uploaded by this garage appear in the list endpoint."""
+        mock_upload.return_value = None
+        from sqlalchemy import select
+        from app.modules.auth.models import AppUser as AU
+        result = await doc_db.execute(select(AU).where(AU.email == "uploader@test.com"))
+        user = result.scalar_one()
+        headers = _auth_header(user.id)
+
+        # Seed two documents
+        await doc_client.post(
+            "/api/v1/documents",
+            headers=headers,
+            files={"file": ("invoice.pdf", io.BytesIO(_make_pdf()), "application/pdf")},
+            data={"category": "invoice", "owner_entity_type": "generic"},
+        )
+        await doc_client.post(
+            "/api/v1/documents",
+            headers=headers,
+            files={"file": ("carte_grise.jpg", io.BytesIO(_make_jpeg()), "image/jpeg")},
+            data={"category": "registration_card", "owner_entity_type": "vehicle"},
+        )
+
+        resp = await doc_client.get("/api/v1/documents", headers=headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "items" in body
+        assert len(body["items"]) >= 2
+
+    @patch("app.modules.documents.storage.upload_bytes", new_callable=AsyncMock)
+    async def test_list_filter_by_category(
+        self, mock_upload: AsyncMock, doc_client: AsyncClient, doc_db: AsyncSession
+    ) -> None:
+        """Category filter returns only matching documents."""
+        mock_upload.return_value = None
+        from sqlalchemy import select
+        from app.modules.auth.models import AppUser as AU
+        result = await doc_db.execute(select(AU).where(AU.email == "uploader@test.com"))
+        user = result.scalar_one()
+        headers = _auth_header(user.id)
+
+        await doc_client.post(
+            "/api/v1/documents",
+            headers=headers,
+            files={"file": ("ins.pdf", io.BytesIO(_make_pdf()), "application/pdf")},
+            data={"category": "insurance", "owner_entity_type": "generic"},
+        )
+
+        resp = await doc_client.get(
+            "/api/v1/documents",
+            headers=headers,
+            params={"category": "insurance"},
+        )
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert all(i["category"] == "insurance" for i in items)
+        assert len(items) >= 1
+
+    async def test_list_requires_auth(self, doc_client: AsyncClient) -> None:
+        resp = await doc_client.get("/api/v1/documents")
+        assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Delete tests
+# ---------------------------------------------------------------------------
+
+class TestDocumentDelete:
+    @patch("app.modules.documents.storage.upload_bytes", new_callable=AsyncMock)
+    async def test_soft_delete_removes_from_list(
+        self, mock_upload: AsyncMock, doc_client: AsyncClient, doc_db: AsyncSession
+    ) -> None:
+        """Deleting a document removes it from the active list."""
+        mock_upload.return_value = None
+        from sqlalchemy import select
+        from app.modules.auth.models import AppUser as AU
+        result = await doc_db.execute(select(AU).where(AU.email == "uploader@test.com"))
+        user = result.scalar_one()
+        headers = _auth_header(user.id)
+
+        # Upload
+        resp = await doc_client.post(
+            "/api/v1/documents",
+            headers=headers,
+            files={"file": ("to_delete.pdf", io.BytesIO(_make_pdf()), "application/pdf")},
+            data={"category": "generic", "owner_entity_type": "generic"},
+        )
+        assert resp.status_code == 201
+        doc_id = resp.json()["id"]
+
+        # Delete
+        del_resp = await doc_client.delete(f"/api/v1/documents/{doc_id}", headers=headers)
+        assert del_resp.status_code == 204
+
+        # Should no longer appear in list
+        list_resp = await doc_client.get("/api/v1/documents", headers=headers)
+        ids = [d["id"] for d in list_resp.json()["items"]]
+        assert doc_id not in ids
+
+    async def test_delete_not_found(
+        self, doc_client: AsyncClient, doc_db: AsyncSession
+    ) -> None:
+        from sqlalchemy import select
+        from app.modules.auth.models import AppUser as AU
+        result = await doc_db.execute(select(AU).where(AU.email == "uploader@test.com"))
+        user = result.scalar_one()
+        resp = await doc_client.delete(
+            f"/api/v1/documents/{uuid.uuid4()}",
+            headers=_auth_header(user.id),
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Archiver unit test
+# ---------------------------------------------------------------------------
+
+class TestDocumentArchiver:
+    @patch("app.modules.documents.storage.copy_object", new_callable=AsyncMock)
+    @patch("app.modules.documents.storage.delete_object", new_callable=AsyncMock)
+    @patch("app.modules.documents.storage.upload_bytes", new_callable=AsyncMock)
+    async def test_archiver_moves_old_documents(
+        self,
+        mock_upload: AsyncMock,
+        mock_delete: AsyncMock,
+        mock_copy: AsyncMock,
+        doc_db: AsyncSession,
+    ) -> None:
+        """archive_old_documents() copies then deletes objects older than the threshold."""
+        from datetime import timedelta, timezone
+        from datetime import datetime as _dt
+        mock_upload.return_value = None
+        mock_copy.return_value = None
+        mock_delete.return_value = None
+
+        # Create a document with an old timestamp directly in DB
+        from app.modules.documents import repository as repo
+        from app.modules.documents.models import DocumentCategory, OwnerEntityType
+
+        old_doc = await repo.create_document(
+            doc_db,
+            garage_id=1,
+            owner_entity_type=OwnerEntityType.generic,
+            owner_entity_id=None,
+            category=DocumentCategory.generic,
+            filename="old_file.pdf",
+            mime_type="application/pdf",
+            size_bytes=512,
+            sha256="abc123",
+            storage_key="1/generic/old_file.pdf",
+            uploaded_by=1,
+        )
+        # Backdate uploaded_at beyond the threshold
+        from sqlalchemy import update
+        from app.modules.documents.models import Document
+        await doc_db.execute(
+            update(Document)
+            .where(Document.id == old_doc.id)
+            .values(uploaded_at=_dt.now(tz=timezone.utc) - timedelta(days=400))
+        )
+        await doc_db.commit()
+
+        from app.modules.documents.service import archive_old_documents
+        archived = await archive_old_documents(doc_db)
+
+        assert archived >= 1
+        mock_copy.assert_awaited()
+        mock_delete.assert_awaited()
+

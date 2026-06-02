@@ -29,8 +29,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from app.modules.notification.scheduler import configure_scheduler
     from app.modules.media.archiver import register_archiver_job
+    from app.modules.documents.archiver import register_document_archiver_job
     notification_scheduler = configure_scheduler()
     register_archiver_job(notification_scheduler)
+    register_document_archiver_job(notification_scheduler)
     notification_scheduler.start()
 
     # Run Alembic migrations on every startup (safe — only applies pending ones)

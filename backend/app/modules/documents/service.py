@@ -1,8 +1,9 @@
-"""Document service — validation, upload orchestration, signed-URL generation."""
+"""Document service — validation, upload orchestration, signed-URL generation, archiver."""
 from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import UploadFile
@@ -13,7 +14,7 @@ from app.core.logging import get_logger
 from app.modules.documents import repository as repo
 from app.modules.documents import storage
 from app.modules.documents.models import Document, DocumentCategory, OwnerEntityType
-from app.modules.documents.schemas import DocumentOut, SignedUrlResponse
+from app.modules.documents.schemas import DocumentListResponse, DocumentOut, SignedUrlResponse
 
 logger = get_logger("documents.service")
 
@@ -146,6 +147,109 @@ async def get_signed_url(
         url=url,
         expires_in_seconds=cfg.signed_url_expiry_seconds,
     )
+
+
+async def list_documents(
+    db: AsyncSession,
+    *,
+    garage_id: int,
+    category: Optional[DocumentCategory] = None,
+    owner_entity_type: Optional[OwnerEntityType] = None,
+    owner_entity_id: Optional[int] = None,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    q: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> DocumentListResponse:
+    docs = await repo.list_documents(
+        db,
+        garage_id=garage_id,
+        category=category,
+        owner_entity_type=owner_entity_type,
+        owner_entity_id=owner_entity_id,
+        from_date=from_date,
+        to_date=to_date,
+        q=q,
+        limit=limit,
+        offset=offset,
+    )
+    return DocumentListResponse(
+        items=[DocumentOut.from_model(d) for d in docs],
+        limit=limit,
+        offset=offset,
+    )
+
+
+async def delete_document(
+    db: AsyncSession,
+    *,
+    document_public_id: uuid.UUID,
+    garage_id: int,
+) -> None:
+    doc = await repo.soft_delete(db, public_id=document_public_id, garage_id=garage_id)
+    if doc is None:
+        raise DocumentNotFoundError(document_public_id)
+    logger.info("document_deleted", public_id=str(document_public_id), garage_id=garage_id)
+
+
+async def get_document(
+    db: AsyncSession,
+    *,
+    document_public_id: uuid.UUID,
+    garage_id: int,
+) -> Document:
+    doc = await repo.get_by_public_id(db, public_id=document_public_id, garage_id=garage_id)
+    if doc is None:
+        raise DocumentNotFoundError(document_public_id)
+    return doc
+
+
+async def archive_old_documents(db: AsyncSession) -> int:
+    """Move documents older than CFG_DOCUMENT_ARCHIVE_AFTER_DAYS to archive S3 prefix.
+
+    Returns the count of documents archived in this run.
+    """
+    cfg = get_settings()
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=cfg.cfg_document_archive_after_days)
+    archived_count = 0
+
+    garage_ids = await repo.get_all_garage_ids(db)
+    for garage_id in garage_ids:
+        docs = await repo.get_archivable_documents(db, garage_id=garage_id, older_than=cutoff)
+        for doc in docs:
+            archive_key = f"archive/{doc.storage_key}"
+            try:
+                await storage.copy_object(
+                    bucket=cfg.s3_bucket_documents,
+                    source_key=doc.storage_key,
+                    dest_key=archive_key,
+                )
+                await storage.delete_object(
+                    bucket=cfg.s3_bucket_documents,
+                    key=doc.storage_key,
+                )
+                # Update the row: new key + mark archived
+                doc.storage_key = archive_key
+                doc.archived = True
+                doc.archived_at = datetime.now(tz=timezone.utc)
+                await db.flush()
+                archived_count += 1
+                logger.info(
+                    "document_archived",
+                    public_id=str(doc.public_id),
+                    garage_id=garage_id,
+                    archive_key=archive_key,
+                )
+            except Exception:
+                logger.exception(
+                    "document_archive_error",
+                    public_id=str(doc.public_id),
+                    garage_id=garage_id,
+                )
+    if archived_count:
+        await db.commit()
+    return archived_count
 
 
 # ---------------------------------------------------------------------------

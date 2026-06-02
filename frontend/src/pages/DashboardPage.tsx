@@ -16,6 +16,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import BarChartIcon from '@mui/icons-material/BarChart'
+import FolderIcon from '@mui/icons-material/Folder'
 import LogoutIcon from '@mui/icons-material/Logout'
 import { PermissionGate } from '../components/auth/PermissionGate'
 import { useAuth } from '../contexts/AuthContext'
@@ -253,6 +254,32 @@ export function DashboardPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Rapprochement 3 voies
+              </Typography>
+            </Box>
+          </Paper>
+        </PermissionGate>
+        <PermissionGate permission="document.read">
+          <Paper
+            component={RouterLink}
+            to="/documents"
+            sx={{
+              p: 3,
+              minWidth: 220,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              transition: 'box-shadow .15s',
+              '&:hover': { boxShadow: 4 },
+            }}
+          >
+            <FolderIcon color="primary" fontSize="large" />
+            <Box>
+              <Typography variant="h6" color="text.primary">
+                Documents (GED)
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Gestion documentaire
               </Typography>
             </Box>
           </Paper>
