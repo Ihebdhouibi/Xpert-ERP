@@ -280,11 +280,13 @@ class TestSignedUrl:
 
 class TestDocumentList:
     @patch("app.modules.documents.storage.upload_bytes", new_callable=AsyncMock)
+    @patch("app.modules.documents.storage.download_object", new_callable=AsyncMock)
     async def test_list_returns_uploaded_documents(
-        self, mock_upload: AsyncMock, doc_client: AsyncClient, doc_db: AsyncSession
+        self, mock_download: AsyncMock, mock_upload: AsyncMock, doc_client: AsyncClient, doc_db: AsyncSession
     ) -> None:
         """Documents uploaded by this garage appear in the list endpoint."""
         mock_upload.return_value = None
+        mock_download.return_value = _make_jpeg()  # OCR background task gets bytes instead of hitting MinIO
         from sqlalchemy import select
         from app.modules.auth.models import AppUser as AU
         result = await doc_db.execute(select(AU).where(AU.email == "uploader@test.com"))

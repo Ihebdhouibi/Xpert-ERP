@@ -260,3 +260,43 @@ async def delete_contacts_for_customer(
     for contact in result.scalars().all():
         await db.delete(contact)
     await db.flush()
+
+
+async def patch_from_ocr(
+    db: AsyncSession,
+    *,
+    customer_id: int,
+    garage_id: int,
+    fields: dict[str, str],
+) -> bool:
+    """Apply confirmed OCR fields to a customer row.
+
+    Returns True if the customer was found and updated, False otherwise.
+    Only updates fields that are present and non-empty in *fields*.
+    """
+    result = await db.execute(
+        select(Customer).where(
+            Customer.id == customer_id,
+            Customer.garage_id == garage_id,
+            Customer.deleted_at.is_(None),
+        )
+    )
+    customer = result.scalar_one_or_none()
+    if customer is None:
+        return False
+
+    # CIN number → fiscal_id
+    numero_cin = fields.get("numero_cin", "").strip()
+    if numero_cin:
+        customer.fiscal_id = numero_cin
+
+    # Build full_name from prenom + nom when both are available
+    nom = fields.get("nom", "").strip()
+    prenom = fields.get("prenom", "").strip()
+    if prenom and nom:
+        customer.full_name = f"{prenom} {nom}"
+    elif nom:
+        customer.full_name = nom
+
+    await db.commit()
+    return True

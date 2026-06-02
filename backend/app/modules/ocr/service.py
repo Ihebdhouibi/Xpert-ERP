@@ -16,9 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.modules.customer import repository as customer_repo
 from app.modules.documents import repository as doc_repo
 from app.modules.documents import storage as doc_storage
-from app.modules.documents.models import DocumentCategory
+from app.modules.documents.models import DocumentCategory, OwnerEntityType
 from app.modules.ocr import repository as ocr_repo
 from app.modules.ocr.engine import PaddleOcrEngine
 from app.modules.ocr.extractors import (
@@ -27,6 +28,7 @@ from app.modules.ocr.extractors import (
     extract_national_id,
 )
 from app.modules.ocr.models import OcrExtraction, OcrStatus
+from app.modules.vehicles import repository as vehicle_repo
 
 logger = get_logger("ocr.service")
 
@@ -166,13 +168,10 @@ async def confirm_fields(
     """
     Human confirms (or corrects) extracted field values.
 
-    This is the ONLY place where OCR results are allowed to be written to other
-    entity tables. The caller supplies the final values; we store them back on
-    the extraction row and mark it reviewed.
-
-    Note: Actually updating vehicle/customer records is the responsibility of
-    the calling router/service layer — this function records the review state
-    only to keep the OCR module self-contained.
+    This is the ONLY place where OCR results are written to vehicle / customer
+    tables. Confirmed fields are merged into the extraction row, all confirmed
+    fields receive confidence = 1.0 (human-verified), and the owning entity
+    (vehicle or customer) is patched based on the document category.
     """
     extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
     if extraction is None:
@@ -205,6 +204,42 @@ async def confirm_fields(
         reviewed_by=reviewer_id,
         reviewed_at=datetime.now(tz=timezone.utc),
     )
+
+    # Write confirmed fields back to the owning entity
+    document = await doc_repo.get_by_id(db, document_id=extraction.document_id)
+    if document is not None and document.owner_entity_id is not None:
+        if (
+            document.category == DocumentCategory.registration_card
+            and document.owner_entity_type == OwnerEntityType.vehicle.value
+        ):
+            wrote = await vehicle_repo.patch_from_ocr(
+                db,
+                vehicle_id=document.owner_entity_id,
+                garage_id=document.garage_id,
+                fields=merged,
+            )
+            logger.info(
+                "ocr_vehicle_writeback",
+                vehicle_id=document.owner_entity_id,
+                wrote=wrote,
+                fields=list(merged.keys()),
+            )
+        elif (
+            document.category == DocumentCategory.id_doc
+            and document.owner_entity_type == OwnerEntityType.customer.value
+        ):
+            wrote = await customer_repo.patch_from_ocr(
+                db,
+                customer_id=document.owner_entity_id,
+                garage_id=document.garage_id,
+                fields=merged,
+            )
+            logger.info(
+                "ocr_customer_writeback",
+                customer_id=document.owner_entity_id,
+                wrote=wrote,
+                fields=list(merged.keys()),
+            )
 
     refreshed = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
     assert refreshed is not None
