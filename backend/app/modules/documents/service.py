@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import UploadFile
+from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -60,6 +60,7 @@ async def upload_document(
     owner_entity_id: Optional[int],
     garage_id: int,
     uploaded_by: int,
+    background_tasks: Optional[BackgroundTasks] = None,
 ) -> DocumentOut:
     cfg = get_settings()
 
@@ -118,6 +119,19 @@ async def upload_document(
         storage_key=key,
         uploaded_by=uploaded_by,
     )
+
+    # 6. Enqueue OCR for documents that benefit from structured extraction
+    if background_tasks is not None and category in (
+        DocumentCategory.registration_card,
+        DocumentCategory.id_doc,
+    ):
+        from app.modules.ocr.service import enqueue_ocr, process_ocr_job
+
+        async def _ocr_pipeline() -> None:
+            extraction = await enqueue_ocr(db, document_id=doc.id)
+            await process_ocr_job(db, extraction_id=extraction.id)
+
+        background_tasks.add_task(_ocr_pipeline)
 
     return DocumentOut.from_model(doc)
 

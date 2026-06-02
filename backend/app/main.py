@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     from app.modules.media.router import router as media_router
     from app.modules.kpi.router import router as kpi_router
     from app.modules.accounting_export.router import router as accounting_export_router
+    from app.modules.ocr.router import router as ocr_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -151,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(media_router, prefix="/api/v1")
     app.include_router(kpi_router, prefix="/api/v1")
     app.include_router(accounting_export_router, prefix="/api/v1")
+    app.include_router(ocr_router, prefix="/api/v1")
 
     return app
 

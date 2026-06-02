@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -32,6 +32,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 async def upload_document(
     user: AuthUser,
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     category: DocumentCategory = Form(...),
     owner_entity_type: OwnerEntityType = Form(...),
     owner_entity_id: Optional[int] = Form(None),
@@ -47,6 +48,7 @@ async def upload_document(
             owner_entity_id=owner_entity_id,
             garage_id=user.garage_id,
             uploaded_by=user.user_id,
+            background_tasks=background_tasks,
         )
     except FileTooLargeError as exc:
         raise HTTPException(

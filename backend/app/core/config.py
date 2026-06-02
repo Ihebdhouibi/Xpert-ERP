@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     cfg_document_archive_after_days: int = 365  # days before GED documents move to archive tier
 
     # -------------------------------------------------------------------------
+    # OCR pipeline (Issue #48)
+    # -------------------------------------------------------------------------
+    cfg_ocr_confidence_threshold_default: float = 0.75
+    cfg_ocr_confidence_threshold_immatriculation: float = 0.75
+    cfg_ocr_confidence_threshold_vin: float = 0.80
+    cfg_ocr_confidence_threshold_date: float = 0.70
+    cfg_ocr_confidence_threshold_nom: float = 0.70
+    cfg_ocr_confidence_threshold_cin: float = 0.80
+
+    # -------------------------------------------------------------------------
     # PDF / Document printing
     # -------------------------------------------------------------------------
     pdf_garage_name: str = "Xpert Garage"

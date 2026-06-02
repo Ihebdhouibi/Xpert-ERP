@@ -62,6 +62,18 @@ async def get_by_public_id(
     return result.scalar_one_or_none()
 
 
+async def get_by_id(
+    db: AsyncSession,
+    *,
+    document_id: int,
+) -> Document | None:
+    """Fetch a document by its integer PK (used internally by OCR service)."""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_documents(
     db: AsyncSession,
     *,

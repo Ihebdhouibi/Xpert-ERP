@@ -114,3 +114,18 @@ async def delete_object(*, bucket: str, key: str) -> None:
         logger.error("s3_delete_failed", key=key, error=str(exc))
         raise
 
+
+async def download_object(*, bucket: str, key: str) -> bytes:
+    """Download an object from S3 and return its raw bytes."""
+    client = _make_client()
+    loop = asyncio.get_running_loop()
+    get = functools.partial(client.get_object, Bucket=bucket, Key=key)
+    try:
+        response = await loop.run_in_executor(None, get)
+        body = response["Body"]
+        read = functools.partial(body.read)
+        return await loop.run_in_executor(None, read)
+    except ClientError as exc:
+        logger.error("s3_download_failed", key=key, error=str(exc))
+        raise
+

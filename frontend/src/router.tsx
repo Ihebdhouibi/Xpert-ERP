@@ -23,6 +23,7 @@ import { InspectionExecutionPage } from './pages/inspections/InspectionExecution
 import { InspectionApprovalPage } from './pages/inspections/InspectionApprovalPage'
 import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
+import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
 
 export const router = createBrowserRouter([
   {
@@ -194,6 +195,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <DocumentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/ocr/:extractionId',
+    element: (
+      <ProtectedRoute>
+        <OcrReviewPage />
       </ProtectedRoute>
     ),
   },

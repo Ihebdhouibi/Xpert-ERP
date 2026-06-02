@@ -43,6 +43,10 @@ dependencies = [
     "Pillow==11.2.1",
     # Scheduler
     "apscheduler==3.11.0",
+    # OCR
+    "paddlepaddle==3.0.0",
+    "paddleocr==3.0.1",
+    "opencv-python-headless==4.10.0.84",
 ]
 
 [project.optional-dependencies]
