@@ -63,7 +63,10 @@ class PaddleOcrEngine(OcrEngine):
             try:
                 from paddleocr import PaddleOCR  # type: ignore[import]
 
-                self._paddle = PaddleOCR(use_angle_cls=True, lang="fr", show_log=False)
+                # PaddleOCR 3.x — use_angle_cls / show_log / use_gpu are removed.
+                # "fr" is only available in PP-OCRv3; PP-OCRv5 (default) only
+                # supports ch/en/japan/chinese_cht.
+                self._paddle = PaddleOCR(lang="fr", ocr_version="PP-OCRv3")
                 logger.info("PaddleOCR initialised (lang=fr)")
             except ImportError:
                 logger.warning(
@@ -76,23 +79,22 @@ class PaddleOcrEngine(OcrEngine):
     def _run_sync(self, image_bytes: bytes) -> RawOcrResult:
         paddle = self._get_paddle()
         try:
-            result = paddle.ocr(image_bytes, cls=True)
+            # PaddleOCR 3.x: predict() returns a list of OCRResult objects
+            results = paddle.predict(image_bytes)
         except Exception as exc:
             logger.error("PaddleOCR execution error: %s", exc)
             return RawOcrResult(lines=[], full_text="")
 
         lines: list[OcrLine] = []
-        if result:
-            for page in result:
-                if not page:
-                    continue
-                for item in page:
-                    # item: [box_coords, (text, confidence)]
-                    try:
-                        text, conf = item[1]
-                        lines.append(OcrLine(text=str(text), confidence=float(conf)))
-                    except (IndexError, TypeError, ValueError):
-                        continue
+        for res in results:
+            # Each OCRResult is dict-like: res["rec_texts"], res["rec_scores"]
+            try:
+                texts = res["rec_texts"]
+                scores = res["rec_scores"]
+                for text, conf in zip(texts, scores):
+                    lines.append(OcrLine(text=str(text), confidence=float(conf)))
+            except (KeyError, TypeError, ValueError):
+                continue
 
         full_text = "\n".join(line.text for line in lines)
         return RawOcrResult(lines=lines, full_text=full_text)
@@ -101,5 +103,5 @@ class PaddleOcrEngine(OcrEngine):
 class _NullPaddle:
     """Fallback used when paddleocr is not installed (test / CI environments)."""
 
-    def ocr(self, _bytes: bytes, **_kwargs):
+    def predict(self, _input, **_kwargs):
         return []
