@@ -39,7 +39,8 @@ import { RolesPage } from './pages/admin/RolesPage'
 import { SettingsPage } from './pages/admin/SettingsPage'
 import { AuditLogsPage } from './pages/admin/AuditLogsPage'
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
   // Public routes — no shell
   {
     path: '/login',
@@ -132,4 +133,5 @@ export const router = createBrowserRouter([
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-])
+  ]
+)

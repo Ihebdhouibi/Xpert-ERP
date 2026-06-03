@@ -31,8 +31,8 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { documentsApi } from '../lib/documentsApi'
-import { ocrApi, OcrExtractionOut } from '../lib/ocrApi'
+import { documentsApi } from '../../lib/documentsApi'
+import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
 
 // ---------------------------------------------------------------------------
 // Field label localisation (FR)
@@ -120,7 +120,7 @@ export function OcrReviewPage() {
           }
         }
       } catch (err: unknown) {
-        if (!cancelled) setError('Impossible de charger l'extraction OCR.')
+        if (!cancelled) setError("Impossible de charger l'extraction OCR.")
       } finally {
         if (!cancelled) setLoading(false)
       }

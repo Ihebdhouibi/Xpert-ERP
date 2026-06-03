@@ -23,7 +23,7 @@ import PendingRoundedIcon from '@mui/icons-material/PendingRounded'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { advancePaymentApi, type AdvancePaymentOut } from '../../lib/advancePaymentApi'
+import { advancePaymentApi, type AdvancePaymentOut, type AdvancePaymentListResponse } from '../../lib/advancePaymentApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
@@ -112,7 +112,7 @@ export function AdvancePaymentsPage() {
     queryKey: ['advance-payments', customerId],
     queryFn: () => advancePaymentApi.listByCustomer(Number(customerId)),
     enabled: typeof customerId === 'number',
-    onSuccess: (data) => setAdvances(data.items),
+    onSuccess: (data: AdvancePaymentListResponse) => setAdvances(data.items),
   } as Parameters<typeof useQuery>[0])
 
   const { control, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({

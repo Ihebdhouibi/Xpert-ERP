@@ -8,7 +8,6 @@ import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
-import CreditCardRoundedIcon from '@mui/icons-material/CreditCardRounded'
 import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded'
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
@@ -105,12 +104,6 @@ export const navSections: NavSection[] = [
         path: '/advance-payments',
         icon: PaymentsRoundedIcon,
         permission: 'payment.read',
-      },
-      {
-        label: 'Avances',
-        path: '/advance-payments',
-        icon: CreditCardRoundedIcon,
-        permission: 'advance_payment.read',
       },
       {
         label: 'Sessions caisse',

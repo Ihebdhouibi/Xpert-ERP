@@ -16,7 +16,7 @@ const pageVariants = {
 
 const pageTransition = {
   duration: 0.13,
-  ease: [0.4, 0, 0.2, 1], // MUI standard easing
+  ease: [0.4, 0, 0.2, 1] as [number, number, number, number], // MUI standard easing
 }
 
 export function AppShell() {
