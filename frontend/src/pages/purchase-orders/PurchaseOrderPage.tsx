@@ -191,7 +191,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
               <TableRow>
                 <TableCell>Pièce</TableCell>
                 <TableCell width={100}>Qté</TableCell>
-                <TableCell width={130}>Prix HT (centimes)</TableCell>
+                <TableCell width={130}>Prix HT (MAD)</TableCell>
                 <TableCell width={40} />
               </TableRow>
             </TableHead>
@@ -225,9 +225,9 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                     <TextField
                       size="small"
                       type="number"
-                      value={ln.unit_price_ht}
-                      onChange={(e) => updateLine(i, 'unit_price_ht', parseInt(e.target.value) || 0)}
-                      inputProps={{ min: 0 }}
+                      value={(ln.unit_price_ht / 100).toFixed(2)}
+                      onChange={(e) => updateLine(i, 'unit_price_ht', Math.round((parseFloat(e.target.value) || 0) * 100))}
+                      inputProps={{ min: 0, step: '0.01' }}
                     />
                   </TableCell>
                   <TableCell>

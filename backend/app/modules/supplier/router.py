@@ -153,7 +153,7 @@ async def list_suppliers(
     "/suppliers",
     status_code=http_status.HTTP_201_CREATED,
     response_model=SupplierSummary,
-    dependencies=[require_permission("supplier.write")],
+    dependencies=[require_permission("supplier.create")],
 )
 async def create_supplier_endpoint(
     body: SupplierCreateRequest,
@@ -194,7 +194,7 @@ async def get_supplier(
 @router.put(
     "/suppliers/{public_id}",
     response_model=SupplierSummary,
-    dependencies=[require_permission("supplier.write")],
+    dependencies=[require_permission("supplier.update")],
 )
 async def update_supplier_endpoint(
     public_id: str,
@@ -231,7 +231,7 @@ async def update_supplier_endpoint(
     "/suppliers/{public_id}",
     status_code=http_status.HTTP_204_NO_CONTENT,
     response_model=None,
-    dependencies=[require_permission("supplier.write")],
+    dependencies=[require_permission("supplier.update")],
 )
 async def delete_supplier_endpoint(
     public_id: str,
@@ -289,7 +289,7 @@ async def list_supplier_prices(
     "/suppliers/{public_id}/prices",
     status_code=http_status.HTTP_201_CREATED,
     response_model=PriceEntryResponse,
-    dependencies=[require_permission("supplier.write")],
+    dependencies=[require_permission("supplier.update")],
 )
 async def add_supplier_price_endpoint(
     public_id: str,

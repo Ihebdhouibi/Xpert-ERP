@@ -587,7 +587,7 @@ export function SupplierPage() {
         title="Fournisseurs"
         subtitle={data ? `${data.total} fournisseur${data.total !== 1 ? 's' : ''}` : 'Gestion des fournisseurs'}
         actions={
-          <PermissionGate permission="supplier.write">
+          <PermissionGate permission="supplier.create">
             <Button startIcon={<AddIcon />} variant="contained" onClick={openCreate}>
               Nouveau fournisseur
             </Button>
@@ -702,7 +702,7 @@ export function SupplierPage() {
                             <HistoryIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <PermissionGate permission="supplier.write">
+                        <PermissionGate permission="supplier.create">
                           <Tooltip title="Modifier">
                             <IconButton size="small" onClick={() => openEdit(s)}>
                               <EditIcon fontSize="small" />

@@ -69,7 +69,7 @@ function MovementDialog({
       stockApi.createMovement(part.id, {
         type,
         quantity: parseInt(quantity),
-        unit_cost_minor: unitCost ? parseInt(unitCost) : undefined,
+        unit_cost_minor: unitCost ? Math.round(parseFloat(unitCost) * 100) : undefined,
         reason: reason || undefined,
       }),
     onSuccess: () => {
@@ -108,12 +108,12 @@ function MovementDialog({
           />
           {type === 'in' && (
             <TextField
-              label="Coût unitaire (centimes)"
+              label="Coût unitaire (€)"
               type="number"
               value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
+              inputProps={{ min: 0, step: '0.01' }}
             />
           )}
           <TextField

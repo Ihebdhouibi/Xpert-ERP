@@ -21,6 +21,7 @@ export interface CustomerContact {
 
 export interface CustomerSummary {
   id: string
+  numeric_id: number
   garage_id: number
   type: CustomerType
   full_name: string

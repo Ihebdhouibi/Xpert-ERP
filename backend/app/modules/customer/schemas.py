@@ -128,6 +128,7 @@ class CreditLimitUpdateRequest(BaseModel):
 
 class CustomerSummary(BaseModel):
     id: str  # public_id (UUID as string)
+    numeric_id: int  # internal integer PK used as customer_id in related entities
     garage_id: int
     type: CustomerType
     full_name: str

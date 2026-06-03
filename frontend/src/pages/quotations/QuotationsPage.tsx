@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   InputAdornment,
   Stack,
   TextField,
@@ -25,6 +29,8 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
+import { useToast } from '../../contexts/ToastContext'
 
 const STATUS_FILTERS: { value: QuotationStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Tous' },
@@ -133,11 +139,86 @@ const columns: Column<QuotationOut>[] = [
   },
 ]
 
+function CreateQuotationDialog({ open, onClose, onCreated }: {
+  open: boolean
+  onClose: () => void
+  onCreated: (publicId: string) => void
+}) {
+  const { error: toastError } = useToast()
+  const [customerId, setCustomerId] = useState<number | null>(null)
+  const [validUntil, setValidUntil] = useState('')
+  const [notes, setNotes] = useState('')
+  const [customerError, setCustomerError] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      quotationApi.create({
+        customer_id: customerId!,
+        valid_until: validUntil ? `${validUntil}T00:00:00` : null,
+        notes: notes || null,
+      }),
+    onSuccess: q => {
+      onCreated(q.public_id)
+      setCustomerId(null)
+      setValidUntil('')
+      setNotes('')
+    },
+    onError: () => toastError('Erreur lors de la création du devis.'),
+  })
+
+  function handleSubmit() {
+    if (!customerId) { setCustomerError(true); return }
+    setCustomerError(false)
+    mutation.mutate()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Nouveau devis</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} pt={1}>
+          <CustomerAutocomplete
+            value={customerId}
+            onChange={id => { setCustomerId(id); setCustomerError(false) }}
+            required
+            error={customerError}
+            helperText={customerError ? 'Sélectionnez un client' : undefined}
+          />
+          <TextField
+            label="Valide jusqu'au (optionnel)"
+            type="date"
+            value={validUntil}
+            onChange={e => setValidUntil(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            label="Notes (optionnel)"
+            multiline
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose}>Annuler</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={mutation.isPending}>
+          Créer le devis
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 export function QuotationsPage() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [page, setPage] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | 'all'>('all')
+  const [createOpen, setCreateOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['quotations', { page, pageSize, statusFilter }],
@@ -152,6 +233,14 @@ export function QuotationsPage() {
 
   return (
     <Box>
+      <CreateQuotationDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={publicId => {
+          void qc.invalidateQueries({ queryKey: ['quotations'] })
+          navigate(`/quotations/${publicId}`)
+        }}
+      />
       <PageHeader
         title="Devis"
         subtitle="Gérez les estimations et propositions commerciales clients"
@@ -159,7 +248,7 @@ export function QuotationsPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/quotations/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouveau devis
           </Button>
@@ -208,7 +297,7 @@ export function QuotationsPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/quotations/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouveau devis
           </Button>

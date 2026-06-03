@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   LinearProgress,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -18,6 +23,8 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
+import { useToast } from '../../contexts/ToastContext'
 
 function PaymentProgress({ total, paid, currency }: { total: number; paid: number; currency: string }) {
   const pct = total > 0 ? Math.min((paid / total) * 100, 100) : 0
@@ -160,11 +167,86 @@ const columns: Column<InvoiceOut>[] = [
   },
 ]
 
+function CreateInvoiceDialog({ open, onClose, onCreated }: {
+  open: boolean
+  onClose: () => void
+  onCreated: (publicId: string) => void
+}) {
+  const { error: toastError } = useToast()
+  const [customerId, setCustomerId] = useState<number | null>(null)
+  const [dueAt, setDueAt] = useState('')
+  const [notes, setNotes] = useState('')
+  const [customerError, setCustomerError] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      invoiceApi.create({
+        customer_id: customerId!,
+        due_at: dueAt ? `${dueAt}T00:00:00` : null,
+        notes: notes || null,
+      }),
+    onSuccess: inv => {
+      onCreated(inv.public_id)
+      setCustomerId(null)
+      setDueAt('')
+      setNotes('')
+    },
+    onError: () => toastError('Erreur lors de la création de la facture.'),
+  })
+
+  function handleSubmit() {
+    if (!customerId) { setCustomerError(true); return }
+    setCustomerError(false)
+    mutation.mutate()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Nouvelle facture</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} pt={1}>
+          <CustomerAutocomplete
+            value={customerId}
+            onChange={id => { setCustomerId(id); setCustomerError(false) }}
+            required
+            error={customerError}
+            helperText={customerError ? 'Sélectionnez un client' : undefined}
+          />
+          <TextField
+            label="Date d'échéance (optionnel)"
+            type="date"
+            value={dueAt}
+            onChange={e => setDueAt(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            label="Notes (optionnel)"
+            multiline
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onClose}>Annuler</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={mutation.isPending}>
+          Créer la facture
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 export function InvoicesPage() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [page, setPage] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
+  const [createOpen, setCreateOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['invoices', { page, pageSize, statusFilter }],
@@ -179,6 +261,14 @@ export function InvoicesPage() {
 
   return (
     <Box>
+      <CreateInvoiceDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={publicId => {
+          void qc.invalidateQueries({ queryKey: ['invoices'] })
+          navigate(`/invoices/${publicId}`)
+        }}
+      />
       <PageHeader
         title="Factures"
         subtitle="Suivi de la facturation client et des encours"
@@ -186,7 +276,7 @@ export function InvoicesPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/invoices/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouvelle facture
           </Button>
@@ -234,7 +324,7 @@ export function InvoicesPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/invoices/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouvelle facture
           </Button>

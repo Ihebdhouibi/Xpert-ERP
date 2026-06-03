@@ -154,6 +154,12 @@ function PartDialog({
     reorder_quantity: editing?.reorder_quantity ?? undefined,
     status: editing?.status ?? 'active',
   })
+  const [purchaseEuros, setPurchaseEuros] = useState(
+    ((editing?.purchase_price_minor ?? 0) / 100).toFixed(2)
+  )
+  const [sellingEuros, setSellingEuros] = useState(
+    ((editing?.selling_price_minor ?? 0) / 100).toFixed(2)
+  )
   const [error, setError] = useState<string | null>(null)
 
   const field = (key: keyof PartCreatePayload, value: unknown) =>
@@ -237,20 +243,26 @@ function PartDialog({
           />
           <Stack direction="row" spacing={2}>
             <TextField
-              label="Prix d'achat (centimes)"
+              label="Prix d'achat (€)"
               type="number"
-              value={form.purchase_price_minor}
-              onChange={(e) => field('purchase_price_minor', parseInt(e.target.value) || 0)}
+              value={purchaseEuros}
+              onChange={(e) => {
+                setPurchaseEuros(e.target.value)
+                field('purchase_price_minor', Math.round((parseFloat(e.target.value) || 0) * 100))
+              }}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
+              inputProps={{ min: 0, step: '0.01' }}
             />
             <TextField
-              label="Prix de vente (centimes)"
+              label="Prix de vente (€)"
               type="number"
-              value={form.selling_price_minor}
-              onChange={(e) => field('selling_price_minor', parseInt(e.target.value) || 0)}
+              value={sellingEuros}
+              onChange={(e) => {
+                setSellingEuros(e.target.value)
+                field('selling_price_minor', Math.round((parseFloat(e.target.value) || 0) * 100))
+              }}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
+              inputProps={{ min: 0, step: '0.01' }}
             />
           </Stack>
           <Stack direction="row" spacing={2}>

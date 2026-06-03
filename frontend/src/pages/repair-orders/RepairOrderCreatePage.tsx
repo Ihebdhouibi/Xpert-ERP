@@ -23,13 +23,14 @@ import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import { repairOrderApi } from '../../lib/repairOrderApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
 
 const schema = z.object({
   customer_id: z.coerce.number().int().positive('Client requis'),
   vehicle_id: z.coerce.number().int().positive().nullable().optional(),
   description: z.string().min(1, 'Description requise'),
   priority: z.string().max(20).nullable().optional(),
-  estimated_cost_minor: z.coerce.number().int().min(0).nullable().optional(),
+  estimated_cost_euros: z.coerce.number().min(0).nullable().optional(),
   estimated_cost_currency: z
     .string()
     .length(3)
@@ -93,21 +94,13 @@ export function RepairOrderCreatePage() {
       vehicle_id: null,
       description: '',
       priority: 'normal',
-      estimated_cost_minor: null,
+      estimated_cost_euros: null,
       estimated_cost_currency: 'EUR',
     },
   })
 
-  const estimatedMinor = watch('estimated_cost_minor')
+  const estimatedEuros = watch('estimated_cost_euros')
   const estimatedCurrency = watch('estimated_cost_currency')
-  const estimatedDisplay =
-    estimatedMinor != null && estimatedMinor > 0
-      ? (estimatedMinor / 100).toLocaleString('fr-FR', {
-          style: 'currency',
-          currency: estimatedCurrency || 'EUR',
-          minimumFractionDigits: 2,
-        })
-      : null
 
   const onSubmit = async (values: FormValues) => {
     setSubmitError(null)
@@ -117,7 +110,7 @@ export function RepairOrderCreatePage() {
         vehicle_id: values.vehicle_id ?? null,
         description: values.description,
         priority: values.priority ?? null,
-        estimated_cost_minor: values.estimated_cost_minor ?? null,
+        estimated_cost_minor: values.estimated_cost_euros != null ? Math.round(values.estimated_cost_euros * 100) : null,
         estimated_cost_currency: values.estimated_cost_currency ?? null,
       })
       navigate(`/repair-orders/${ro.id}`)
@@ -177,16 +170,13 @@ export function RepairOrderCreatePage() {
                 <Controller
                   name="customer_id"
                   control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      label="ID Client *"
-                      type="number"
-                      error={!!errors.customer_id}
-                      helperText={errors.customer_id?.message ?? 'Numéro du client propriétaire du véhicule'}
-                      fullWidth
-                      autoFocus
-                      inputProps={{ min: 1 }}
+                  render={({ field, fieldState }) => (
+                    <CustomerAutocomplete
+                      value={field.value || null}
+                      onChange={id => field.onChange(id ?? 0)}
+                      required
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
                     />
                   )}
                 />
@@ -269,29 +259,25 @@ export function RepairOrderCreatePage() {
 
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
                   <Controller
-                    name="estimated_cost_minor"
+                    name="estimated_cost_euros"
                     control={control}
                     render={({ field }) => (
                       <TextField
                         {...field}
                         value={field.value ?? ''}
-                        label="Coût estimé"
+                        label="Coût estimé (€)"
                         type="number"
-                        error={!!errors.estimated_cost_minor}
-                        helperText={
-                          estimatedDisplay
-                            ? `≈ ${estimatedDisplay}`
-                            : 'Valeur en centimes (ex: 15000 = 150,00)'
-                        }
+                        error={!!errors.estimated_cost_euros}
+                        helperText={errors.estimated_cost_euros?.message ?? 'Optionnel'}
                         InputProps={{
                           endAdornment: (
                             <InputAdornment position="end">
-                              <Typography variant="caption" color="text.secondary">cts</Typography>
+                              <Typography variant="caption" color="text.secondary">€</Typography>
                             </InputAdornment>
                           ),
                         }}
                         fullWidth
-                        inputProps={{ min: 0 }}
+                        inputProps={{ min: 0, step: '0.01' }}
                       />
                     )}
                   />

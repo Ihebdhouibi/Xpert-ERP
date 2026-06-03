@@ -75,6 +75,7 @@ def _client_ip(request: Request) -> Optional[str]:
 def _to_summary(c: Customer) -> CustomerSummary:
     return CustomerSummary(
         id=str(c.public_id),
+        numeric_id=c.id,
         garage_id=c.garage_id,
         type=c.type,
         full_name=c.full_name,
@@ -94,6 +95,7 @@ def _to_summary(c: Customer) -> CustomerSummary:
 def _to_detail(c: Customer) -> CustomerDetail:
     return CustomerDetail(
         id=str(c.public_id),
+        numeric_id=c.id,
         garage_id=c.garage_id,
         type=c.type,
         full_name=c.full_name,
