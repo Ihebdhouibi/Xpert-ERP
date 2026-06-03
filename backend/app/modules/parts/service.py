@@ -4,8 +4,11 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.parts.models import Part, PartCategory, PartStatus
 from app.modules.parts.repository import PartCategoryRepository, PartRepository
+
+logger = get_logger("parts.service")
 
 
 class PartNotFoundError(Exception):
@@ -112,7 +115,7 @@ async def create_part(
     existing = await PartRepository.get_by_sku(db, garage_id, sku_code)
     if existing:
         raise PartSKUConflictError(sku_code)
-    return await PartRepository.create(
+    part = await PartRepository.create(
         db,
         garage_id=garage_id,
         sku_code=sku_code.upper(),
@@ -127,6 +130,8 @@ async def create_part(
         reorder_quantity=reorder_quantity,
         status=status,
     )
+    logger.info("part_created", part_public_id=str(part.public_id), sku=sku_code.upper(), garage_id=garage_id)
+    return part
 
 
 async def update_part(

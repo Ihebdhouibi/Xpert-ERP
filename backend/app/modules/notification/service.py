@@ -13,7 +13,6 @@ that the HTTP response is not blocked by the sleep delays.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timedelta, timezone
 from datetime import time as dt_time
 from pathlib import Path
@@ -23,6 +22,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.notification.adapter import (
     DeliveryResult,
     EmailAdapter,
@@ -32,7 +32,7 @@ from app.modules.notification.adapter import (
 from app.modules.notification.models import NotificationChannel, NotificationStatus
 from app.modules.notification.repository import NotificationRepository, TemplateRepository
 
-logger = logging.getLogger(__name__)
+logger = get_logger("notification.service")
 
 _FS_TEMPLATES_DIR = Path(__file__).parent / "templates"
 

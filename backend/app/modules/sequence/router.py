@@ -8,8 +8,10 @@ from app.core.database import get_db
 from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.sequence import service
 from app.modules.sequence.schemas import SequenceStateOut
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/sequences", tags=["sequences"])
+logger = get_logger("sequence.router")
 
 
 @router.get(

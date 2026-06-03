@@ -25,8 +25,10 @@ from app.modules.vehicles.service import (
     DuplicateVehicleError,
     VehicleNotFoundError,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
+logger = get_logger("vehicles.router")
 
 
 # ---------------------------------------------------------------------------

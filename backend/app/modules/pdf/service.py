@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from app.core.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -19,6 +21,8 @@ from app.modules.customer import repository as customer_repo
 from app.modules.invoice import repository as invoice_repo
 from app.modules.quotation import repository as quotation_repo
 from app.modules.vehicles import repository as vehicle_repo
+
+logger = get_logger("pdf.service")
 
 # ---------------------------------------------------------------------------
 # Jinja2 environment

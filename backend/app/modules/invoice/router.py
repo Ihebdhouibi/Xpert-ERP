@@ -27,8 +27,10 @@ from app.modules.invoice.service import (
     InvoiceVersionError,
     QuotationAlreadyConvertedError,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
+logger = get_logger("invoice.router")
 
 _NOT_FOUND = "Invoice not found."
 _LINE_NOT_FOUND = "Invoice line not found."

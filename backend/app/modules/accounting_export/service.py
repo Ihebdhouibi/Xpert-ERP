@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.accounting_export.formatters import generate_zip
 from app.modules.accounting_export.models import AccountingExport
 from app.modules.accounting_export.repository import AccountingExportRepository
@@ -16,6 +17,8 @@ from app.modules.accounting_export.repository import AccountingExportRepository
 # ---------------------------------------------------------------------------
 # Domain errors
 # ---------------------------------------------------------------------------
+
+logger = get_logger("accounting_export.service")
 
 
 class AccountingExportNotFoundError(Exception):

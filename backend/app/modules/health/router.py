@@ -7,8 +7,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["health"])
+logger = get_logger("health.router")
 settings = get_settings()
 
 

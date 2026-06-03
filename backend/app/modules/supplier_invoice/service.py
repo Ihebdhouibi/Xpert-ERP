@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.supplier_invoice.models import (
     SIMatchStatus,
     SupplierInvoice,
@@ -17,6 +18,8 @@ from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
 # ---------------------------------------------------------------------------
 # Domain errors
 # ---------------------------------------------------------------------------
+
+logger = get_logger("supplier_invoice.service")
 
 
 class SINotFoundError(Exception):
@@ -163,7 +166,7 @@ async def create_supplier_invoice(
             }
         )
 
-    return await SupplierInvoiceRepository.create(
+    si = await SupplierInvoiceRepository.create(
         db,
         garage_id=garage_id,
         supplier_id=supplier_id,
@@ -177,6 +180,8 @@ async def create_supplier_invoice(
         notes=notes,
         created_by=user_id,
     )
+    logger.info("supplier_invoice_created", si_public_id=str(si.public_id), number=number, po_public_id=po_public_id, garage_id=garage_id)
+    return si
 
 
 async def update_supplier_invoice(

@@ -20,8 +20,10 @@ from app.modules.auth.schemas import (
     RefreshRequest,
     TokenResponse,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = get_logger("auth.router")
 
 
 def _client_ip(request: Request) -> str:

@@ -30,8 +30,10 @@ from app.modules.repair_order.service import (
     RepairOrderService,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/repair-orders", tags=["repair-orders"])
+logger = get_logger("repair_order.router")
 
 
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:

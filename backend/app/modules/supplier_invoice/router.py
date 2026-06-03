@@ -30,8 +30,10 @@ from app.modules.supplier_invoice.service import (
     post_supplier_invoice,
     update_supplier_invoice,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["supplier-invoices"])
+logger = get_logger("supplier_invoice.router")
 
 
 # ---------------------------------------------------------------------------

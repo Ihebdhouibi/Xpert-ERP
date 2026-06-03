@@ -20,8 +20,10 @@ from .time_entry_schemas import (
     TimeEntryStopRequest,
 )
 from . import time_entry_service as svc
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["repair-order-time-comments"])
+logger = get_logger("repair_order.time_entry_router")
 
 
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> int:

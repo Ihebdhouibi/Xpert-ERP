@@ -13,7 +13,6 @@ Counts are stored as integers cast to Decimal.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -22,9 +21,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.core.redis import get_redis
 
-logger = logging.getLogger(__name__)
+logger = get_logger("kpi.service")
 
 # KPI catalog — codes used as kpi_code in snapshots
 KPI_CODES = [

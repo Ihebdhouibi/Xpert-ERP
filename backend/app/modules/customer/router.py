@@ -37,8 +37,10 @@ from app.modules.customer.schemas import (
     MergePromptResponse,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+logger = get_logger("customer.router")
 
 
 # ---------------------------------------------------------------------------

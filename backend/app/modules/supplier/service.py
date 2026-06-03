@@ -5,8 +5,11 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.supplier.models import Supplier, SupplierPartPrice
 from app.modules.supplier.repository import SupplierPartPriceRepository, SupplierRepository
+
+logger = get_logger("supplier.service")
 
 
 class SupplierNotFoundError(Exception):
@@ -41,7 +44,7 @@ async def create_supplier(
     payment_terms_days: Optional[int] = None,
     average_delivery_days: Optional[int] = None,
 ) -> Supplier:
-    return await SupplierRepository.create(
+    supplier = await SupplierRepository.create(
         db,
         garage_id=garage_id,
         name=name,
@@ -51,6 +54,8 @@ async def create_supplier(
         payment_terms_days=payment_terms_days,
         average_delivery_days=average_delivery_days,
     )
+    logger.info("supplier_created", supplier_public_id=str(supplier.public_id), name=name, garage_id=garage_id)
+    return supplier
 
 
 async def update_supplier(

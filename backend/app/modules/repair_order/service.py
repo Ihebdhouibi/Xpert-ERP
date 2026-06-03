@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.audit.service import audit
 from app.modules.repair_order.models import (
     RepairOrder,
@@ -12,6 +13,8 @@ from app.modules.repair_order.models import (
     can_transition,
 )
 from app.modules.repair_order.repository import RepairOrderRepository
+
+logger = get_logger("repair_order.service")
 
 
 class OptimisticLockError(Exception):
@@ -90,6 +93,14 @@ class RepairOrderService:
             new_value=_to_audit_dict(ro),
         )
 
+        logger.info(
+            "repair_order_created",
+            ro_public_id=str(ro.public_id),
+            customer_id=customer_id,
+            vehicle_id=vehicle_id,
+            garage_id=garage_id,
+            user_id=user_id,
+        )
         return ro
 
     @staticmethod
@@ -211,6 +222,14 @@ class RepairOrderService:
             new_value={"status": new_status.value},
         )
 
+        logger.info(
+            "repair_order_status_transition",
+            ro_public_id=str(ro.public_id),
+            old_status=old_status.value,
+            new_status=new_status.value,
+            garage_id=garage_id,
+            user_id=user_id,
+        )
         return ro
 
     @staticmethod

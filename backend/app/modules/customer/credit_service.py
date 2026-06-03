@@ -16,15 +16,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-import structlog
 from sqlalchemy import select, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.modules.customer.models import Customer, CustomerBalanceEvent
 from app.modules.customer import repository as customer_repo
+from app.core.logging import get_logger
 
-logger = structlog.get_logger("customer.credit")
+logger = get_logger("customer.credit")
 
 
 # ---------------------------------------------------------------------------

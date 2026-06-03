@@ -7,6 +7,7 @@ No hard-coded defaults for business-logic values.
 """
 
 from functools import lru_cache
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,8 +72,15 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     log_level: str = "INFO"
     log_dir: str = "logs"
-    log_max_bytes: int = 10_485_760  # 10 MB
-    log_backup_count: int = 5
+    # Accept both LOG_MAX_BYTES and CFG_LOG_MAX_BYTES env-var spellings
+    log_max_bytes: int = Field(
+        default=10_485_760,
+        validation_alias=AliasChoices("log_max_bytes", "cfg_log_max_bytes"),
+    )
+    log_backup_count: int = Field(
+        default=5,
+        validation_alias=AliasChoices("log_backup_count", "cfg_log_backup_count"),
+    )
 
     # -------------------------------------------------------------------------
     # Email (SMTP)

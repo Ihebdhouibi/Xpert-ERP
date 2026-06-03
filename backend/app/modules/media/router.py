@@ -27,8 +27,10 @@ from app.modules.media.service import (
     UploadSessionNotFound,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/media", tags=["media"])
+logger = get_logger("media.router")
 
 
 async def _resolve_inspection(

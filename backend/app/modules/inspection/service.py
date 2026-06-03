@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.inspection.models import (
     Inspection,
     InspectionApprovalToken,
@@ -21,6 +22,8 @@ from app.modules.inspection.repository import (
     InspectionTemplateRepository,
     VehicleRecommendationRepository,
 )
+
+logger = get_logger("inspection.service")
 
 
 class TemplateNotFoundError(Exception):
@@ -122,7 +125,7 @@ async def create_inspection(
     )
     if not template:
         raise TemplateNotFoundError(template_public_id)
-    return await InspectionRepository.create(
+    inspection = await InspectionRepository.create(
         db,
         garage_id=garage_id,
         template_id=template.id,
@@ -131,6 +134,8 @@ async def create_inspection(
         vehicle_id=vehicle_id,
         created_by_user_id=created_by_user_id,
     )
+    logger.info("inspection_created", inspection_public_id=str(inspection.public_id), template_public_id=template_public_id, garage_id=garage_id)
+    return inspection
 
 
 async def transition_inspection(
@@ -148,6 +153,7 @@ async def transition_inspection(
             inspection.status.value, new_status.value
         )
     await InspectionRepository.transition_status(db, inspection, new_status)
+    logger.info("inspection_status_transition", inspection_public_id=public_id, new_status=new_status.value, garage_id=garage_id)
     return inspection
 
 

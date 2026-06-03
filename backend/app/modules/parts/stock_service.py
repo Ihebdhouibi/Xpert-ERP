@@ -5,10 +5,13 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.parts.models import Part
 from app.modules.parts.repository import PartRepository
 from app.modules.parts.stock_models import LowStockAlert, StockLevel, StockMovement, StockMovementType
 from app.modules.parts.stock_repository import StockRepository
+
+logger = get_logger("parts.stock")
 
 
 class NegativeStockError(Exception):
@@ -90,6 +93,17 @@ async def record_movement(
     ):
         await _maybe_create_alert(db, garage_id, part_id, level.on_hand)
 
+    logger.info(
+        "stock_movement_recorded",
+        garage_id=garage_id,
+        part_id=part_id,
+        movement_type=movement_type.value,
+        quantity=quantity,
+        ref_type=ref_type,
+        ref_id=ref_id,
+        on_hand=level.on_hand,
+        reserved=level.reserved,
+    )
     return movement
 
 

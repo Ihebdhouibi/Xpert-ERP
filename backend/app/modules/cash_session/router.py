@@ -12,8 +12,10 @@ from app.modules.cash_session.schemas import (
     ZReportData,
 )
 from app.modules.cash_session import service
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["cash-sessions"])
+logger = get_logger("cash_session.router")
 
 
 @router.post(

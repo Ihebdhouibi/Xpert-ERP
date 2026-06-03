@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.pdf import service as pdf_service
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/pdf", tags=["pdf"])
+logger = get_logger("pdf.router")
 
 
 @router.get(

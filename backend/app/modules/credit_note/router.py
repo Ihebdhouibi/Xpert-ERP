@@ -23,8 +23,10 @@ from app.modules.credit_note.service import (
 )
 from app.modules.invoice.service import InvoiceNotFoundError
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/credit-notes", tags=["Credit Notes"])
+logger = get_logger("credit_note.router")
 
 # ---------------------------------------------------------------------------
 # Credit note endpoints

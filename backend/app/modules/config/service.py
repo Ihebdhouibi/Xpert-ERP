@@ -15,7 +15,6 @@ Cache key pattern: cfg:<garage_id>:<key>
 """
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -24,9 +23,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.config.models import GarageSetting
 
-logger = logging.getLogger("config")
+logger = get_logger("config.service")
 
 _CACHE_PREFIX = "cfg"
 _GLOBAL_GARAGE_ID = 0
@@ -100,7 +100,7 @@ class SettingsService:
             try:
                 await self._redis.setex(cache_key, self._ttl(), value)
             except Exception:
-                logger.warning("config_cache_write_failed", extra={"key": key})
+                logger.warning("config_cache_write_failed", key=key)
 
         return value
 
@@ -113,7 +113,7 @@ class SettingsService:
         try:
             return int(raw)
         except ValueError:
-            logger.warning("config_int_cast_failed", extra={"key": key, "value": raw})
+            logger.warning("config_int_cast_failed", key=key, value=raw)
             return default
 
     async def get_bool(
@@ -133,7 +133,7 @@ class SettingsService:
         try:
             return float(raw)
         except ValueError:
-            logger.warning("config_float_cast_failed", extra={"key": key, "value": raw})
+            logger.warning("config_float_cast_failed", key=key, value=raw)
             return default
 
     async def upsert_setting(
@@ -171,7 +171,7 @@ class SettingsService:
         await self._db.commit()
         await self._db.refresh(row)
         await self._invalidate(key, garage_id)
-        logger.info("config_setting_upserted", extra={"key": key, "garage_id": garage_id})
+        logger.info("config_setting_upserted", key=key, garage_id=garage_id)
         return row
 
     async def delete_setting(
@@ -189,7 +189,7 @@ class SettingsService:
         await self._db.delete(row)
         await self._db.commit()
         await self._invalidate(key, garage_id)
-        logger.info("config_setting_deleted", extra={"key": key, "garage_id": garage_id})
+        logger.info("config_setting_deleted", key=key, garage_id=garage_id)
         return True
 
     async def list_settings(
@@ -206,7 +206,7 @@ class SettingsService:
         try:
             await self._redis.delete(self._cache_key(key, garage_id))
         except Exception:
-            logger.warning("config_cache_invalidate_failed", extra={"key": key})
+            logger.warning("config_cache_invalidate_failed", key=key)
 
 
 def get_settings_service(db: AsyncSession, redis: Redis) -> SettingsService:

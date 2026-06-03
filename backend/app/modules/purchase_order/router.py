@@ -28,8 +28,10 @@ from app.modules.purchase_order.service import (
     update_po,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["purchase-orders"])
+logger = get_logger("purchase_order.router")
 
 
 # ---------------------------------------------------------------------------

@@ -22,8 +22,10 @@ from app.modules.config.schemas import (
 )
 from app.modules.config.service import SettingsService
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/settings", tags=["config"])
+logger = get_logger("config.router")
 
 
 def _svc(

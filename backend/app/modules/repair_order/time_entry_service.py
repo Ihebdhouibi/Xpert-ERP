@@ -5,8 +5,11 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from . import time_entry_repository as repo
 from .time_entry_models import ROComment, ROTimeEntry
+
+logger = get_logger("repair_order.time_entry")
 
 
 class TimeEntryAlreadyOpenError(Exception):
@@ -45,6 +48,7 @@ async def start_time_entry(
     entry = await repo.start_entry(db, ro_id, user_id, notes)
     await db.commit()
     await db.refresh(entry)
+    logger.info("time_entry_started", entry_id=entry.id, ro_id=ro_id, user_id=user_id)
     return entry
 
 
@@ -65,6 +69,7 @@ async def stop_time_entry(
     entry = await repo.stop_entry(db, entry, ended_at, duration_minutes, notes)
     await db.commit()
     await db.refresh(entry)
+    logger.info("time_entry_stopped", entry_id=entry.id, ro_id=ro_id, user_id=user_id, duration_minutes=duration_minutes)
     return entry
 
 

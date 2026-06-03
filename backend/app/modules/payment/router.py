@@ -11,8 +11,10 @@ from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.payment import service as pay_svc
 from app.modules.payment.schemas import PaymentCreateRequest, PaymentOut
 from app.modules.payment.service import InvoiceNotPayableError, OverpaymentError, PaymentError
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+logger = get_logger("payment.router")
 
 
 @router.post(

@@ -6,6 +6,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.purchase_order.models import (
     POMatchFlag,
     PurchaseOrder,
@@ -21,6 +22,8 @@ from app.modules.purchase_order.repository import (
 # ---------------------------------------------------------------------------
 # Domain errors
 # ---------------------------------------------------------------------------
+
+logger = get_logger("purchase_order.service")
 
 
 class PONotFoundError(Exception):
@@ -124,6 +127,14 @@ async def create_po(
             unit_price_ht=ld["unit_price_ht"],
         )
 
+    logger.info(
+        "purchase_order_created",
+        po_public_id=str(po.public_id),
+        doc_number=doc_number,
+        supplier_public_id=supplier_public_id,
+        garage_id=garage_id,
+        total_ht=total_ht,
+    )
     return po
 
 
@@ -276,7 +287,15 @@ async def receive_po(
         else po.status
     )
 
-    return await PurchaseOrderRepository.update(db, po, status=new_status)
+    result = await PurchaseOrderRepository.update(db, po, status=new_status)
+    logger.info(
+        "purchase_order_received",
+        po_public_id=str(po.public_id),
+        doc_number=po.doc_number,
+        new_status=new_status.value,
+        garage_id=garage_id,
+    )
+    return result
 
 
 async def cancel_po(

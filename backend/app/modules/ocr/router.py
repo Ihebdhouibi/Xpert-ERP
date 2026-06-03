@@ -14,8 +14,10 @@ from app.modules.ocr.service import (
     OcrNotFoundError,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
+logger = get_logger("ocr.router")
 
 
 @router.post(
