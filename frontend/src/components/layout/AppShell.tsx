@@ -4,7 +4,7 @@ import { Box, useMediaQuery, useTheme } from '@mui/material'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar, DRAWER_WIDTH, COLLAPSED_WIDTH } from './Sidebar'
 import { TopBar } from './TopBar'
-import { useCommandPalette } from '../CommandPalette'
+import { useCommandPalette } from '../useCommandPalette'
 
 // 130ms ease-out fade — masks React re-render flash, adds perceived polish.
 // Deliberately subtle: users should feel snappy, not notice the animation.
