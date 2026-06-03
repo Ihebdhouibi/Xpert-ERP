@@ -1,6 +1,7 @@
 """Vehicle repository — all DB queries for the vehicle module."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -165,3 +166,49 @@ async def get_registration_aliases(
         .order_by(VehicleRegistrationAlias.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def patch_from_ocr(
+    db: AsyncSession,
+    *,
+    vehicle_id: int,
+    garage_id: int,
+    fields: dict[str, str],
+) -> bool:
+    """Apply confirmed OCR fields to a vehicle row.
+
+    Returns True if the vehicle was found and updated, False otherwise.
+    Only updates fields that are present and non-empty in *fields*.
+    """
+    result = await db.execute(
+        select(Vehicle).where(
+            Vehicle.id == vehicle_id,
+            Vehicle.garage_id == garage_id,
+            Vehicle.deleted_at.is_(None),
+        )
+    )
+    vehicle = result.scalar_one_or_none()
+    if vehicle is None:
+        return False
+
+    # OCR field → vehicle column mapping
+    str_mapping = {
+        "immatriculation": "registration",
+        "vin": "vin",
+        "marque": "make",
+        "modele": "model",
+    }
+    for ocr_field, col in str_mapping.items():
+        value = fields.get(ocr_field, "").strip()
+        if value:
+            setattr(vehicle, col, value)
+
+    # Extract 4-digit year from date_mise_en_circulation (e.g. "01/01/2019")
+    date_str = fields.get("date_mise_en_circulation", "")
+    if date_str:
+        match = re.search(r"\b(19|20)\d{2}\b", date_str)
+        if match:
+            vehicle.year = int(match.group())
+
+    await db.commit()
+    return True

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +27,8 @@ class DocumentOut(BaseModel):
     uploaded_by: int
     uploaded_at: datetime
     status: DocumentStatus
+    archived: bool
+    archived_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
 
@@ -46,7 +49,15 @@ class DocumentOut(BaseModel):
             uploaded_by=d.uploaded_by,
             uploaded_at=d.uploaded_at,
             status=d.status,  # type: ignore[arg-type]
+            archived=d.archived,
+            archived_at=d.archived_at,
         )
+
+
+class DocumentListResponse(BaseModel):
+    items: list[DocumentOut]
+    limit: int
+    offset: int
 
 
 class SignedUrlResponse(BaseModel):

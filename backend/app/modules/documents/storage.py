@@ -83,3 +83,49 @@ async def generate_presigned_url(
     except ClientError as exc:
         logger.error("s3_presign_failed", key=key, error=str(exc))
         raise
+
+
+async def copy_object(*, bucket: str, source_key: str, dest_key: str) -> None:
+    """Server-side copy within the same bucket (used by archiver)."""
+    client = _make_client()
+    loop = asyncio.get_running_loop()
+    copy_source = {"Bucket": bucket, "Key": source_key}
+    fn = functools.partial(
+        client.copy_object,
+        CopySource=copy_source,
+        Bucket=bucket,
+        Key=dest_key,
+    )
+    try:
+        await loop.run_in_executor(None, fn)
+    except ClientError as exc:
+        logger.error("s3_copy_failed", source=source_key, dest=dest_key, error=str(exc))
+        raise
+
+
+async def delete_object(*, bucket: str, key: str) -> None:
+    """Delete a single object from the bucket."""
+    client = _make_client()
+    loop = asyncio.get_running_loop()
+    fn = functools.partial(client.delete_object, Bucket=bucket, Key=key)
+    try:
+        await loop.run_in_executor(None, fn)
+    except ClientError as exc:
+        logger.error("s3_delete_failed", key=key, error=str(exc))
+        raise
+
+
+async def download_object(*, bucket: str, key: str) -> bytes:
+    """Download an object from S3 and return its raw bytes."""
+    client = _make_client()
+    loop = asyncio.get_running_loop()
+    get = functools.partial(client.get_object, Bucket=bucket, Key=key)
+    try:
+        response = await loop.run_in_executor(None, get)
+        body = response["Body"]
+        read = functools.partial(body.read)
+        return await loop.run_in_executor(None, read)
+    except ClientError as exc:
+        logger.error("s3_download_failed", key=key, error=str(exc))
+        raise
+

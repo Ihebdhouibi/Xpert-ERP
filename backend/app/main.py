@@ -29,8 +29,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     from app.modules.notification.scheduler import configure_scheduler
     from app.modules.media.archiver import register_archiver_job
+    from app.modules.documents.archiver import register_document_archiver_job
     notification_scheduler = configure_scheduler()
     register_archiver_job(notification_scheduler)
+    register_document_archiver_job(notification_scheduler)
     notification_scheduler.start()
 
     # Run Alembic migrations on every startup (safe — only applies pending ones)
@@ -43,12 +45,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         alembic_cfg = AlembicConfig(str(backend_dir / "alembic.ini"))
         # Resolve script_location relative to the backend dir, not CWD
         alembic_cfg.set_main_option("script_location", str(backend_dir / "migrations"))
-        # Use sync URL (psycopg2) for Alembic
-        sync_url = settings.database_url.replace(
-            "postgresql+asyncpg://", "postgresql+psycopg2://", 1
-        )
-        alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
-        command.upgrade(alembic_cfg, "head")
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        # Run via run_sync so we reuse the existing event loop (no nested asyncio.run)
+        from app.core.database import engine as _db_engine
+        from alembic import command as _alembic_command
+
+        def _run_upgrade(sync_conn) -> None:
+            alembic_cfg.attributes["connection"] = sync_conn
+            _alembic_command.upgrade(alembic_cfg, "head")
+
+        async with _db_engine.begin() as _conn:
+            await _conn.run_sync(_run_upgrade)
         logger.info("migrations_applied")
     except Exception as exc:
         logger.error("migrations_failed", error=str(exc))
@@ -122,6 +129,7 @@ def create_app() -> FastAPI:
     from app.modules.media.router import router as media_router
     from app.modules.kpi.router import router as kpi_router
     from app.modules.accounting_export.router import router as accounting_export_router
+    from app.modules.ocr.router import router as ocr_router
     from app.modules.config.router import router as config_router
 
     app.include_router(health_router, prefix="/api/v1")
@@ -151,6 +159,7 @@ def create_app() -> FastAPI:
     app.include_router(media_router, prefix="/api/v1")
     app.include_router(kpi_router, prefix="/api/v1")
     app.include_router(accounting_export_router, prefix="/api/v1")
+    app.include_router(ocr_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
 
     return app

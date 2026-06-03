@@ -8,6 +8,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Enum,
     Index,
@@ -91,6 +92,19 @@ class Document(Base):
         nullable=False,
         default=DocumentStatus.active,
         server_default="active",
+    )
+
+    # Populated by the OCR pipeline (M11)
+    extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Archive lifecycle
+    archived: Mapped[bool] = mapped_column(
+        default=False,
+        server_default="false",
+        nullable=False,
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     __table_args__ = (

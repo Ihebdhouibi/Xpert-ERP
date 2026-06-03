@@ -1,58 +1,55 @@
-import psycopg2
+import asyncio
+import asyncpg
 from app.modules.auth.service import hash_password
 
-conn = None
-cursor = None
+async def seed() -> None:
+    conn: asyncpg.Connection | None = None
+    try:
+        conn = await asyncpg.connect(
+            host='127.0.0.1',
+            port=5433,
+            database='xpert_erp',
+            user='xpert',
+            password='xpert_dev_password',
+        )
 
-try:
-    conn = psycopg2.connect(
-        host='localhost',
-        database='xpert_erp',
-        user='xpert',
-        password='rootadmin'
-    )
-    cursor = conn.cursor()
+        # Get admin role ID
+        admin_role_id = await conn.fetchval("SELECT id FROM role WHERE code='admin' LIMIT 1")
+        if not admin_role_id:
+            print('ERROR: admin role not found')
+            return
 
-    # Get admin role ID
-    cursor.execute("SELECT id FROM role WHERE code='admin' LIMIT 1")
-    result = cursor.fetchone()
-    if not result:
-        print('ERROR: admin role not found')
-        exit(1)
-    admin_role_id = result[0]
+        # Delete existing admin@gmail.com user
+        await conn.execute("DELETE FROM app_user WHERE email = 'admin@gmail.com'")
 
-    # Delete existing admin@gmail.com user
-    cursor.execute("DELETE FROM app_user WHERE email = 'admin@gmail.com'")
+        # Insert new admin user
+        password_hash = hash_password('Test1234!')
+        admin_user_id = await conn.fetchval(
+            """
+            INSERT INTO app_user (garage_id, email, full_name, password_hash, status)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            1, 'admin@gmail.com', 'Admin User', password_hash, 'active',
+        )
 
-    # Insert new admin user
-    password_hash = hash_password('Test1234!')
-    cursor.execute(
-        """
-        INSERT INTO app_user (garage_id, email, full_name, password_hash, status)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id
-        """,
-        (1, 'admin@gmail.com', 'Admin User', password_hash, 'active')
-    )
-    admin_user_id = cursor.fetchone()[0]
+        # Assign admin role
+        await conn.execute(
+            "INSERT INTO user_role (user_id, role_id) VALUES ($1, $2)",
+            admin_user_id, admin_role_id,
+        )
 
-    # Assign admin role
-    cursor.execute(
-        "INSERT INTO user_role (user_id, role_id) VALUES (%s, %s)",
-        (admin_user_id, admin_role_id)
-    )
+        print('✓ Admin user created: admin@gmail.com / Test1234!')
 
-    conn.commit()
-    print('✓ Admin user created: admin@gmail.com / Test1234!')
+    except Exception as e:
+        print(f'ERROR: {e}')
+        import traceback
+        traceback.print_exc()
+    finally:
+        if conn:
+            await conn.close()
 
-except Exception as e:
-    print(f'ERROR: {e}')
-    import traceback
-    traceback.print_exc()
-    if conn:
-        conn.rollback()
-finally:
-    if cursor:
-        cursor.close()
-    if conn:
-        conn.close()
+
+if __name__ == '__main__':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(seed())

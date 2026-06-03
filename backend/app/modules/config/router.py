@@ -9,7 +9,7 @@ garage_id query parameter to manage per-garage overrides.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +93,7 @@ async def upsert_setting(
 @router.delete(
     "/{key}",
     status_code=204,
+    response_class=Response,
     dependencies=[require_permission("config.write")],
 )
 async def delete_setting(
@@ -100,7 +101,8 @@ async def delete_setting(
     user: AuthUser,
     garage_id: int = Query(0),
     svc: SettingsService = Depends(_svc),
-) -> None:
+) -> Response:
     deleted = await svc.delete_setting(key=key, garage_id=garage_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found for garage_id={garage_id}")
+    return Response(status_code=204)
