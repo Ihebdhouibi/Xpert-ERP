@@ -239,7 +239,12 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           },
         }}
       >
-        {navSections.map((section, si) => (
+        {navSections.map((section, si) => {
+          const hasVisible = section.items.some(
+            item => !item.permission || user?.permissions.includes(item.permission)
+          )
+          if (!hasVisible) return null
+          return (
           <Box key={si} sx={{ mb: 0.5 }}>
             {!collapsed && (
               <Typography
@@ -277,7 +282,8 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               ))}
             </List>
           </Box>
-        ))}
+          )
+        })}
       </Box>
 
       {/* User profile footer */}
