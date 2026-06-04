@@ -513,7 +513,11 @@ async def list_photos(
 
     items: list[ROPhotoSummary] = []
     for p in photos:
-        url = await generate_presigned_url(settings.s3_bucket_media, p.storage_key)
+        url = await generate_presigned_url(
+            bucket=settings.s3_bucket_media,
+            key=p.storage_key,
+            expiry_seconds=3600,
+        )
         summary = ROPhotoSummary.model_validate(p)
         summary.url = url
         items.append(summary)

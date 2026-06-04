@@ -37,7 +37,21 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
         )
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - start) * 1000, 1)
+            logger.error(
+                "[UNHANDLED] request_error",
+                method=request.method,
+                path=request.url.path,
+                duration_ms=duration_ms,
+                request_id=request_id,
+                exc_type=type(exc).__name__,
+                exc=str(exc),
+            )
+            raise
+
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
 
         response.headers["X-Request-ID"] = request_id
