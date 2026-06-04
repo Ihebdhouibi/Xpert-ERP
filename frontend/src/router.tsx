@@ -10,6 +10,7 @@ import { CustomerDetailPage } from './pages/customers/CustomerDetailPage'
 import { RepairOrdersListPage } from './pages/repair-orders/RepairOrdersListPage'
 import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePage'
 import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
+import { RepairOrderEditPage } from './pages/repair-orders/RepairOrderEditPage'
 import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
 import { TabletViewPage } from './pages/tablet/TabletViewPage'
 import { PartsPage } from './pages/parts/PartsPage'
@@ -82,6 +83,7 @@ export const router = createBrowserRouter(
       { path: 'repair-orders', element: <RepairOrdersListPage /> },
       { path: 'repair-orders/new', element: <RepairOrderCreatePage /> },
       { path: 'repair-orders/:publicId', element: <RepairOrderDetailPage /> },
+      { path: 'repair-orders/:publicId/edit', element: <RepairOrderEditPage /> },
 
       // Workshop
       { path: 'workshop', element: <WorkshopKanbanPage /> },
