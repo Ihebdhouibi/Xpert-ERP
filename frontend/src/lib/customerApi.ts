@@ -118,6 +118,11 @@ export const customerApi = {
     return data
   },
 
+  getByIntId: async (intId: number): Promise<CustomerSummary> => {
+    const { data } = await apiClient.get<CustomerSummary>(`/customers/by-int-id/${intId}`)
+    return data
+  },
+
   create: async (input: CustomerCreateInput): Promise<CustomerDetail> => {
     const { data } = await apiClient.post<CustomerDetail>('/customers', input)
     return data

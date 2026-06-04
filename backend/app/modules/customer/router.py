@@ -173,6 +173,23 @@ async def list_customers(
 
 
 @router.get(
+    "/by-int-id/{int_id}",
+    response_model=CustomerSummary,
+    dependencies=[require_permission("customer.read")],
+    summary="Resolve an internal integer customer ID to a summary (used by cross-module FKs)",
+)
+async def get_customer_by_int_id(
+    int_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerSummary:
+    c = await repo.get_by_id(db, user.garage_id, int_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    return _to_summary(c)
+
+
+@router.get(
     "/{public_id}",
     response_model=CustomerDetail,
     dependencies=[require_permission("customer.read")],

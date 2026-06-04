@@ -8,6 +8,7 @@ import {
   Chip,
   Divider,
   Grid,
+  Link,
   Stack,
   Typography,
 } from '@mui/material'
@@ -15,9 +16,11 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
 import { vehiclesApi, FUEL_TYPE_LABELS } from '../../lib/vehiclesApi'
+import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
@@ -66,6 +69,12 @@ export function VehicleDetailPage() {
     enabled: !!id,
   })
 
+  const { data: owner } = useQuery({
+    queryKey: ['customer-by-int-id', history?.vehicle.customer_id],
+    queryFn: () => customerApi.getByIntId(history!.vehicle.customer_id!),
+    enabled: !!history?.vehicle.customer_id,
+  })
+
   if (isLoading) return <LoadingScreen />
   if (!history) return null
 
@@ -85,7 +94,12 @@ export function VehicleDetailPage() {
             <Button
               variant="outlined"
               startIcon={<BuildRoundedIcon />}
-              onClick={() => navigate(`/repair-orders/new`)}
+              onClick={() => {
+                const params = new URLSearchParams()
+                params.set('vehicleId', String(v.id))
+                if (v.customer_id) params.set('customerId', String(v.customer_id))
+                navigate(`/repair-orders/new?${params.toString()}`)
+              }}
             >
               Nouvel OT
             </Button>
@@ -277,6 +291,41 @@ export function VehicleDetailPage() {
                 </Stack>
               </SectionCard>
             )}
+
+            {/* Owner */}
+            <SectionCard
+              title="Propriétaire"
+              icon={<PersonRoundedIcon sx={{ fontSize: 20 }} />}
+            >
+              {owner ? (
+                <Stack spacing={0.5}>
+                  <Link
+                    href={`/customers/${owner.id}`}
+                    underline="hover"
+                    variant="body2"
+                    fontWeight={700}
+                    color="primary"
+                  >
+                    {owner.full_name}
+                    {owner.company_name && (
+                      <Typography component="span" variant="caption" color="text.secondary" ml={0.5}>
+                        ({owner.company_name})
+                      </Typography>
+                    )}
+                  </Link>
+                  {owner.phone_e164 && (
+                    <Typography variant="caption" color="text.secondary">{owner.phone_e164}</Typography>
+                  )}
+                  {owner.email && (
+                    <Typography variant="caption" color="text.secondary">{owner.email}</Typography>
+                  )}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary" py={1}>
+                  Aucun propriétaire assigné.
+                </Typography>
+              )}
+            </SectionCard>
 
             {/* Repair orders */}
             <SectionCard
