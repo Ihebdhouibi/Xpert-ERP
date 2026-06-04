@@ -183,6 +183,7 @@ async def create_customer(
     Returns a `Customer` on success (caller must commit) or a `DuplicateMatch`
     that the router translates into a 409 merge-prompt response.
     """
+    logger.info("create_customer_start", garage_id=garage_id)
     duplicate = await _check_duplicate(db, garage_id, payload)
     if duplicate is not None:
         return duplicate
@@ -220,6 +221,7 @@ async def create_customer(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("create_customer_success", customer_id=new_customer.id, garage_id=garage_id)
     return new_customer
 
 
@@ -260,6 +262,7 @@ async def update_customer(
         FiscalIdConflictError: when the new fiscal_id is taken by another live
             customer in the same garage.
     """
+    logger.info("update_customer_start", public_id=public_id, garage_id=garage_id)
     target = await repo.get_by_public_id(
         db, garage_id, public_id, with_contacts=True
     )
@@ -315,6 +318,7 @@ async def update_customer(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("update_customer_success", customer_id=target.id, garage_id=garage_id)
     return target
 
 
@@ -333,6 +337,7 @@ async def soft_delete_customer(
     request_id: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> Customer:
+    logger.info("delete_customer_start", public_id=public_id, garage_id=garage_id)
     # include_deleted so the idempotent re-delete path can short-circuit.
     target = await repo.get_by_public_id(
         db, garage_id, public_id, include_deleted=True
@@ -361,6 +366,7 @@ async def soft_delete_customer(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("delete_customer_success", customer_id=target.id, garage_id=garage_id)
     return target
 
 
@@ -378,6 +384,7 @@ async def restore_customer(
     Re-checks fiscal_id uniqueness against live rows before restoring, since
     the partial unique index only constrains live rows.
     """
+    logger.info("restore_customer_start", public_id=public_id, garage_id=garage_id)
     target = await repo.get_by_public_id(
         db, garage_id, public_id, include_deleted=True
     )
@@ -409,6 +416,7 @@ async def restore_customer(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("restore_customer_success", customer_id=target.id, garage_id=garage_id)
     return target
 
 
@@ -427,6 +435,7 @@ async def update_credit_limit(
     request_id: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> Customer:
+    logger.info("update_credit_limit_start", public_id=public_id, garage_id=garage_id)
     target = await repo.get_by_public_id(db, garage_id, public_id)
     if target is None:
         raise CustomerNotFoundError(public_id)
@@ -451,6 +460,7 @@ async def update_credit_limit(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("update_credit_limit_success", customer_id=target.id, garage_id=garage_id)
     return target
 
 
@@ -474,6 +484,7 @@ async def add_balance_event(
     Row-locks the customer to keep the ledger and outstanding column
     consistent under concurrent posts.
     """
+    logger.info("add_balance_event_start", public_id=public_id, garage_id=garage_id)
     # SELECT ... FOR UPDATE to serialize concurrent balance adjustments.
     result = await db.execute(
         select(Customer)
@@ -521,4 +532,5 @@ async def add_balance_event(
         request_id=request_id,
         ip_address=ip_address,
     )
+    logger.info("add_balance_event_success", customer_id=target.id, event_id=event.id, garage_id=garage_id)
     return event

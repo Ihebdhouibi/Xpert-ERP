@@ -299,23 +299,4 @@ function CommandPalette({ open, onClose }: CommandPaletteProps) {
   )
 }
 
-// ── Global hook — mounts one palette for the whole app ───────────────────────
-
-export function useCommandPalette() {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setOpen(v => !v)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
-
-  const palette = <CommandPalette open={open} onClose={() => setOpen(false)} />
-
-  return { open, setOpen, palette }
-}
+export default CommandPalette

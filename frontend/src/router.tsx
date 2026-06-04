@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './pages/auth/LoginPage'
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CustomersListPage } from './pages/customers/CustomersListPage'
 import { CustomerCreatePage } from './pages/customers/CustomerCreatePage'
@@ -10,6 +12,7 @@ import { CustomerDetailPage } from './pages/customers/CustomerDetailPage'
 import { RepairOrdersListPage } from './pages/repair-orders/RepairOrdersListPage'
 import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePage'
 import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
+import { RepairOrderEditPage } from './pages/repair-orders/RepairOrderEditPage'
 import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
 import { TabletViewPage } from './pages/tablet/TabletViewPage'
 import { PartsPage } from './pages/parts/PartsPage'
@@ -26,6 +29,7 @@ import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 import { VehiclesPage } from './pages/vehicles/VehiclesPage'
 import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage'
 import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
+import { VehicleEditPage } from './pages/vehicles/VehicleEditPage'
 import { QuotationsPage } from './pages/quotations/QuotationsPage'
 import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
@@ -38,12 +42,23 @@ import { UsersPage } from './pages/admin/UsersPage'
 import { RolesPage } from './pages/admin/RolesPage'
 import { SettingsPage } from './pages/admin/SettingsPage'
 import { AuditLogsPage } from './pages/admin/AuditLogsPage'
+import { DocumentsPage } from './pages/documents/DocumentsPage'
+import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
   // Public routes — no shell
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/approve/:token',
@@ -81,6 +96,7 @@ export const router = createBrowserRouter([
       { path: 'repair-orders', element: <RepairOrdersListPage /> },
       { path: 'repair-orders/new', element: <RepairOrderCreatePage /> },
       { path: 'repair-orders/:publicId', element: <RepairOrderDetailPage /> },
+      { path: 'repair-orders/:publicId/edit', element: <RepairOrderEditPage /> },
 
       // Workshop
       { path: 'workshop', element: <WorkshopKanbanPage /> },
@@ -106,6 +122,7 @@ export const router = createBrowserRouter([
       { path: 'vehicles', element: <VehiclesPage /> },
       { path: 'vehicles/new', element: <VehicleCreatePage /> },
       { path: 'vehicles/:id', element: <VehicleDetailPage /> },
+      { path: 'vehicles/:id/edit', element: <VehicleEditPage /> },
 
       // Billing — quotations & invoices
       { path: 'quotations', element: <QuotationsPage /> },
@@ -128,8 +145,13 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <SettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
 
+      // Documents & OCR
+      { path: 'documents', element: <DocumentsPage /> },
+      { path: 'ocr/:extractionId', element: <OcrReviewPage /> },
+
       // Catch-all
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
-])
+  ]
+)

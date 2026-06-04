@@ -15,8 +15,10 @@ from app.modules.notification.repository import TemplateRepository
 from app.modules.notification.service import render_preview
 from app.modules.notification.templates_seed import SAMPLE_CONTEXTS, TRIGGER_CATALOG
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["notifications"])
+logger = get_logger("notification.router")
 
 
 # ---------------------------------------------------------------------------

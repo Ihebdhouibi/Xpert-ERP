@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Optional
 
+
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import PyJWTError as JWTError
@@ -68,13 +69,14 @@ async def _resolve_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return CurrentUser(
+    user = CurrentUser(
         public_id=payload["sub"],
         user_id=payload.get("uid", 0),
         garage_id=payload["gid"],
         roles=payload.get("roles", []),
         permissions=payload.get("perms", []),
     )
+    return user
 
 
 # Convenience type alias for injection

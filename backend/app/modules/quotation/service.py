@@ -109,6 +109,7 @@ async def create_quotation(
     garage_id: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("create_quotation_start", garage_id=garage_id, user_id=user_id)
     quotation = Quotation(
         public_id=str(uuid.uuid4()),
         garage_id=garage_id,
@@ -174,6 +175,7 @@ async def update_quotation(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("update_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -198,12 +200,14 @@ async def update_quotation(
     await repo.save(db, quotation)
     await db.commit()
     fresh = await repo.get_by_id(db, quotation.id, garage_id)
+    logger.info("update_quotation_success", quotation_id=quotation_id, garage_id=garage_id)
     return QuotationOut.model_validate(fresh)
 
 
 async def delete_quotation(
     db: AsyncSession, quotation_id: int, garage_id: int, *, user_id: int
 ) -> None:
+    logger.info("delete_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -211,6 +215,7 @@ async def delete_quotation(
         raise QuotationStateError("Only draft or rejected quotations can be deleted.")
     await repo.soft_delete(db, quotation, deleted_by=user_id)
     await db.commit()
+    logger.info("delete_quotation_success", quotation_id=quotation_id, garage_id=garage_id)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +246,7 @@ async def add_line(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("add_line_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -268,6 +274,7 @@ async def add_line(
     await repo.save(db, quotation)
     await db.commit()
     fresh = await repo.get_by_id(db, quotation.id, garage_id)
+    logger.info("add_line_success", quotation_id=quotation_id, garage_id=garage_id)
     return QuotationOut.model_validate(fresh)
 
 
@@ -281,6 +288,7 @@ async def update_line(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("update_line_start", quotation_id=quotation_id, line_id=line_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -314,6 +322,7 @@ async def update_line(
     await repo.save(db, quotation)
     await db.commit()
     fresh = await repo.get_by_id(db, quotation.id, garage_id)
+    logger.info("update_line_success", quotation_id=quotation_id, line_id=line_id, garage_id=garage_id)
     return QuotationOut.model_validate(fresh)
 
 
@@ -326,6 +335,7 @@ async def remove_line(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("remove_line_start", quotation_id=quotation_id, line_id=line_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -346,6 +356,7 @@ async def remove_line(
     await repo.save(db, quotation)
     await db.commit()
     fresh = await repo.get_by_id(db, quotation.id, garage_id)
+    logger.info("remove_line_success", quotation_id=quotation_id, line_id=line_id, garage_id=garage_id)
     return QuotationOut.model_validate(fresh)
 
 
@@ -361,6 +372,7 @@ async def send_quotation(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("send_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -390,6 +402,7 @@ async def approve_quotation(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("approve_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
@@ -416,6 +429,7 @@ async def reject_quotation(
     expected_version: int,
     user_id: int,
 ) -> QuotationOut:
+    logger.info("reject_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)

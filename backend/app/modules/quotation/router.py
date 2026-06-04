@@ -25,8 +25,10 @@ from app.modules.quotation.service import (
     QuotationStateError,
     QuotationVersionError,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/quotations", tags=["quotations"])
+logger = get_logger("quotation.router")
 
 _NOT_FOUND = "Quotation not found."
 _LINE_NOT_FOUND = "Quotation line not found."

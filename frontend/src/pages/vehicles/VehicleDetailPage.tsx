@@ -1,26 +1,38 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
+  Link,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
+import NumbersRoundedIcon from '@mui/icons-material/NumbersRounded'
 import { vehiclesApi, FUEL_TYPE_LABELS } from '../../lib/vehiclesApi'
+import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
+import { useToast } from '../../contexts/ToastContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -59,11 +71,39 @@ function SectionCard({ title, icon, children }: {
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const hasPermission = (p: string) => user?.permissions.includes(p) ?? false
+  const { success: toastSuccess, error: toastError } = useToast()
+
+  const [reRegOpen, setReRegOpen] = useState(false)
+  const [newReg, setNewReg] = useState('')
+  const [reRegNote, setReRegNote] = useState('')
+
+  const reRegMutation = useMutation({
+    mutationFn: (vars: { id: number; registration: string; note: string }) =>
+      vehiclesApi.reRegister(vars.id, { new_registration: vars.registration, note: vars.note || null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vehicle-history', id] })
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      toastSuccess('Immatriculation mise à jour.')
+      setReRegOpen(false)
+      setNewReg('')
+      setReRegNote('')
+    },
+    onError: () => toastError('Erreur lors du changement d\'immatriculation.'),
+  })
 
   const { data: history, isLoading } = useQuery({
     queryKey: ['vehicle-history', id],
     queryFn: () => vehiclesApi.getHistory(Number(id)),
     enabled: !!id,
+  })
+
+  const { data: owner } = useQuery({
+    queryKey: ['customer-by-int-id', history?.vehicle.customer_id],
+    queryFn: () => customerApi.getByIntId(history!.vehicle.customer_id!),
+    enabled: !!history?.vehicle.customer_id,
   })
 
   if (isLoading) return <LoadingScreen />
@@ -82,10 +122,24 @@ export function VehicleDetailPage() {
         ]}
         actions={
           <Stack direction="row" spacing={1}>
+            {hasPermission('vehicle.update') && (
+              <Button
+                variant="outlined"
+                startIcon={<NumbersRoundedIcon />}
+                onClick={() => { setNewReg(v.registration ?? ''); setReRegOpen(true) }}
+              >
+                Réimmatriculer
+              </Button>
+            )}
             <Button
               variant="outlined"
               startIcon={<BuildRoundedIcon />}
-              onClick={() => navigate(`/repair-orders/new`)}
+              onClick={() => {
+                const params = new URLSearchParams()
+                params.set('vehicleId', String(v.id))
+                if (v.customer_id) params.set('customerId', String(v.customer_id))
+                navigate(`/repair-orders/new?${params.toString()}`)
+              }}
             >
               Nouvel OT
             </Button>
@@ -278,6 +332,41 @@ export function VehicleDetailPage() {
               </SectionCard>
             )}
 
+            {/* Owner */}
+            <SectionCard
+              title="Propriétaire"
+              icon={<PersonRoundedIcon sx={{ fontSize: 20 }} />}
+            >
+              {owner ? (
+                <Stack spacing={0.5}>
+                  <Link
+                    href={`/customers/${owner.id}`}
+                    underline="hover"
+                    variant="body2"
+                    fontWeight={700}
+                    color="primary"
+                  >
+                    {owner.full_name}
+                    {owner.company_name && (
+                      <Typography component="span" variant="caption" color="text.secondary" ml={0.5}>
+                        ({owner.company_name})
+                      </Typography>
+                    )}
+                  </Link>
+                  {owner.phone_e164 && (
+                    <Typography variant="caption" color="text.secondary">{owner.phone_e164}</Typography>
+                  )}
+                  {owner.email && (
+                    <Typography variant="caption" color="text.secondary">{owner.email}</Typography>
+                  )}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary" py={1}>
+                  Aucun propriétaire assigné.
+                </Typography>
+              )}
+            </SectionCard>
+
             {/* Repair orders */}
             <SectionCard
               title="Ordres de réparation"
@@ -303,6 +392,46 @@ export function VehicleDetailPage() {
           </Stack>
         </Grid>
       </Grid>
+
+      {/* ── Re-registration dialog ────────────────────────────────────────── */}
+      <Dialog open={reRegOpen} onClose={() => setReRegOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Changer d'immatriculation</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            L'ancienne immatriculation sera conservée comme alias.
+          </Typography>
+          <TextField
+            label="Nouvelle immatriculation"
+            value={newReg}
+            onChange={e => setNewReg(e.target.value.toUpperCase())}
+            fullWidth
+            autoFocus
+            inputProps={{ style: { fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.1em' } }}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            label="Note (optionnel)"
+            value={reRegNote}
+            onChange={e => setReRegNote(e.target.value)}
+            fullWidth
+            multiline
+            rows={2}
+            placeholder="Ex. : changement suite à vente, correction de plaque…"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setReRegOpen(false)} disabled={reRegMutation.isPending}>
+            Annuler
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!newReg.trim() || newReg.trim() === v.registration || reRegMutation.isPending}
+            onClick={() => reRegMutation.mutate({ id: v.id, registration: newReg.trim(), note: reRegNote })}
+          >
+            {reRegMutation.isPending ? 'Enregistrement…' : 'Confirmer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

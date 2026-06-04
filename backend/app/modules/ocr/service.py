@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,11 +22,6 @@ from app.modules.documents import storage as doc_storage
 from app.modules.documents.models import DocumentCategory, OwnerEntityType
 from app.modules.ocr import repository as ocr_repo
 from app.modules.ocr.engine import PaddleOcrEngine
-from app.modules.ocr.extractors import (
-    FieldMap,
-    extract_carte_grise,
-    extract_national_id,
-)
 from app.modules.ocr.models import OcrExtraction, OcrStatus
 from app.modules.vehicles import repository as vehicle_repo
 
@@ -37,44 +32,6 @@ OCR_TRIGGER_CATEGORIES = {
     DocumentCategory.registration_card,
     DocumentCategory.id_doc,
 }
-
-
-# ---------------------------------------------------------------------------
-# Per-field confidence thresholds
-# ---------------------------------------------------------------------------
-
-def _threshold(field_name: str) -> float:
-    cfg = get_settings()
-    thresholds = {
-        "immatriculation": cfg.cfg_ocr_confidence_threshold_immatriculation,
-        "vin": cfg.cfg_ocr_confidence_threshold_vin,
-        "date_mise_en_circulation": cfg.cfg_ocr_confidence_threshold_date,
-        "date_naissance": cfg.cfg_ocr_confidence_threshold_date,
-        "nom": cfg.cfg_ocr_confidence_threshold_nom,
-        "prenom": cfg.cfg_ocr_confidence_threshold_nom,
-        "numero_cin": cfg.cfg_ocr_confidence_threshold_cin,
-    }
-    return thresholds.get(field_name, cfg.cfg_ocr_confidence_threshold_default)
-
-
-def _evaluate_fields(fields: FieldMap) -> tuple[dict[str, Any], dict[str, float], bool]:
-    """
-    Returns:
-        structured_fields: {field: value}
-        confidence_scores: {field: confidence}
-        needs_review: True if any field is below its threshold
-    """
-    structured: dict[str, Any] = {}
-    scores: dict[str, float] = {}
-    needs_review = False
-
-    for field, (value, confidence) in fields.items():
-        structured[field] = value
-        scores[field] = confidence
-        if confidence < _threshold(field):
-            needs_review = True
-
-    return structured, scores, needs_review
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +73,16 @@ async def process_ocr_job(db: AsyncSession, *, extraction_id: int) -> OcrExtract
         engine = PaddleOcrEngine.get()
         raw_result = await engine.run_ocr(image_bytes)
 
-        # Choose extractor based on document category
-        if document.category == DocumentCategory.registration_card:
-            fields = extract_carte_grise(raw_result)
-        elif document.category == DocumentCategory.id_doc:
-            fields = extract_national_id(raw_result)
-        else:
-            fields = {}
+        # Store every recognised line as a numbered field so the reviewer
+        # can see the full OCR output without any regex matching.
+        structured: dict[str, Any] = {}
+        scores: dict[str, float] = {}
+        for i, line in enumerate(raw_result.lines):
+            key = f"ligne_{i + 1}"
+            structured[key] = line.text
+            scores[key] = line.confidence
 
-        structured, scores, needs_review = _evaluate_fields(fields)
-        final_status = OcrStatus.needs_review if needs_review else OcrStatus.completed
+        final_status = OcrStatus.needs_review if structured else OcrStatus.completed
 
         await ocr_repo.update_status(
             db,
@@ -140,7 +97,7 @@ async def process_ocr_job(db: AsyncSession, *, extraction_id: int) -> OcrExtract
             "ocr_processed",
             extraction_id=extraction_id,
             status=final_status,
-            field_count=len(structured),
+            line_count=len(structured),
         )
 
     except Exception as exc:

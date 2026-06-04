@@ -13,8 +13,10 @@ from app.modules.accounting_export.schemas import (
     AccountingExportPreviewResponse,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/accounting-exports", tags=["accounting-exports"])
+logger = get_logger("accounting_export.router")
 
 
 @router.get(

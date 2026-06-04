@@ -19,8 +19,10 @@ from app.modules.kpi.schemas import (
     KpiValueOut,
 )
 from app.modules.kpi.service import compute_analytics, get_live_kpis
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/kpi", tags=["kpi"])
+logger = get_logger("kpi.router")
 
 
 @router.get(

@@ -13,7 +13,6 @@ Counts are stored as integers cast to Decimal.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -22,9 +21,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.core.redis import get_redis
 
-logger = logging.getLogger(__name__)
+logger = get_logger("kpi.service")
 
 # KPI catalog — codes used as kpi_code in snapshots
 KPI_CODES = [
@@ -436,6 +436,7 @@ async def compute_all_kpis(
     connections; instead we run them sequentially but each is a single SQL
     round-trip, so total time stays well under 5s at expected data volumes.
     """
+    logger.info("compute_all_kpis_start", garage_id=garage_id)
     settings = get_settings()
     capacity = getattr(settings, "cfg_kpi_workshop_capacity", 10)
 
@@ -464,6 +465,7 @@ async def get_live_kpis(db: AsyncSession, garage_id: int) -> dict[str, Any]:
     Return live KPIs, served from Redis cache when still fresh.
     On cache miss, recomputes from DB and repopulates the cache.
     """
+    logger.info("get_live_kpis_start", garage_id=garage_id)
     settings = get_settings()
     ttl = settings.cfg_kpi_refresh_interval_seconds
     cache_key = f"{_CACHE_KEY_PREFIX}{garage_id}"

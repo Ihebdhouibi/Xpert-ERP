@@ -1,13 +1,10 @@
 /**
- * OCR Review Page — side-by-side document preview + field confirmation.
+ * OCR Review Page — document preview + full raw OCR output.
  *
  * Route: /ocr/:extractionId
  *
- * Shows:
- *   - Signed-URL image/PDF preview on the left
- *   - Extracted fields table on the right with per-field confidence bars
- *   - Editable field values
- *   - "Valider" (confirm) and "Rejeter" (reject) actions
+ * Shows every recognised text line from PaddleOCR with its confidence score.
+ * The operator can reject the extraction or validate it (confirm all lines as-is).
  */
 import {
   Alert,
@@ -23,7 +20,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -31,28 +27,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { documentsApi } from '../lib/documentsApi'
-import { ocrApi, OcrExtractionOut } from '../lib/ocrApi'
-
-// ---------------------------------------------------------------------------
-// Field label localisation (FR)
-// ---------------------------------------------------------------------------
-const FIELD_LABELS: Record<string, string> = {
-  immatriculation: 'Immatriculation',
-  vin: 'VIN',
-  marque: 'Marque',
-  modele: 'Modèle',
-  date_mise_en_circulation: 'Date 1re mise en circulation',
-  proprietaire: 'Propriétaire',
-  nom: 'Nom',
-  prenom: 'Prénom',
-  date_naissance: 'Date de naissance',
-  numero_cin: 'N° CIN',
-}
-
-function label(field: string): string {
-  return FIELD_LABELS[field] ?? field
-}
+import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
 
 // ---------------------------------------------------------------------------
 // Confidence bar — green ≥ 75 %, orange 50-74 %, red < 50 %
@@ -85,8 +60,6 @@ export function OcrReviewPage() {
   const navigate = useNavigate()
 
   const [extraction, setExtraction] = useState<OcrExtractionOut | null>(null)
-  const [signedUrl, setSignedUrl] = useState<string | null>(null)
-  const [editedFields, setEditedFields] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,23 +77,12 @@ export function OcrReviewPage() {
         const data = await ocrApi.get(extractionId!)
         if (cancelled) return
         setExtraction(data)
-        setEditedFields(data.structured_fields ?? {})
 
         if (data.status === 'pending' || data.status === 'processing') {
           pollTimer = setTimeout(load, 2000)
-        } else {
-          // Load signed URL for preview using document_id
-          try {
-            // The GET /documents/{id}/signed-url endpoint expects a UUID;
-            // we don't have it here so we skip the preview if unavailable
-            // In a real app, the extraction row would carry the document public_id.
-            setSignedUrl(null)
-          } catch {
-            /* preview optional */
-          }
         }
-      } catch (err: unknown) {
-        if (!cancelled) setError('Impossible de charger l'extraction OCR.')
+      } catch {
+        if (!cancelled) setError("Impossible de charger l'extraction OCR.")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -133,22 +95,19 @@ export function OcrReviewPage() {
     }
   }, [extractionId])
 
-  function handleFieldChange(field: string, value: string) {
-    setEditedFields((prev) => ({ ...prev, [field]: value }))
-  }
-
   async function handleConfirm() {
-    if (!extractionId) return
+    if (!extractionId || !extraction) return
     setSaving(true)
     setError(null)
     try {
+      // Confirm all lines as-is (structured_fields already holds the raw lines)
       const updated = await ocrApi.confirm(extractionId, {
-        confirmed_fields: editedFields,
+        confirmed_fields: extraction.structured_fields ?? {},
       })
       setExtraction(updated)
-      setSuccess('Champs confirmés avec succès.')
+      setSuccess('Extraction confirmée avec succès.')
     } catch {
-      setError('Échec de la confirmation. Veuillez réessayer.')
+      setError('Echec de la confirmation. Veuillez réessayer.')
     } finally {
       setSaving(false)
     }
@@ -188,12 +147,12 @@ export function OcrReviewPage() {
     extraction.status === 'pending' || extraction.status === 'processing'
   const isReviewed =
     extraction.status === 'completed' && extraction.reviewed_at !== null
-  const fields = Object.keys(editedFields)
+  const lines = Object.entries(extraction.structured_fields ?? {})
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
-        Vérification OCR
+        Verification OCR
       </Typography>
 
       {error && (
@@ -207,74 +166,89 @@ export function OcrReviewPage() {
         </Alert>
       )}
 
-      {/* Status banner while processing */}
       {isPending && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Traitement OCR en cours…
+          Traitement OCR en cours...
           <CircularProgress size={16} sx={{ ml: 1 }} />
         </Alert>
       )}
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-        {/* ---- Left: document preview ---- */}
-        <Paper sx={{ flex: 1, p: 2, minHeight: 400 }}>
+        {/* ---- Left: document info ---- */}
+        <Paper sx={{ flex: '0 0 280px', p: 2 }}>
           <Typography variant="subtitle1" gutterBottom>
-            Document original
+            Document
           </Typography>
-          {signedUrl ? (
-            <Box
-              component="iframe"
-              src={signedUrl}
-              sx={{ width: '100%', height: 500, border: 'none' }}
-              title="Document preview"
-            />
-          ) : (
-            <Alert severity="info" variant="outlined">
-              Aperçu non disponible — cliquez sur &laquo;&nbsp;Documents&nbsp;&raquo; pour télécharger le fichier.
-            </Alert>
+          <Typography variant="body2" color="text.secondary">
+            ID document : {extraction.document_id}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Moteur : {extraction.engine_version}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Statut : {extraction.status}
+          </Typography>
+          {extraction.processed_at && (
+            <Typography variant="body2" color="text.secondary">
+              Traite le : {new Date(extraction.processed_at).toLocaleString('fr-FR')}
+            </Typography>
           )}
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Texte brut
+            </Typography>
+            <Box
+              component="pre"
+              sx={{
+                mt: 0.5,
+                p: 1,
+                bgcolor: 'grey.100',
+                borderRadius: 1,
+                fontSize: '0.7rem',
+                maxHeight: 300,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {extraction.raw_text || '—'}
+            </Box>
+          </Box>
         </Paper>
 
-        {/* ---- Right: extracted fields ---- */}
+        {/* ---- Right: OCR lines table ---- */}
         <Paper sx={{ flex: 1, p: 2 }}>
           <Typography variant="subtitle1" gutterBottom>
-            Champs extraits
+            Lignes extraites ({lines.length})
           </Typography>
 
-          {fields.length === 0 && !isPending && (
+          {lines.length === 0 && !isPending && (
             <Alert severity="warning">
-              Aucun champ extrait. Vérifiez la qualité du document.
+              Aucune ligne extraite. Verifiez la qualite du document.
             </Alert>
           )}
 
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Champ</TableCell>
-                <TableCell>Valeur</TableCell>
-                <TableCell>Confiance</TableCell>
+                <TableCell sx={{ width: 50 }}>#</TableCell>
+                <TableCell>Texte reconnu</TableCell>
+                <TableCell sx={{ width: 140 }}>Confiance</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {fields.map((field) => {
-                const conf = extraction.confidence_scores?.[field] ?? 0
-                const belowThreshold = conf < 0.75
+              {lines.map(([key, value]) => {
+                const conf = extraction.confidence_scores?.[key] ?? 0
+                const lineNum = key.replace('ligne_', '')
                 return (
-                  <TableRow
-                    key={field}
-                    sx={{ bgcolor: belowThreshold ? 'error.lighter' : undefined }}
-                  >
-                    <TableCell>{label(field)}</TableCell>
+                  <TableRow key={key} hover>
                     <TableCell>
-                      <TextField
-                        size="small"
-                        value={editedFields[field] ?? ''}
-                        onChange={(e) => handleFieldChange(field, e.target.value)}
-                        disabled={isReviewed || saving}
-                        error={belowThreshold}
-                        helperText={belowThreshold ? 'Vérifier' : undefined}
-                        sx={{ minWidth: 160 }}
-                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {lineNum}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{value as string}</Typography>
                     </TableCell>
                     <TableCell>
                       <ConfidenceBar value={conf} />
@@ -287,7 +261,6 @@ export function OcrReviewPage() {
 
           <Divider sx={{ my: 2 }} />
 
-          {/* Action buttons */}
           {!isReviewed && !isPending && (
             <Stack direction="row" spacing={2} justifyContent="flex-end">
               <Button
@@ -304,7 +277,7 @@ export function OcrReviewPage() {
                 color="primary"
                 startIcon={<CheckCircleOutlineIcon />}
                 onClick={handleConfirm}
-                disabled={saving || fields.length === 0}
+                disabled={saving || lines.length === 0}
               >
                 {saving ? <CircularProgress size={20} /> : 'Valider'}
               </Button>
@@ -313,7 +286,7 @@ export function OcrReviewPage() {
 
           {isReviewed && (
             <Alert severity="success">
-              Extraction validée le{' '}
+              Extraction validee le{' '}
               {new Date(extraction.reviewed_at!).toLocaleString('fr-FR')}.
             </Alert>
           )}

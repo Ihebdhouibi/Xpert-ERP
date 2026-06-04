@@ -39,6 +39,7 @@ import {
   STATUS_LABELS,
   type Supplier,
   type SupplierCreatePayload,
+  type SupplierUpdatePayload,
   type SupplierStatus,
 } from '../../lib/supplierApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
@@ -88,7 +89,7 @@ function SupplierFormDialog({ open, initial, onClose, onSaved }: SupplierFormDia
 
   const updateMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof buildPayload>) =>
-      supplierApi.update(initial!.id, payload),
+      supplierApi.update(initial!.id, payload as SupplierUpdatePayload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); onSaved() },
     onError: (err: any) => {
       if (err?.response?.data?.detail?.code === 'version_conflict') {
@@ -107,7 +108,7 @@ function SupplierFormDialog({ open, initial, onClose, onSaved }: SupplierFormDia
       address: address || undefined,
       payment_terms_days: paymentDays ? Number(paymentDays) : undefined,
       average_delivery_days: deliveryDays ? Number(deliveryDays) : undefined,
-      ...(isEdit ? { version: initial!.version, status } : {}),
+      ...(isEdit ? { version: initial!.version ?? 1, status } : {}),
     }
   }
 

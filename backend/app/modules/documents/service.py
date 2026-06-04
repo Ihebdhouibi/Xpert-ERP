@@ -142,6 +142,7 @@ async def get_signed_url(
     document_public_id: uuid.UUID,
     garage_id: int,
 ) -> SignedUrlResponse:
+    logger.info("get_signed_url_start", document_public_id=str(document_public_id), garage_id=garage_id)
     cfg = get_settings()
 
     doc: Document | None = await repo.get_by_public_id(
@@ -176,6 +177,7 @@ async def list_documents(
     limit: int = 50,
     offset: int = 0,
 ) -> DocumentListResponse:
+    logger.info("list_documents_start", garage_id=garage_id, category=str(category) if category else None, limit=limit)
     docs = await repo.list_documents(
         db,
         garage_id=garage_id,
@@ -201,6 +203,7 @@ async def delete_document(
     document_public_id: uuid.UUID,
     garage_id: int,
 ) -> None:
+    logger.info("delete_document_start", document_public_id=str(document_public_id), garage_id=garage_id)
     doc = await repo.soft_delete(db, public_id=document_public_id, garage_id=garage_id)
     if doc is None:
         raise DocumentNotFoundError(document_public_id)
@@ -213,6 +216,7 @@ async def get_document(
     document_public_id: uuid.UUID,
     garage_id: int,
 ) -> Document:
+    logger.info("get_document_start", document_public_id=str(document_public_id), garage_id=garage_id)
     doc = await repo.get_by_public_id(db, public_id=document_public_id, garage_id=garage_id)
     if doc is None:
         raise DocumentNotFoundError(document_public_id)

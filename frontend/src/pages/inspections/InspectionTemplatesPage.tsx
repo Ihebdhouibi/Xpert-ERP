@@ -249,7 +249,7 @@ export function InspectionTemplatesPage() {
       )}
 
       {isLoading ? (
-        <TableLoadingSkeleton rows={4} />
+        <TableLoadingSkeleton cols={5} rows={4} />
       ) : templates.length === 0 ? (
         <EmptyState
           title="Aucun modèle d'inspection"

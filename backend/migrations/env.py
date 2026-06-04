@@ -38,7 +38,11 @@ import app.modules.ocr.models  # noqa: F401, E402
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False is critical: without it, the default True
+    # causes Python to set logger.disabled=True on every logger that isn't listed
+    # in alembic.ini (i.e. all our "auth", "sales", "http" group loggers), which
+    # silences all application logging for the entire server run.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

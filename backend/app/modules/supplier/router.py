@@ -23,8 +23,10 @@ from app.modules.supplier.service import (
     get_part_price_comparison,
     update_supplier,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["suppliers"])
+logger = get_logger("supplier.router")
 
 
 # ---------------------------------------------------------------------------

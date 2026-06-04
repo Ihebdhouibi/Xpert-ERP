@@ -1,14 +1,15 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import axios from 'axios'
 import {
+  Autocomplete,
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  CircularProgress,
   Divider,
   Grid,
   InputAdornment,
@@ -22,24 +23,9 @@ import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import { repairOrderApi } from '../../lib/repairOrderApi'
+import { customerApi, type CustomerSummary } from '../../lib/customerApi'
+import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
-
-const schema = z.object({
-  customer_id: z.coerce.number().int().positive('Client requis'),
-  vehicle_id: z.coerce.number().int().positive().nullable().optional(),
-  description: z.string().min(1, 'Description requise'),
-  priority: z.string().max(20).nullable().optional(),
-  estimated_cost_euros: z.coerce.number().min(0).nullable().optional(),
-  estimated_cost_currency: z
-    .string()
-    .length(3)
-    .regex(/^[A-Z]{3}$/, 'Devise invalide (ex: EUR)')
-    .nullable()
-    .optional(),
-})
-
-type FormValues = z.infer<typeof schema>
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 const PRIORITY_LABELS: Record<string, string> = {
@@ -80,50 +66,149 @@ function SectionCard({
 
 export function RepairOrderCreatePage() {
   const navigate = useNavigate()
-  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const prefillVehicleId = searchParams.get('vehicleId') ? Number(searchParams.get('vehicleId')) : null
+  const prefillCustomerId = searchParams.get('customerId') ? Number(searchParams.get('customerId')) : null
 
-  const {
-    control,
-    handleSubmit,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      customer_id: undefined,
-      vehicle_id: null,
-      description: '',
-      priority: 'normal',
-      estimated_cost_euros: null,
-      estimated_cost_currency: 'EUR',
-    },
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Customer autocomplete state
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null)
+  const [customerInputValue, setCustomerInputValue] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
+  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Vehicle autocomplete state
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleOut | null>(null)
+  const [vehicleInputValue, setVehicleInputValue] = useState('')
+  const [vehicleSearch, setVehicleSearch] = useState('')
+  const [debouncedVehicleSearch, setDebouncedVehicleSearch] = useState('')
+  const vehicleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Form fields
+  const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState('normal')
+  const [estimatedMinor, setEstimatedMinor] = useState('')
+  const [estimatedCurrency, setEstimatedCurrency] = useState('EUR')
+
+  // Validation errors
+  const [fieldErrors, setFieldErrors] = useState<{ customer?: string; description?: string }>({})
+
+  // Debounce customer search
+  useEffect(() => {
+    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current)
+    customerDebounceRef.current = setTimeout(() => setDebouncedCustomerSearch(customerSearch), 300)
+    return () => { if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current) }
+  }, [customerSearch])
+
+  // Debounce vehicle search
+  useEffect(() => {
+    if (vehicleDebounceRef.current) clearTimeout(vehicleDebounceRef.current)
+    vehicleDebounceRef.current = setTimeout(() => setDebouncedVehicleSearch(vehicleSearch), 300)
+    return () => { if (vehicleDebounceRef.current) clearTimeout(vehicleDebounceRef.current) }
+  }, [vehicleSearch])
+
+  // Prefill: fetch vehicle from URL param
+  const { data: prefillVehicle } = useQuery({
+    queryKey: ['vehicle-prefill', prefillVehicleId],
+    queryFn: () => vehiclesApi.get(prefillVehicleId!),
+    enabled: !!prefillVehicleId,
+    staleTime: Infinity,
   })
 
-  const estimatedEuros = watch('estimated_cost_euros')
-  const estimatedCurrency = watch('estimated_cost_currency')
+  // Prefill: fetch customer from URL param
+  const { data: prefillCustomer } = useQuery({
+    queryKey: ['customer-prefill', prefillCustomerId],
+    queryFn: () => customerApi.getByIntId(prefillCustomerId!),
+    enabled: !!prefillCustomerId,
+    staleTime: Infinity,
+  })
 
-  const onSubmit = async (values: FormValues) => {
+  useEffect(() => {
+    if (prefillVehicle) {
+      setSelectedVehicle(prefillVehicle)
+      const label = [prefillVehicle.registration, `${prefillVehicle.make} ${prefillVehicle.model}`, prefillVehicle.year]
+        .filter(Boolean).join(' — ')
+      setVehicleInputValue(label)
+    }
+  }, [prefillVehicle])
+
+  useEffect(() => {
+    if (prefillCustomer) {
+      setSelectedCustomer(prefillCustomer)
+      const label = prefillCustomer.company_name
+        ? `${prefillCustomer.full_name} (${prefillCustomer.company_name})`
+        : prefillCustomer.full_name
+      setCustomerInputValue(label)
+    }
+  }, [prefillCustomer])
+
+  // Customer search results
+  const { data: customersData, isFetching: customersLoading } = useQuery({
+    queryKey: ['customers', 'for-ro', debouncedCustomerSearch],
+    queryFn: () => customerApi.list({ status: 'active', q: debouncedCustomerSearch || undefined, page_size: 50 }),
+    placeholderData: (prev: typeof customersData) => prev,
+  })
+  const customers = customersData?.items ?? []
+
+  // Vehicle search results (filter by selected customer if one is chosen)
+  const { data: vehiclesData, isFetching: vehiclesLoading } = useQuery({
+    queryKey: ['vehicles', 'for-ro', debouncedVehicleSearch, selectedCustomer?.int_id],
+    queryFn: () =>
+      vehiclesApi.list({
+        q: debouncedVehicleSearch || undefined,
+        customer_id: selectedCustomer?.int_id,
+        page_size: 50,
+      }),
+    placeholderData: (prev: typeof vehiclesData) => prev,
+  })
+  const vehicles = vehiclesData?.items ?? []
+
+  const estimatedDisplay =
+    estimatedMinor && Number(estimatedMinor) > 0
+      ? (Number(estimatedMinor) / 100).toLocaleString('fr-FR', {
+          style: 'currency',
+          currency: estimatedCurrency || 'EUR',
+          minimumFractionDigits: 2,
+        })
+      : null
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const errs: typeof fieldErrors = {}
+    if (!selectedCustomer) errs.customer = 'Client requis'
+    if (!description.trim()) errs.description = 'Description requise'
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0) return
+
+    setIsSubmitting(true)
     setSubmitError(null)
     try {
       const ro = await repairOrderApi.create({
-        customer_id: values.customer_id,
-        vehicle_id: values.vehicle_id ?? null,
-        description: values.description,
-        priority: values.priority ?? null,
-        estimated_cost_minor: values.estimated_cost_euros != null ? Math.round(values.estimated_cost_euros * 100) : null,
-        estimated_cost_currency: values.estimated_cost_currency ?? null,
+        customer_id: selectedCustomer!.int_id,
+        vehicle_id: selectedVehicle?.id ?? null,
+        description: description.trim(),
+        priority: priority ?? null,
+        estimated_cost_minor: estimatedMinor ? Number(estimatedMinor) : null,
+        estimated_cost_currency: estimatedCurrency || null,
       })
       navigate(`/repair-orders/${ro.id}`)
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ?? 'Erreur lors de la création.'
-      setSubmitError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } catch (err) {
+      let msg = 'Erreur lors de la création.'
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const d = err.response.data
+        msg = typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)
+      }
+      setSubmitError(msg)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <Box component="form" onSubmit={handleSubmit(onSubmit)}>
+    <Box component="form" onSubmit={handleSubmit}>
       <PageHeader
         title="Nouvel ordre de réparation"
         subtitle="Créez un OT et assignez-le à un client et un véhicule"
@@ -167,51 +252,134 @@ export function RepairOrderCreatePage() {
               icon={<BuildRoundedIcon sx={{ fontSize: 20 }} />}
             >
               <Stack spacing={2.5}>
-                <Controller
-                  name="customer_id"
-                  control={control}
-                  render={({ field, fieldState }) => (
-                    <CustomerAutocomplete
-                      value={field.value || null}
-                      onChange={id => field.onChange(id ?? 0)}
-                      required
-                      error={!!fieldState.error}
-                      helperText={fieldState.error?.message}
+                {/* Customer autocomplete */}
+                <Autocomplete
+                  options={customers}
+                  loading={customersLoading}
+                  value={selectedCustomer}
+                  onChange={(_e, value) => {
+                    setSelectedCustomer(value)
+                    // Clear vehicle if new customer selected and vehicle doesn't belong to them
+                    if (value && selectedVehicle?.customer_id !== value.int_id) {
+                      setSelectedVehicle(null)
+                      setVehicleInputValue('')
+                      setVehicleSearch('')
+                    }
+                  }}
+                  inputValue={customerInputValue}
+                  onInputChange={(_e, value, reason) => {
+                    setCustomerInputValue(value)
+                    if (reason === 'input') setCustomerSearch(value)
+                    if (reason === 'clear') setCustomerSearch('')
+                  }}
+                  filterOptions={x => x}
+                  noOptionsText={debouncedCustomerSearch ? 'Aucun client trouvé' : 'Tapez un nom pour rechercher'}
+                  getOptionLabel={c => c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name}
+                  isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+                  renderOption={(props, c) => (
+                    <Box component="li" {...props} key={c.int_id}>
+                      <Stack>
+                        <Typography variant="body2" fontWeight={600}>
+                          {c.full_name}
+                          {c.company_name && (
+                            <Typography component="span" variant="caption" color="text.secondary" ml={0.5}>
+                              ({c.company_name})
+                            </Typography>
+                          )}
+                        </Typography>
+                        {(c.phone_e164 || c.email) && (
+                          <Typography variant="caption" color="text.secondary">
+                            {c.phone_e164 ?? c.email}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Box>
+                  )}
+                  renderInput={params => (
+                    <TextField
+                      {...params}
+                      label="Client *"
+                      placeholder="Rechercher par nom…"
+                      error={!!fieldErrors.customer}
+                      helperText={fieldErrors.customer}
+                      autoFocus
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {customersLoading && <CircularProgress color="inherit" size={16} />}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
                     />
                   )}
                 />
 
-                <Controller
-                  name="vehicle_id"
-                  control={control}
-                  render={({ field }) => (
+                {/* Vehicle autocomplete */}
+                <Autocomplete
+                  options={vehicles}
+                  loading={vehiclesLoading}
+                  value={selectedVehicle}
+                  onChange={(_e, value) => setSelectedVehicle(value)}
+                  inputValue={vehicleInputValue}
+                  onInputChange={(_e, value, reason) => {
+                    setVehicleInputValue(value)
+                    if (reason === 'input') setVehicleSearch(value)
+                    if (reason === 'clear') setVehicleSearch('')
+                  }}
+                  filterOptions={x => x}
+                  noOptionsText={debouncedVehicleSearch ? 'Aucun véhicule trouvé' : 'Tapez pour rechercher'}
+                  getOptionLabel={v =>
+                    [v.registration, `${v.make} ${v.model}`, v.year].filter(Boolean).join(' — ')
+                  }
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  renderOption={(props, v) => (
+                    <Box component="li" {...props} key={v.id}>
+                      <Stack>
+                        <Typography variant="body2" fontWeight={600}>
+                          {v.make} {v.model}
+                          {v.year && (
+                            <Typography component="span" variant="caption" color="text.secondary" ml={0.5}>
+                              ({v.year})
+                            </Typography>
+                          )}
+                        </Typography>
+                        {v.registration && (
+                          <Typography variant="caption" fontFamily="monospace" color="text.secondary">
+                            {v.registration}
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Box>
+                  )}
+                  renderInput={params => (
                     <TextField
-                      {...field}
-                      value={field.value ?? ''}
-                      label="ID Véhicule"
-                      type="number"
-                      error={!!errors.vehicle_id}
-                      helperText={errors.vehicle_id?.message ?? 'Optionnel — peut être associé après création'}
-                      fullWidth
-                      inputProps={{ min: 1 }}
+                      {...params}
+                      label="Véhicule"
+                      placeholder="Rechercher par immatriculation…"
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {vehiclesLoading && <CircularProgress color="inherit" size={16} />}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
                     />
                   )}
                 />
 
-                <Controller
-                  name="description"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      label="Description *"
-                      multiline
-                      rows={4}
-                      error={!!errors.description}
-                      helperText={errors.description?.message ?? 'Décrivez le problème signalé par le client'}
-                      fullWidth
-                    />
-                  )}
+                <TextField
+                  label="Description *"
+                  multiline
+                  rows={4}
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  error={!!fieldErrors.description}
+                  helperText={fieldErrors.description ?? 'Décrivez le problème signalé par le client'}
+                  fullWidth
                 />
               </Stack>
             </SectionCard>
@@ -225,76 +393,46 @@ export function RepairOrderCreatePage() {
               icon={<TuneRoundedIcon sx={{ fontSize: 20 }} />}
             >
               <Stack spacing={2.5}>
-                <Controller
-                  name="priority"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      select
-                      label="Priorité"
-                      error={!!errors.priority}
-                      helperText={errors.priority?.message}
-                      fullWidth
-                    >
-                      {PRIORITIES.map((p) => (
-                        <MenuItem key={p} value={p}>
-                          <Stack direction="row" alignItems="center" spacing={1.25}>
-                            <Box
-                              sx={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                bgcolor: PRIORITY_COLORS[p],
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span>{PRIORITY_LABELS[p]}</span>
-                          </Stack>
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
-                />
+                <TextField
+                  select
+                  label="Priorité"
+                  value={priority}
+                  onChange={e => setPriority(e.target.value)}
+                  fullWidth
+                >
+                  {PRIORITIES.map(p => (
+                    <MenuItem key={p} value={p}>
+                      <Stack direction="row" alignItems="center" spacing={1.25}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: PRIORITY_COLORS[p], flexShrink: 0 }} />
+                        <span>{PRIORITY_LABELS[p]}</span>
+                      </Stack>
+                    </MenuItem>
+                  ))}
+                </TextField>
 
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <Controller
-                    name="estimated_cost_euros"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        value={field.value ?? ''}
-                        label="Coût estimé (€)"
-                        type="number"
-                        error={!!errors.estimated_cost_euros}
-                        helperText={errors.estimated_cost_euros?.message ?? 'Optionnel'}
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <Typography variant="caption" color="text.secondary">€</Typography>
-                            </InputAdornment>
-                          ),
-                        }}
-                        fullWidth
-                        inputProps={{ min: 0, step: '0.01' }}
-                      />
-                    )}
+                  <TextField
+                    label="Coût estimé"
+                    type="number"
+                    value={estimatedMinor}
+                    onChange={e => setEstimatedMinor(e.target.value)}
+                    helperText={estimatedDisplay ? `≈ ${estimatedDisplay}` : 'Valeur en centimes (ex: 15000 = 150,00)'}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Typography variant="caption" color="text.secondary">cts</Typography>
+                        </InputAdornment>
+                      ),
+                    }}
+                    fullWidth
+                    inputProps={{ min: 0 }}
                   />
-                  <Controller
-                    name="estimated_cost_currency"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        value={field.value ?? ''}
-                        label="Devise"
-                        error={!!errors.estimated_cost_currency}
-                        helperText={errors.estimated_cost_currency?.message}
-                        sx={{ width: 100, flexShrink: 0 }}
-                        inputProps={{ style: { fontFamily: 'monospace', textTransform: 'uppercase' } }}
-                      />
-                    )}
+                  <TextField
+                    label="Devise"
+                    value={estimatedCurrency}
+                    onChange={e => setEstimatedCurrency(e.target.value.toUpperCase())}
+                    sx={{ width: 100, flexShrink: 0 }}
+                    inputProps={{ style: { fontFamily: 'monospace', textTransform: 'uppercase' }, maxLength: 3 }}
                   />
                 </Stack>
               </Stack>
@@ -305,3 +443,4 @@ export function RepairOrderCreatePage() {
     </Box>
   )
 }
+

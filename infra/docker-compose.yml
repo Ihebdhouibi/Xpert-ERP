@@ -21,7 +21,7 @@ services:
       - pg_data:/var/lib/postgresql/data
       - pg_wal_archive:/var/lib/postgresql/wal_archive
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xpert}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xpert} -d ${POSTGRES_DB:-xpert_erp}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,6 +40,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: xpert_erp_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    environment:
+      MP_MAX_MESSAGES: 200
 
   minio:
     image: minio/minio:latest
@@ -80,7 +90,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-config uvicorn_log_config.json
 
   backup:
     build:

@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.accounting_export.formatters import generate_zip
 from app.modules.accounting_export.models import AccountingExport
 from app.modules.accounting_export.repository import AccountingExportRepository
@@ -16,6 +17,8 @@ from app.modules.accounting_export.repository import AccountingExportRepository
 # ---------------------------------------------------------------------------
 # Domain errors
 # ---------------------------------------------------------------------------
+
+logger = get_logger("accounting_export.service")
 
 
 class AccountingExportNotFoundError(Exception):
@@ -213,6 +216,7 @@ async def preview_export(
     period_end: str,
 ) -> dict[str, int]:
     """Return counts of pending and already-exported records in the period."""
+    logger.info("preview_export_start", garage_id=garage_id, period_start=period_start, period_end=period_end)
     invoices = await _gather_invoices(db, garage_id, period_start, period_end)
     payments = await _gather_payments(db, garage_id, period_start, period_end)
     sis = await _gather_supplier_invoices(db, garage_id, period_start, period_end)
@@ -240,6 +244,7 @@ async def create_export(
     fmt: Optional[str],
     user_id: Optional[int],
 ) -> AccountingExport:
+    logger.info("create_export_start", garage_id=garage_id, period_start=period_start, period_end=period_end, fmt=fmt)
     settings = get_settings()
     resolved_fmt = fmt or settings.cfg_accounting_format
     if resolved_fmt not in _VALID_FORMATS:
@@ -307,6 +312,7 @@ async def create_export(
         await db.commit()
 
     except Exception as exc:
+        logger.exception("create_export_error", garage_id=garage_id, period_start=period_start, period_end=period_end)
         await db.rollback()
         # Persist failure status in a new transaction
         from app.core.database import AsyncSessionFactory
@@ -339,12 +345,14 @@ async def list_exports(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[AccountingExport], int]:
+    logger.info("list_exports_start", garage_id=garage_id, page=page)
     return await AccountingExportRepository.list(db, garage_id, page, page_size)
 
 
 async def get_export(
     db: AsyncSession, garage_id: int, public_id: str
 ) -> AccountingExport:
+    logger.info("get_export_start", garage_id=garage_id, public_id=public_id)
     obj = await AccountingExportRepository.get_by_public_id(db, garage_id, public_id)
     if not obj:
         raise AccountingExportNotFoundError(public_id)
@@ -359,6 +367,7 @@ async def get_export(
 async def get_download_url(
     db: AsyncSession, garage_id: int, public_id: str
 ) -> str:
+    logger.info("get_download_url_start", garage_id=garage_id, public_id=public_id)
     obj = await get_export(db, garage_id, public_id)
     if not obj.file_storage_key:
         raise AccountingExportNotFoundError("Export file not available")

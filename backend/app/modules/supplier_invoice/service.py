@@ -6,6 +6,7 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.modules.supplier_invoice.models import (
     SIMatchStatus,
     SupplierInvoice,
@@ -17,6 +18,8 @@ from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
 # ---------------------------------------------------------------------------
 # Domain errors
 # ---------------------------------------------------------------------------
+
+logger = get_logger("supplier_invoice.service")
 
 
 class SINotFoundError(Exception):
@@ -122,6 +125,7 @@ async def create_supplier_invoice(
     notes: Optional[str] = None,
     user_id: Optional[int] = None,
 ) -> SupplierInvoice:
+    logger.info("create_supplier_invoice_start", po_public_id=po_public_id, garage_id=garage_id)
     if not lines_data:
         raise SIInvalidTransitionError("A supplier invoice must have at least one line")
 
@@ -163,7 +167,7 @@ async def create_supplier_invoice(
             }
         )
 
-    return await SupplierInvoiceRepository.create(
+    si = await SupplierInvoiceRepository.create(
         db,
         garage_id=garage_id,
         supplier_id=supplier_id,
@@ -177,6 +181,8 @@ async def create_supplier_invoice(
         notes=notes,
         created_by=user_id,
     )
+    logger.info("supplier_invoice_created", si_public_id=str(si.public_id), number=number, po_public_id=po_public_id, garage_id=garage_id)
+    return si
 
 
 async def update_supplier_invoice(
@@ -190,6 +196,7 @@ async def update_supplier_invoice(
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
 ) -> SupplierInvoice:
+    logger.info("update_supplier_invoice_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
     if not si:
         raise SINotFoundError(public_id)
@@ -272,6 +279,7 @@ async def post_supplier_invoice(
     submitted_version: int,
 ) -> SupplierInvoice:
     """Run three-way match and transition draft → posted."""
+    logger.info("post_supplier_invoice_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
     if not si:
         raise SINotFoundError(public_id)
@@ -355,6 +363,7 @@ async def override_discrepancy(
     user_id: Optional[int] = None,
 ) -> SupplierInvoice:
     """Accept discrepancy with a reason; records an audit entry."""
+    logger.info("override_discrepancy_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
     if not si:
         raise SINotFoundError(public_id)
@@ -408,6 +417,7 @@ async def approve_supplier_invoice(
     public_id: str,
     submitted_version: int,
 ) -> SupplierInvoice:
+    logger.info("approve_supplier_invoice_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
     if not si:
         raise SINotFoundError(public_id)
@@ -438,6 +448,7 @@ async def mark_paid(
     public_id: str,
     submitted_version: int,
 ) -> SupplierInvoice:
+    logger.info("mark_paid_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
     if not si:
         raise SINotFoundError(public_id)

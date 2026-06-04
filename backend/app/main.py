@@ -4,9 +4,11 @@ Xpert-ERP FastAPI application factory and lifespan.
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -14,13 +16,24 @@ from app.core.middleware import RequestIDMiddleware
 from app.core.redis import close_redis
 
 settings = get_settings()
+_app_logger = get_logger("app")
+
+# Resolve log directory relative to the project root (two levels up from app/)
+# so logs always land in <project-root>/logs/ regardless of the CWD when
+# uvicorn is launched.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_LOG_DIR = str(
+    Path(settings.log_dir)
+    if Path(settings.log_dir).is_absolute()
+    else _PROJECT_ROOT / settings.log_dir
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(
         log_level=settings.log_level,
-        log_dir=settings.log_dir,
+        log_dir=_LOG_DIR,
         max_bytes=settings.log_max_bytes,
         backup_count=settings.log_backup_count,
     )
@@ -60,6 +73,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.error("migrations_failed", error=str(exc))
         raise
+
+    # Re-run configure_logging after migrations: Alembic's fileConfig (inside env.py)
+    # can set logger.disabled=True on our group loggers even with the env.py fix in
+    # place on older cached .pyc files.  Calling configure_logging again resets the
+    # disabled flag and ensures all group loggers are fully operational.
+    configure_logging(
+        log_level=settings.log_level,
+        log_dir=settings.log_dir,
+        max_bytes=settings.log_max_bytes,
+        backup_count=settings.log_backup_count,
+    )
+    logger.info("logging_ready", log_dir=settings.log_dir, log_level=settings.log_level)
 
     # Seed system notification templates (idempotent)
     try:
@@ -161,6 +186,22 @@ def create_app() -> FastAPI:
     app.include_router(accounting_export_router, prefix="/api/v1")
     app.include_router(ocr_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
+
+    # ------------------------------------------------------------------
+    # Global exception handler — logs ALL unhandled 500s to system.log
+    # ------------------------------------------------------------------
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        _app_logger.exception(
+            "unhandled_exception",
+            method=request.method,
+            path=request.url.path,
+            error=str(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
     return app
 

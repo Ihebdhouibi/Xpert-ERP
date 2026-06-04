@@ -1,6 +1,10 @@
 import asyncio
+import logging
 import asyncpg
 from app.modules.auth.service import hash_password
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
 async def seed() -> None:
     conn: asyncpg.Connection | None = None
@@ -16,7 +20,7 @@ async def seed() -> None:
         # Get admin role ID
         admin_role_id = await conn.fetchval("SELECT id FROM role WHERE code='admin' LIMIT 1")
         if not admin_role_id:
-            print('ERROR: admin role not found')
+            log.error("admin role not found")
             return
 
         # Delete existing admin@gmail.com user
@@ -39,10 +43,10 @@ async def seed() -> None:
             admin_user_id, admin_role_id,
         )
 
-        print('✓ Admin user created: admin@gmail.com / Test1234!')
+        log.info("Admin user created: admin@gmail.com")
 
     except Exception as e:
-        print(f'ERROR: {e}')
+        log.error("Seed failed: %s", e)
         import traceback
         traceback.print_exc()
     finally:

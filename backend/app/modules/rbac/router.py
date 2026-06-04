@@ -21,8 +21,10 @@ from app.modules.rbac.schemas import (
     UserSummary,
     UserUpdateRequest,
 )
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = get_logger("rbac.router")
 
 
 @router.get(

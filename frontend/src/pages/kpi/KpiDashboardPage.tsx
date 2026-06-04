@@ -154,7 +154,8 @@ function KpiCard({ label, value, icon, color = 'primary.main' }: KpiCardProps) {
 // Shared custom tooltip style — consistent with design system
 function ChartTooltip({ active, payload, label, formatter }: {
   active?: boolean
-  payload?: Array<{ value: number; name?: string }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: Array<{ value?: any; name?: any }>
   label?: string
   formatter?: (v: number) => string
 }) {
@@ -173,7 +174,7 @@ function ChartTooltip({ active, payload, label, formatter }: {
       )}
       {payload.map((p, i) => (
         <Box key={i} sx={{ color: 'white', fontSize: '0.8125rem', fontWeight: 600 }}>
-          {formatter ? formatter(p.value) : p.value}
+        {formatter ? formatter(p.value ?? 0) : (p.value ?? '')}
         </Box>
       ))}
     </Box>

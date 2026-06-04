@@ -39,8 +39,10 @@ from app.modules.parts.service import (
     update_part,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["parts"])
+logger = get_logger("parts.router")
 
 
 # ===========================================================================

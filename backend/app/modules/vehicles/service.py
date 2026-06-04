@@ -37,48 +37,56 @@ async def create_vehicle(
     garage_id: int,
     data: VehicleCreateRequest,
 ) -> VehicleOut:
-    # Uniqueness checks
-    if data.registration:
-        existing = await repo.get_by_registration(
-            db, garage_id=garage_id, registration=data.registration
+    logger.info("create_vehicle_start", garage_id=garage_id, make=data.make, model=data.model, registration=data.registration, vin=data.vin)
+    try:
+        # Uniqueness checks
+        if data.registration:
+            existing = await repo.get_by_registration(
+                db, garage_id=garage_id, registration=data.registration
+            )
+            if existing:
+                raise DuplicateVehicleError(
+                    f"A vehicle with registration '{data.registration}' already exists in this garage"
+                )
+
+        if data.vin:
+            existing = await repo.get_by_vin(db, garage_id=garage_id, vin=data.vin)
+            if existing:
+                raise DuplicateVehicleError(
+                    f"A vehicle with VIN '{data.vin}' already exists in this garage"
+                )
+
+        vehicle = Vehicle(
+            garage_id=garage_id,
+            customer_id=data.customer_id,
+            registration=data.registration,
+            vin=data.vin,
+            make=data.make,
+            model=data.model,
+            year=data.year,
+            fuel_type=data.fuel_type.value if data.fuel_type else None,
+            color=data.color,
+            mileage_current=data.mileage_current,
+            technical_inspection_due_at=data.technical_inspection_due_at,
+            maintenance_due_at=data.maintenance_due_at,
+            status=VehicleStatus.active,
+            version=0,
         )
-        if existing:
-            raise DuplicateVehicleError(
-                f"A vehicle with registration '{data.registration}' already exists in this garage"
-            )
 
-    if data.vin:
-        existing = await repo.get_by_vin(db, garage_id=garage_id, vin=data.vin)
-        if existing:
-            raise DuplicateVehicleError(
-                f"A vehicle with VIN '{data.vin}' already exists in this garage"
-            )
-
-    vehicle = Vehicle(
-        garage_id=garage_id,
-        customer_id=data.customer_id,
-        registration=data.registration,
-        vin=data.vin,
-        make=data.make,
-        model=data.model,
-        year=data.year,
-        fuel_type=data.fuel_type.value if data.fuel_type else None,
-        color=data.color,
-        mileage_current=data.mileage_current,
-        technical_inspection_due_at=data.technical_inspection_due_at,
-        maintenance_due_at=data.maintenance_due_at,
-        status=VehicleStatus.active,
-        version=0,
-    )
-
-    created = await repo.create(db, vehicle)
-    logger.info("vehicle_created", vehicle_id=created.id, garage_id=garage_id)
-    return VehicleOut.model_validate(created)
+        created = await repo.create(db, vehicle)
+        logger.info("vehicle_created", vehicle_id=created.id, garage_id=garage_id)
+        return VehicleOut.model_validate(created)
+    except DuplicateVehicleError:
+        raise
+    except Exception:
+        logger.exception("create_vehicle_error", garage_id=garage_id, registration=data.registration)
+        raise
 
 
 async def get_vehicle(
     db: AsyncSession, *, vehicle_id: int, garage_id: int
 ) -> VehicleOut:
+    logger.info("get_vehicle_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
     return VehicleOut.model_validate(vehicle)
 
@@ -93,6 +101,7 @@ async def list_vehicles(
     page: int,
     page_size: int,
 ) -> VehicleListResponse:
+    logger.info("list_vehicles_start", garage_id=garage_id)
     offset = (page - 1) * page_size
     vehicles, total = await repo.list_vehicles(
         db,
@@ -119,6 +128,7 @@ async def update_vehicle(
     data: VehicleUpdateRequest,
     expected_version: Optional[int],
 ) -> VehicleOut:
+    logger.info("update_vehicle_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
 
     if expected_version is not None and vehicle.version != expected_version:
@@ -147,6 +157,7 @@ async def delete_vehicle(
     garage_id: int,
     deleted_by: Optional[int],
 ) -> None:
+    logger.info("delete_vehicle_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
     await repo.soft_delete(db, vehicle=vehicle, deleted_by=deleted_by)
     logger.info("vehicle_deleted", vehicle_id=vehicle_id, garage_id=garage_id)
@@ -169,6 +180,7 @@ async def transfer_ownership(
     Historical repair orders keep their own customer_id reference and are
     unaffected — this only updates vehicle.customer_id.
     """
+    logger.info("transfer_ownership_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
 
     previous_customer_id = vehicle.customer_id
@@ -214,6 +226,7 @@ async def re_register(
 
     The vehicle is NOT replaced — it stays the same record with history.
     """
+    logger.info("re_register_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
 
     # Check the new registration is not already taken by another vehicle

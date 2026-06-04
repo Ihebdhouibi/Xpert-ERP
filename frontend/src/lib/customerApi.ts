@@ -21,7 +21,7 @@ export interface CustomerContact {
 
 export interface CustomerSummary {
   id: string
-  numeric_id: number
+  int_id: number
   garage_id: number
   type: CustomerType
   full_name: string
@@ -115,6 +115,11 @@ export const customerApi = {
     const { data } = await apiClient.get<CustomerDetail>(
       `/customers/${publicId}`,
     )
+    return data
+  },
+
+  getByIntId: async (intId: number): Promise<CustomerSummary> => {
+    const { data } = await apiClient.get<CustomerSummary>(`/customers/by-int-id/${intId}`)
     return data
   },
 

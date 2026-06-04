@@ -753,7 +753,7 @@ export function PurchaseOrderPage() {
       <CreateDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(po) => { setCreateOpen(false); setSelectedPO(po); load() }}
+        onCreated={(po) => { setCreateOpen(false); setSelectedPO(po); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }}
       />
     </Box>
   )

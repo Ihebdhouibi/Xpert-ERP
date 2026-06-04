@@ -4,13 +4,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
-import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.payment.models import Payment, PaymentMethod
 from app.modules.payment.schemas import PaymentCreateRequest, PaymentOut
 
-log = structlog.get_logger()
+log = get_logger("payment.service")
 
 
 class PaymentError(Exception):
@@ -53,6 +53,7 @@ async def record_payment(
     - Updates invoice.paid_amount_minor, outstanding_minor, and transitions status.
     - Returns PaymentOut.
     """
+    log.info("record_payment_start", invoice_id=request.invoice_id, garage_id=garage_id)
     from app.modules.invoice import repository as inv_repo
     from app.modules.invoice.models import InvoiceStatus
     from app.modules.payment import repository as pay_repo

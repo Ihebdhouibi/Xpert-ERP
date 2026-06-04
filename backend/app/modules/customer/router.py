@@ -37,8 +37,10 @@ from app.modules.customer.schemas import (
     MergePromptResponse,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+logger = get_logger("customer.router")
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +77,7 @@ def _client_ip(request: Request) -> Optional[str]:
 def _to_summary(c: Customer) -> CustomerSummary:
     return CustomerSummary(
         id=str(c.public_id),
-        numeric_id=c.id,
+        int_id=c.id,
         garage_id=c.garage_id,
         type=c.type,
         full_name=c.full_name,
@@ -95,7 +97,7 @@ def _to_summary(c: Customer) -> CustomerSummary:
 def _to_detail(c: Customer) -> CustomerDetail:
     return CustomerDetail(
         id=str(c.public_id),
-        numeric_id=c.id,
+        int_id=c.id,
         garage_id=c.garage_id,
         type=c.type,
         full_name=c.full_name,
@@ -168,6 +170,23 @@ async def list_customers(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/by-int-id/{int_id}",
+    response_model=CustomerSummary,
+    dependencies=[require_permission("customer.read")],
+    summary="Resolve an internal integer customer ID to a summary (used by cross-module FKs)",
+)
+async def get_customer_by_int_id(
+    int_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerSummary:
+    c = await repo.get_by_id(db, user.garage_id, int_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    return _to_summary(c)
 
 
 @router.get(

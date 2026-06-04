@@ -11,8 +11,10 @@ from app.modules.advance_payment.schemas import (
     AdvancePaymentOut,
 )
 from app.modules.advance_payment import service
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["advance-payments"])
+logger = get_logger("advance_payment.router")
 
 
 @router.post(

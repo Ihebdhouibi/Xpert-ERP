@@ -21,8 +21,10 @@ from app.modules.parts.stock_service import (
     reserve_for_ref,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["stock"])
+logger = get_logger("parts.stock_router")
 
 
 # ---------------------------------------------------------------------------

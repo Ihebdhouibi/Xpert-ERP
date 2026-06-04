@@ -63,8 +63,10 @@ from app.modules.inspection.service import (
     update_template,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(tags=["inspections"])
+logger = get_logger("inspection.router")
 
 
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:

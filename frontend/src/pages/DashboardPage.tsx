@@ -280,20 +280,24 @@ export function DashboardPage() {
         </Box>
 
         <Stack direction="row" spacing={1.25} flexShrink={0}>
-          <Button
-            variant="outlined"
-            startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/repair-orders/new')}
-          >
-            Nouvel OT
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/customers/new')}
-          >
-            Nouveau client
-          </Button>
+          {hasPermission('repair_order.create') && (
+            <Button
+              variant="outlined"
+              startIcon={<AddRoundedIcon />}
+              onClick={() => navigate('/repair-orders/new')}
+            >
+              Nouvel OT
+            </Button>
+          )}
+          {hasPermission('customer.create') && (
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              onClick={() => navigate('/customers/new')}
+            >
+              Nouveau client
+            </Button>
+          )}
         </Stack>
       </Stack>
 
@@ -459,6 +463,7 @@ export function DashboardPage() {
 
               <Divider sx={{ my: 1.5 }} />
 
+              {(hasPermission('supplier.read') || hasPermission('part.read')) && (
               <Box mb={1.5}>
                 <Typography
                   variant="caption"
@@ -473,17 +478,18 @@ export function DashboardPage() {
                 </Typography>
                 <Grid container spacing={1}>
                   {[
-                    { label: 'Fournisseurs', sub: 'Gestion achats', icon: <PeopleRoundedIcon sx={{ fontSize: 18 }} />, to: '/suppliers' },
-                    { label: 'Bons de cmd.', sub: "Ordres d'achat", icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/purchase-orders' },
-                    { label: 'Catalogue', sub: 'Pièces & SKU', icon: <InventoryRoundedIcon sx={{ fontSize: 18 }} />, to: '/parts' },
-                    { label: 'Stock', sub: 'Niveaux & alertes', icon: <WarningAmberRoundedIcon sx={{ fontSize: 18 }} />, to: '/stock' },
-                  ].map(m => (
+                    hasPermission('supplier.read') && { label: 'Fournisseurs', sub: 'Gestion achats', icon: <PeopleRoundedIcon sx={{ fontSize: 18 }} />, to: '/suppliers' },
+                    hasPermission('purchase_order.read') && { label: 'Bons de cmd.', sub: "Ordres d'achat", icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/purchase-orders' },
+                    hasPermission('part.read') && { label: 'Catalogue', sub: 'Pièces & SKU', icon: <InventoryRoundedIcon sx={{ fontSize: 18 }} />, to: '/parts' },
+                    hasPermission('part.read') && { label: 'Stock', sub: 'Niveaux & alertes', icon: <WarningAmberRoundedIcon sx={{ fontSize: 18 }} />, to: '/stock' },
+                  ].filter(Boolean).map((m: any) => (
                     <Grid item xs={6} sm={3} key={m.to}>
                       <ModuleTile {...m} />
                     </Grid>
                   ))}
                 </Grid>
               </Box>
+              )}
 
               {hasPermission('reporting.dashboard.read') && (
                 <>

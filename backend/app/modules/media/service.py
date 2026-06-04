@@ -118,6 +118,7 @@ async def get_upload_session(
     session_id: str,
     garage_id: int,
 ) -> UploadSessionOut:
+    logger.info("get_upload_session_start", session_id=session_id, garage_id=garage_id)
     session = await _get_session(db, session_id, garage_id)
     if session is None:
         raise UploadSessionNotFound(session_id)
@@ -132,6 +133,7 @@ async def receive_part(
     part_number: int,
     data: bytes,
 ) -> PartUploadOut:
+    logger.info("receive_part_start", session_id=session_id, garage_id=garage_id, part_number=part_number)
     session = await _get_session(db, session_id, garage_id)
     if session is None:
         raise UploadSessionNotFound(session_id)
@@ -255,6 +257,7 @@ async def get_signed_url(
     media_public_id: str,
     garage_id: int,
 ) -> SignedUrlResponse:
+    logger.info("get_media_signed_url_start", media_public_id=media_public_id, garage_id=garage_id)
     media = await _get_media(db, media_public_id, garage_id)
     if media is None:
         raise MediaNotFound(media_public_id)
@@ -281,6 +284,7 @@ async def delete_media(
     media_public_id: str,
     garage_id: int,
 ) -> None:
+    logger.info("delete_media_start", media_public_id=media_public_id, garage_id=garage_id)
     media = await _get_media(db, media_public_id, garage_id)
     if media is None:
         raise MediaNotFound(media_public_id)

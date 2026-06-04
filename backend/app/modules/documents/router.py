@@ -18,8 +18,10 @@ from app.modules.documents.service import (
     MimeTypeNotAllowedError,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = get_logger("documents.router")
 
 
 @router.post(

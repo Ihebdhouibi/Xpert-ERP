@@ -30,8 +30,10 @@ from app.modules.repair_order.service import (
     RepairOrderService,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
+from app.core.logging import get_logger
 
 router = APIRouter(prefix="/repair-orders", tags=["repair-orders"])
+logger = get_logger("repair_order.router")
 
 
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:
@@ -511,7 +513,11 @@ async def list_photos(
 
     items: list[ROPhotoSummary] = []
     for p in photos:
-        url = await generate_presigned_url(settings.s3_bucket_media, p.storage_key)
+        url = await generate_presigned_url(
+            bucket=settings.s3_bucket_media,
+            key=p.storage_key,
+            expiry_seconds=3600,
+        )
         summary = ROPhotoSummary.model_validate(p)
         summary.url = url
         items.append(summary)

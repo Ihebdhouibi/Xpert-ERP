@@ -8,7 +8,6 @@ import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
-import CreditCardRoundedIcon from '@mui/icons-material/CreditCardRounded'
 import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded'
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
@@ -24,6 +23,7 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
 import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded'
+import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
 
 export interface NavItem {
   label: string
@@ -66,6 +66,12 @@ export const navSections: NavSection[] = [
         icon: FindInPageRoundedIcon,
         permission: 'inspection.read',
       },
+      {
+        label: 'Documents',
+        path: '/documents',
+        icon: FolderRoundedIcon,
+        permission: 'document.read',
+      },
     ],
   },
   {
@@ -105,12 +111,6 @@ export const navSections: NavSection[] = [
         path: '/advance-payments',
         icon: PaymentsRoundedIcon,
         permission: 'payment.read',
-      },
-      {
-        label: 'Avances',
-        path: '/advance-payments',
-        icon: CreditCardRoundedIcon,
-        permission: 'advance_payment.read',
       },
       {
         label: 'Sessions caisse',
@@ -190,37 +190,37 @@ export const navSections: NavSection[] = [
         label: 'Utilisateurs',
         path: '/users',
         icon: GroupRoundedIcon,
-        permission: 'user.read',
+        permission: 'users.read',
       },
       {
         label: 'Rôles & permissions',
         path: '/roles',
         icon: AdminPanelSettingsRoundedIcon,
-        permission: 'rbac.read',
+        permission: 'roles.read',
       },
       {
         label: 'Paramètres',
         path: '/settings',
         icon: SettingsRoundedIcon,
-        permission: 'setting.read',
+        permission: 'system.settings.read',
       },
       {
         label: 'Modèles notifications',
         path: '/notification-templates',
         icon: NotificationsRoundedIcon,
-        permission: 'notification_template.read',
+        permission: 'notification.template.manage',
       },
       {
         label: "Modèles d'inspection",
         path: '/inspection-templates',
         icon: ChecklistRoundedIcon,
-        permission: 'inspection_template.read',
+        permission: 'inspection.template.manage',
       },
       {
         label: "Journal d'audit",
         path: '/audit-logs',
         icon: HistoryRoundedIcon,
-        permission: 'audit_log.read',
+        permission: 'audit.read',
       },
     ],
   },

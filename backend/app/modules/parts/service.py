@@ -4,8 +4,11 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.parts.models import Part, PartCategory, PartStatus
 from app.modules.parts.repository import PartCategoryRepository, PartRepository
+
+logger = get_logger("parts.service")
 
 
 class PartNotFoundError(Exception):
@@ -56,11 +59,14 @@ async def create_category(
     description: Optional[str],
     parent_id: Optional[int],
 ) -> PartCategory:
+    logger.info("create_category_start", garage_id=garage_id, name=name)
     if parent_id is not None:
         parent = await PartCategoryRepository.get(db, garage_id, parent_id)
         if not parent:
             raise CategoryNotFoundError(f"Parent category {parent_id} not found")
-    return await PartCategoryRepository.create(db, garage_id, name, description, parent_id)
+    result = await PartCategoryRepository.create(db, garage_id, name, description, parent_id)
+    logger.info("create_category_success", category_id=result.id, garage_id=garage_id)
+    return result
 
 
 async def update_category(
@@ -71,6 +77,7 @@ async def update_category(
     description: Optional[str],
     parent_id: Optional[int],
 ) -> PartCategory:
+    logger.info("update_category_start", category_id=category_id, garage_id=garage_id)
     cat = await PartCategoryRepository.get(db, garage_id, category_id)
     if not cat:
         raise CategoryNotFoundError(f"Category {category_id} not found")
@@ -78,16 +85,20 @@ async def update_category(
         parent = await PartCategoryRepository.get(db, garage_id, parent_id)
         if not parent:
             raise CategoryNotFoundError(f"Parent category {parent_id} not found")
-    return await PartCategoryRepository.update(db, cat, name, description, parent_id)
+    result = await PartCategoryRepository.update(db, cat, name, description, parent_id)
+    logger.info("update_category_success", category_id=category_id, garage_id=garage_id)
+    return result
 
 
 async def delete_category(db: AsyncSession, garage_id: int, category_id: int) -> None:
+    logger.info("delete_category_start", category_id=category_id, garage_id=garage_id)
     cat = await PartCategoryRepository.get(db, garage_id, category_id)
     if not cat:
         raise CategoryNotFoundError(f"Category {category_id} not found")
     if await PartCategoryRepository.has_parts(db, category_id):
         raise CategoryHasPartsError("Cannot delete category with active parts")
     await PartCategoryRepository.delete(db, cat)
+    logger.info("delete_category_success", category_id=category_id, garage_id=garage_id)
 
 
 # ---------------------------------------------------------------------------
@@ -109,10 +120,11 @@ async def create_part(
     reorder_quantity: Optional[int],
     status: PartStatus,
 ) -> Part:
+    logger.info("create_part_start", sku_code=sku_code, garage_id=garage_id)
     existing = await PartRepository.get_by_sku(db, garage_id, sku_code)
     if existing:
         raise PartSKUConflictError(sku_code)
-    return await PartRepository.create(
+    part = await PartRepository.create(
         db,
         garage_id=garage_id,
         sku_code=sku_code.upper(),
@@ -127,6 +139,8 @@ async def create_part(
         reorder_quantity=reorder_quantity,
         status=status,
     )
+    logger.info("part_created", part_public_id=str(part.public_id), sku=sku_code.upper(), garage_id=garage_id)
+    return part
 
 
 async def update_part(
@@ -136,19 +150,24 @@ async def update_part(
     submitted_version: int,
     **data,
 ) -> Part:
+    logger.info("update_part_start", public_id=public_id, garage_id=garage_id)
     part = await PartRepository.get_by_public_id(db, garage_id, public_id)
     if not part:
         raise PartNotFoundError(f"Part {public_id} not found")
     if part.version != submitted_version:
         raise PartVersionConflictError(part.version, submitted_version)
-    return await PartRepository.update(db, part, submitted_version, **data)
+    result = await PartRepository.update(db, part, submitted_version, **data)
+    logger.info("update_part_success", public_id=public_id, garage_id=garage_id)
+    return result
 
 
 async def soft_delete_part(db: AsyncSession, garage_id: int, public_id: str) -> None:
+    logger.info("delete_part_start", public_id=public_id, garage_id=garage_id)
     part = await PartRepository.get_by_public_id(db, garage_id, public_id)
     if not part:
         raise PartNotFoundError(f"Part {public_id} not found")
     await PartRepository.soft_delete(db, part)
+    logger.info("delete_part_success", public_id=public_id, garage_id=garage_id)
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +180,7 @@ async def link_equivalents(
     public_id_a: str,
     public_id_b: str,
 ) -> None:
+    logger.info("link_equivalents_start", public_id_a=public_id_a, public_id_b=public_id_b, garage_id=garage_id)
     if public_id_a == public_id_b:
         raise EquivalentSelfLinkError("A part cannot be equivalent to itself")
     part_a = await PartRepository.get_by_public_id(db, garage_id, public_id_a)
@@ -173,6 +193,7 @@ async def link_equivalents(
     if existing:
         raise EquivalentAlreadyLinkedError("Parts are already linked as equivalents")
     await PartRepository.add_equivalent(db, part_a.id, part_b.id)
+    logger.info("link_equivalents_success", public_id_a=public_id_a, public_id_b=public_id_b, garage_id=garage_id)
 
 
 async def unlink_equivalents(
@@ -181,6 +202,7 @@ async def unlink_equivalents(
     public_id_a: str,
     public_id_b: str,
 ) -> None:
+    logger.info("unlink_equivalents_start", public_id_a=public_id_a, public_id_b=public_id_b, garage_id=garage_id)
     part_a = await PartRepository.get_by_public_id(db, garage_id, public_id_a)
     if not part_a:
         raise PartNotFoundError(f"Part {public_id_a} not found")
@@ -191,3 +213,4 @@ async def unlink_equivalents(
     if not link:
         raise EquivalentNotFoundError("No equivalence link exists between these parts")
     await PartRepository.remove_equivalent(db, part_a.id, part_b.id)
+    logger.info("unlink_equivalents_success", public_id_a=public_id_a, public_id_b=public_id_b, garage_id=garage_id)

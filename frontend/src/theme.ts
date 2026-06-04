@@ -251,10 +251,6 @@ export const theme = createTheme({
           color: '#1E40AF',
           '& .MuiChip-icon': { color: '#1E40AF' },
         },
-        colorDefault: {
-          backgroundColor: '#F1F5F9',
-          color: '#475569',
-        },
         colorPrimary: {
           backgroundColor: '#DBEAFE',
           color: '#1E40AF',

@@ -95,6 +95,7 @@ async def create_invoice(
     garage_id: int,
     user_id: int,
 ) -> InvoiceOut:
+    logger.info("create_invoice_start", garage_id=garage_id, user_id=user_id)
     invoice = Invoice(
         public_id=str(uuid.uuid4()),
         garage_id=garage_id,
@@ -158,6 +159,7 @@ async def update_invoice(
     expected_version: int,
     user_id: int,
 ) -> InvoiceOut:
+    logger.info("update_invoice_start", invoice_id=invoice_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -182,12 +184,14 @@ async def update_invoice(
     await repo.save(db, inv)
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
+    logger.info("update_invoice_success", invoice_id=invoice_id, garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)
 
 
 async def delete_invoice(
     db: AsyncSession, invoice_id: int, garage_id: int, *, user_id: int
 ) -> None:
+    logger.info("delete_invoice_start", invoice_id=invoice_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -195,6 +199,7 @@ async def delete_invoice(
         raise InvoiceStateError("Only draft invoices can be deleted.")
     await repo.soft_delete(db, inv, deleted_by=user_id)
     await db.commit()
+    logger.info("delete_invoice_success", invoice_id=invoice_id, garage_id=garage_id)
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +230,7 @@ async def add_line(
     expected_version: int,
     user_id: int,
 ) -> InvoiceOut:
+    logger.info("add_line_start", invoice_id=invoice_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -252,6 +258,7 @@ async def add_line(
     await repo.save(db, inv)
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
+    logger.info("add_line_success", invoice_id=invoice_id, garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)
 
 
@@ -265,6 +272,7 @@ async def update_line(
     expected_version: int,
     user_id: int,
 ) -> InvoiceOut:
+    logger.info("update_line_start", invoice_id=invoice_id, line_id=line_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -298,6 +306,7 @@ async def update_line(
     await repo.save(db, inv)
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
+    logger.info("update_line_success", invoice_id=invoice_id, line_id=line_id, garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)
 
 
@@ -310,6 +319,7 @@ async def remove_line(
     expected_version: int,
     user_id: int,
 ) -> InvoiceOut:
+    logger.info("remove_line_start", invoice_id=invoice_id, line_id=line_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -330,6 +340,7 @@ async def remove_line(
     await repo.save(db, inv)
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
+    logger.info("remove_line_success", invoice_id=invoice_id, line_id=line_id, garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)
 
 
@@ -346,6 +357,7 @@ async def issue_invoice(
     user_id: int,
 ) -> InvoiceOut:
     """DRAFT → ISSUED.  Assigns doc_number from sequence and locks the invoice."""
+    logger.info("issue_invoice_start", invoice_id=invoice_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -407,6 +419,7 @@ async def cancel_invoice(
     user_id: int,
 ) -> InvoiceOut:
     """DRAFT/ISSUED → CANCELLED."""
+    logger.info("cancel_invoice_start", invoice_id=invoice_id, garage_id=garage_id)
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
@@ -484,6 +497,7 @@ async def convert_quotation(
     - Sets quotation.status = 'converted'.
     - Returns the new draft invoice.
     """
+    logger.info("convert_quotation_start", quotation_id=quotation_id, garage_id=garage_id)
     # Import here to avoid circular imports at module level
     from app.modules.quotation import repository as quot_repo
     from app.modules.quotation.models import QuotationStatus

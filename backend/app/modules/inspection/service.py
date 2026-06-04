@@ -6,6 +6,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.modules.inspection.models import (
     Inspection,
     InspectionApprovalToken,
@@ -21,6 +22,8 @@ from app.modules.inspection.repository import (
     InspectionTemplateRepository,
     VehicleRecommendationRepository,
 )
+
+logger = get_logger("inspection.service")
 
 
 class TemplateNotFoundError(Exception):
@@ -69,6 +72,7 @@ async def create_template(
     sections: list,
     created_by_user_id: Optional[int] = None,
 ) -> InspectionTemplate:
+    logger.info("create_template_start", garage_id=garage_id, name=name)
     return await InspectionTemplateRepository.create(
         db,
         garage_id=garage_id,
@@ -87,6 +91,7 @@ async def update_template(
     sections: Optional[list] = None,
     version: int,
 ) -> InspectionTemplate:
+    logger.info("update_template_start", garage_id=garage_id, public_id=public_id)
     template = await InspectionTemplateRepository.get_by_public_id(db, garage_id, public_id)
     if not template:
         raise TemplateNotFoundError(public_id)
@@ -101,6 +106,7 @@ async def delete_template(
     garage_id: int,
     public_id: str,
 ) -> None:
+    logger.info("delete_template_start", garage_id=garage_id, public_id=public_id)
     template = await InspectionTemplateRepository.get_by_public_id(db, garage_id, public_id)
     if not template:
         raise TemplateNotFoundError(public_id)
@@ -122,7 +128,7 @@ async def create_inspection(
     )
     if not template:
         raise TemplateNotFoundError(template_public_id)
-    return await InspectionRepository.create(
+    inspection = await InspectionRepository.create(
         db,
         garage_id=garage_id,
         template_id=template.id,
@@ -131,6 +137,8 @@ async def create_inspection(
         vehicle_id=vehicle_id,
         created_by_user_id=created_by_user_id,
     )
+    logger.info("inspection_created", inspection_public_id=str(inspection.public_id), template_public_id=template_public_id, garage_id=garage_id)
+    return inspection
 
 
 async def transition_inspection(
@@ -148,6 +156,7 @@ async def transition_inspection(
             inspection.status.value, new_status.value
         )
     await InspectionRepository.transition_status(db, inspection, new_status)
+    logger.info("inspection_status_transition", inspection_public_id=public_id, new_status=new_status.value, garage_id=garage_id)
     return inspection
 
 
@@ -158,6 +167,7 @@ async def submit_results(
     public_id: str,
     items: list[dict],
 ) -> tuple[Inspection, list[InspectionConflictLog]]:
+    logger.info("submit_results_start", garage_id=garage_id, public_id=public_id, item_count=len(items))
     inspection = await InspectionRepository.get_by_public_id(
         db, garage_id, public_id, load_results=True
     )
@@ -176,6 +186,7 @@ async def archive_declined_items(
     declined_items: list[dict],
     created_by_user_id: Optional[int] = None,
 ) -> list[VehicleRecommendation]:
+    logger.info("archive_declined_items_start", garage_id=garage_id, inspection_public_id=inspection_public_id, item_count=len(declined_items))
     inspection = await InspectionRepository.get_by_public_id(
         db, garage_id, inspection_public_id
     )
@@ -200,6 +211,7 @@ async def convert_to_repair_order(
     public_id: str,
     repair_order_id: int,
 ) -> Inspection:
+    logger.info("convert_to_repair_order_start", garage_id=garage_id, public_id=public_id, repair_order_id=repair_order_id)
     inspection = await InspectionRepository.get_by_public_id(db, garage_id, public_id)
     if not inspection:
         raise InspectionNotFoundError(public_id)
@@ -220,6 +232,7 @@ async def generate_approval_link(
     secret_key: str,
     algorithm: str,
 ) -> tuple[str, InspectionApprovalToken]:
+    logger.info("generate_approval_link_start", garage_id=garage_id, inspection_public_id=inspection_public_id, expiry_days=expiry_days)
     from jose import jwt as jose_jwt
 
     inspection = await InspectionRepository.get_by_public_id(db, garage_id, inspection_public_id)
@@ -296,6 +309,7 @@ async def process_approval(
     secret_key: str,
     algorithm: str,
 ) -> dict:
+    logger.info("process_approval_start", decision_count=len(decisions))
     inspection, token_record = await get_inspection_for_approval(
         db, token_str=token_str, secret_key=secret_key, algorithm=algorithm
     )

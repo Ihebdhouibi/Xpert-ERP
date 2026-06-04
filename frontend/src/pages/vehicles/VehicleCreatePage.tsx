@@ -1,12 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import {
+  Autocomplete,
   Alert,
   Box,
   Button,
   Card,
   CardContent,
+  CircularProgress,
   Divider,
   Grid,
   InputAdornment,
@@ -26,6 +29,7 @@ import {
   type FuelType,
   type VehicleCreateInput,
 } from '../../lib/vehiclesApi'
+import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -33,6 +37,65 @@ const FUEL_TYPES = Object.entries(FUEL_TYPE_LABELS).map(([value, label]) => ({
   value: value as FuelType,
   label,
 }))
+
+const CURRENT_YEAR = new Date().getFullYear()
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+interface FormErrors {
+  make?: string
+  model?: string
+  registration?: string
+  vin?: string
+  year?: string
+  mileage?: string
+}
+
+function validate(fields: {
+  make: string
+  model: string
+  registration: string
+  vin: string
+  year: string
+  mileage: string
+}): FormErrors {
+  const errors: FormErrors = {}
+
+  if (!fields.make.trim()) errors.make = 'Champ obligatoire'
+  if (!fields.model.trim()) errors.model = 'Champ obligatoire'
+
+  const reg = fields.registration.trim()
+  const vin = fields.vin.trim()
+
+  if (!reg && !vin) {
+    errors.registration = 'Au moins un des deux champs est requis'
+    errors.vin = 'Au moins un des deux champs est requis'
+  }
+
+  if (vin && (vin.length < 11 || vin.length > 17)) {
+    errors.vin = 'Le VIN doit contenir entre 11 et 17 caractères'
+  }
+
+  if (fields.year) {
+    const y = Number(fields.year)
+    if (!Number.isInteger(y) || y < 1900 || y > CURRENT_YEAR + 1) {
+      errors.year = `Année invalide (1900 – ${CURRENT_YEAR + 1})`
+    }
+  }
+
+  if (fields.mileage) {
+    const m = Number(fields.mileage)
+    if (isNaN(m) || m < 0) errors.mileage = 'Kilométrage invalide (≥ 0)'
+  }
+
+  return errors
+}
+
+// ---------------------------------------------------------------------------
+// SectionCard
+// ---------------------------------------------------------------------------
 
 function SectionCard({
   title,
@@ -59,11 +122,16 @@ function SectionCard({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export function VehicleCreatePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: toastError } = useToast()
 
+  const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
 
@@ -77,13 +145,34 @@ export function VehicleCreatePage() {
   const [mileage, setMileage] = useState('')
   const [ctDate, setCtDate] = useState('')
   const [maintenanceDate, setMaintenanceDate] = useState('')
-  const [customerId, setCustomerId] = useState('')
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const canSubmit = make.trim().length > 0 && model.trim().length > 0
+  // Debounce the search input by 300 ms
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setDebouncedSearch(customerSearch), 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [customerSearch])
+
+  // Fetch customers from the API whenever the debounced query changes
+  const { data: customersData, isFetching: customersLoading } = useQuery({
+    queryKey: ['customers', 'for-vehicle', debouncedSearch],
+    queryFn: () =>
+      customerApi.list({ status: 'active', q: debouncedSearch || undefined, page_size: 50 }),
+    placeholderData: previousData => previousData,
+  })
+  const customers = customersData?.items ?? []
+
+  const errors = validate({ make, model, registration, vin, year, mileage })
+  const hasErrors = Object.keys(errors).length > 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canSubmit) return
+    setSubmitted(true)
+    if (hasErrors) return
     setSubmitting(true)
     setServerError(null)
     try {
@@ -98,14 +187,27 @@ export function VehicleCreatePage() {
         mileage_current: mileage ? Number(mileage) : undefined,
         technical_inspection_due_at: ctDate || undefined,
         maintenance_due_at: maintenanceDate || undefined,
-        customer_id: customerId ? Number(customerId) : undefined,
+        customer_id: selectedCustomer?.int_id ?? undefined,
       }
       const created = await vehiclesApi.create(input)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       success('Véhicule créé avec succès')
       navigate(`/vehicles/${created.id}`, { replace: true })
-    } catch {
-      setServerError('Erreur lors de la création. Vérifiez les données saisies.')
+    } catch (err) {
+      let detail = 'Erreur lors de la création. Vérifiez les données saisies.'
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const data = err.response.data
+        if (typeof data.detail === 'string') {
+          detail = data.detail
+        } else if (Array.isArray(data.detail)) {
+          detail = data.detail
+            .map((d: { loc?: string[]; msg?: string }) =>
+              d.loc ? `${d.loc.slice(1).join('.')}: ${d.msg}` : d.msg,
+            )
+            .join(' · ')
+        }
+      }
+      setServerError(detail)
       toastError('Impossible de créer le véhicule.')
     } finally {
       setSubmitting(false)
@@ -135,7 +237,7 @@ export function VehicleCreatePage() {
               type="submit"
               variant="contained"
               startIcon={<SaveRoundedIcon />}
-              disabled={!canSubmit || submitting}
+              disabled={submitting}
             >
               Enregistrer
             </Button>
@@ -166,8 +268,8 @@ export function VehicleCreatePage() {
                     fullWidth
                     placeholder="ex. Peugeot"
                     autoFocus
-                    error={submitting && !make.trim()}
-                    helperText={submitting && !make.trim() ? 'Champ obligatoire' : undefined}
+                    error={submitted && !!errors.make}
+                    helperText={submitted ? errors.make : undefined}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -177,8 +279,8 @@ export function VehicleCreatePage() {
                     onChange={e => setModel(e.target.value)}
                     fullWidth
                     placeholder="ex. 308"
-                    error={submitting && !model.trim()}
-                    helperText={submitting && !model.trim() ? 'Champ obligatoire' : undefined}
+                    error={submitted && !!errors.model}
+                    helperText={submitted ? errors.model : undefined}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -188,8 +290,10 @@ export function VehicleCreatePage() {
                     value={year}
                     onChange={e => setYear(e.target.value)}
                     fullWidth
-                    placeholder={String(new Date().getFullYear())}
-                    inputProps={{ min: 1900, max: new Date().getFullYear() + 1 }}
+                    placeholder={String(CURRENT_YEAR)}
+                    inputProps={{ min: 1900, max: CURRENT_YEAR + 1 }}
+                    error={submitted && !!errors.year}
+                    helperText={submitted ? errors.year : undefined}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -227,6 +331,12 @@ export function VehicleCreatePage() {
                     onChange={e => setRegistration(e.target.value.toUpperCase())}
                     fullWidth
                     placeholder="AB-123-CD"
+                    error={submitted && !!errors.registration}
+                    helperText={
+                      submitted && errors.registration
+                        ? errors.registration
+                        : undefined
+                    }
                     inputProps={{
                       style: {
                         fontFamily: 'monospace',
@@ -244,11 +354,18 @@ export function VehicleCreatePage() {
                     onChange={e => setVin(e.target.value.toUpperCase())}
                     fullWidth
                     placeholder="VF3XXXXXXXXXX"
+                    error={submitted && !!errors.vin}
                     inputProps={{
                       maxLength: 17,
                       style: { fontFamily: 'monospace', fontSize: '0.875rem' },
                     }}
-                    helperText={vin ? `${vin.length} / 17 caractères` : 'Numéro de châssis à 17 caractères'}
+                    helperText={
+                      submitted && errors.vin
+                        ? errors.vin
+                        : vin
+                          ? `${vin.length} / 17 caractères`
+                          : 'Numéro de châssis (11–17 caractères)'
+                    }
                   />
                 </Grid>
               </Grid>
@@ -272,6 +389,8 @@ export function VehicleCreatePage() {
                   fullWidth
                   placeholder="ex. 75 000"
                   inputProps={{ min: 0 }}
+                  error={submitted && !!errors.mileage}
+                  helperText={submitted ? errors.mileage : undefined}
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
@@ -303,15 +422,58 @@ export function VehicleCreatePage() {
               title="Propriétaire"
               icon={<PersonRoundedIcon sx={{ fontSize: 20 }} />}
             >
-              <TextField
-                label="ID Client"
-                type="number"
-                value={customerId}
-                onChange={e => setCustomerId(e.target.value)}
-                fullWidth
-                placeholder="Numéro du client"
-                inputProps={{ min: 1 }}
-                helperText="Optionnel — peut être associé après création"
+              <Autocomplete
+                options={customers}
+                loading={customersLoading}
+                value={selectedCustomer}
+                onChange={(_e, value) => setSelectedCustomer(value)}
+                inputValue={customerSearch}
+                onInputChange={(_e, value) => setCustomerSearch(value)}
+                filterOptions={x => x}
+                noOptionsText={
+                  debouncedSearch.length === 0
+                    ? 'Tapez un nom pour rechercher'
+                    : 'Aucun client trouvé'
+                }
+                getOptionLabel={c =>
+                  c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name
+                }
+                isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+                renderOption={(props, c) => (
+                  <Box component="li" {...props} key={c.int_id}>
+                    <Stack>
+                      <Typography variant="body2" fontWeight={600}>
+                        {c.full_name}
+                        {c.company_name && (
+                          <Typography component="span" variant="caption" color="text.secondary" ml={0.5}>
+                            ({c.company_name})
+                          </Typography>
+                        )}
+                      </Typography>
+                      {(c.phone_e164 || c.email) && (
+                        <Typography variant="caption" color="text.secondary">
+                          {c.phone_e164 ?? c.email}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Box>
+                )}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label="Client propriétaire"
+                    placeholder="Rechercher par nom…"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {customersLoading && <CircularProgress color="inherit" size={16} />}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
               />
             </SectionCard>
           </Stack>

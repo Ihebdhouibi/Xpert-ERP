@@ -42,6 +42,7 @@ async def record_advance(
     user_id: int,
 ) -> AdvancePaymentOut:
     """Record a deposit/advance payment for a customer before an invoice exists."""
+    logger.info("record_advance_start", customer_id=request.customer_id, garage_id=garage_id)
     # Validate customer belongs to this garage
     from app.modules.customer import repository as customer_repo
     customer = await customer_repo.get_by_id(db, garage_id, request.customer_id)
@@ -87,6 +88,7 @@ async def apply_advances_to_invoice(
     Must be called BEFORE db.commit() in the issue_invoice flow so all changes
     are committed atomically.  Returns total amount applied (minor units).
     """
+    logger.info("apply_advances_start", invoice_id=invoice_id, customer_id=customer_id, garage_id=garage_id)
     from app.modules.invoice import repository as invoice_repo
 
     invoice = await invoice_repo.get_by_id(db, invoice_id, garage_id)
