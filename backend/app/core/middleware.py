@@ -1,16 +1,14 @@
 """
 Request-scoped middleware.
 
-- RequestIDMiddleware: injects X-Request-ID header and binds request_id
-  to the structlog context for the duration of the request.
-  Also logs HTTP request/response at INFO level (method, path, status, duration_ms).
+- RequestIDMiddleware: injects X-Request-ID header and logs every
+  HTTP request/response at INFO level (method, path, status, duration_ms).
 """
 
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 
-import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -21,9 +19,8 @@ logger = get_logger("http")
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """
-    Ensures every request has a unique X-Request-ID.
-    The ID is echoed in the response header and bound into structlog contextvars
-    so every log line emitted during that request carries request_id automatically.
+    Ensures every request has a unique X-Request-ID echoed in the response
+    header and logged with every HTTP request entry.
     """
 
     async def dispatch(
@@ -31,9 +28,6 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         start = time.perf_counter()
-
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
 
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
@@ -45,5 +39,6 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
             status_code=response.status_code,
             duration_ms=duration_ms,
+            request_id=request_id,
         )
         return response

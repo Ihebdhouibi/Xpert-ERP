@@ -61,6 +61,7 @@ class RepairOrderService:
         estimated_cost_currency: Optional[str] = None,
     ) -> RepairOrder:
         """Create a new repair order in 'created' status."""
+        logger.info("create_repair_order_start", garage_id=garage_id, customer_id=customer_id, user_id=user_id)
         ro = RepairOrder(
             garage_id=garage_id,
             customer_id=customer_id,
@@ -117,6 +118,7 @@ class RepairOrderService:
         notes: Optional[str] = None,
     ) -> RepairOrder:
         """Update repair order with optimistic locking."""
+        logger.info("update_repair_order_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
@@ -158,6 +160,7 @@ class RepairOrderService:
             new_value=_to_audit_dict(ro),
         )
 
+        logger.info("update_repair_order_success", ro_public_id=public_id, garage_id=garage_id)
         return ro
 
     @staticmethod
@@ -177,6 +180,7 @@ class RepairOrderService:
         insufficient stock (and allow_negative_stock=False), NegativeStockError
         is raised and the whole transition is rolled back.
         """
+        logger.info("transition_status_start", public_id=public_id, new_status=new_status.value, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
@@ -243,6 +247,7 @@ class RepairOrderService:
         rate_minor: int,
     ) -> RepairOrder:
         """Add a labor line and recalculate total cost."""
+        logger.info("add_labor_line_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
@@ -272,6 +277,7 @@ class RepairOrderService:
             },
         )
 
+        logger.info("add_labor_line_success", ro_public_id=public_id, garage_id=garage_id)
         return ro
 
     @staticmethod
@@ -291,6 +297,7 @@ class RepairOrderService:
         resolved to an internal part_id and a stock reservation is created
         atomically in the same transaction.
         """
+        logger.info("add_part_line_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
@@ -345,6 +352,7 @@ class RepairOrderService:
             },
         )
 
+        logger.info("add_part_line_success", ro_public_id=public_id, garage_id=garage_id)
         return ro
 
     @staticmethod
@@ -355,6 +363,7 @@ class RepairOrderService:
         public_id: str,
     ) -> RepairOrder:
         """Soft delete repair order (idempotent)."""
+        logger.info("soft_delete_repair_order_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(
             db, garage_id, public_id, include_deleted=True
         )
@@ -376,6 +385,7 @@ class RepairOrderService:
                 entity_id=ro.id,
             )
 
+        logger.info("soft_delete_repair_order_success", ro_public_id=public_id, garage_id=garage_id)
         return ro
 
     @staticmethod
@@ -386,6 +396,7 @@ class RepairOrderService:
         public_id: str,
     ) -> RepairOrder:
         """Restore a soft-deleted repair order."""
+        logger.info("restore_repair_order_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(
             db, garage_id, public_id, include_deleted=True
         )
@@ -407,6 +418,7 @@ class RepairOrderService:
                 entity_id=ro.id,
             )
 
+        logger.info("restore_repair_order_success", ro_public_id=public_id, garage_id=garage_id)
         return ro
 
 

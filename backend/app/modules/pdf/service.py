@@ -104,67 +104,79 @@ async def render_quotation_pdf(
     db: AsyncSession, *, quotation_id: int, garage_id: int
 ) -> bytes:
     """Fetch the quotation from DB, render HTML template, return PDF bytes."""
-    quotation = await quotation_repo.get_by_id(db, quotation_id, garage_id)
-    if quotation is None:
-        raise ValueError(f"Quotation {quotation_id} not found")
+    logger.info("render_quotation_pdf_start", quotation_id=quotation_id, garage_id=garage_id)
+    try:
+        quotation = await quotation_repo.get_by_id(db, quotation_id, garage_id)
+        if quotation is None:
+            raise ValueError(f"Quotation {quotation_id} not found")
 
-    customer = await customer_repo.get_by_id(db, garage_id, quotation.customer_id)
-    vehicle = None
-    if quotation.vehicle_id:
-        vehicle = await vehicle_repo.get_by_id(
-            db, vehicle_id=quotation.vehicle_id, garage_id=garage_id
+        customer = await customer_repo.get_by_id(db, garage_id, quotation.customer_id)
+        vehicle = None
+        if quotation.vehicle_id:
+            vehicle = await vehicle_repo.get_by_id(
+                db, vehicle_id=quotation.vehicle_id, garage_id=garage_id
+            )
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": quotation,
+            "customer": customer,
+            "vehicle": vehicle,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("quotation.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
         )
-
-    settings = get_settings()
-    ctx: dict[str, Any] = {
-        **_garage_context(),
-        "doc": quotation,
-        "customer": customer,
-        "vehicle": vehicle,
-        "currency_symbol": settings.pdf_currency_symbol,
-    }
-
-    env = _get_jinja_env()
-    html_string = env.get_template("quotation.html").render(**ctx)
-    base_url = str(_TEMPLATES_DIR) + "/"
-
-    loop = asyncio.get_event_loop()
-    pdf_bytes: bytes = await loop.run_in_executor(
-        None, _render_pdf_sync, html_string, base_url
-    )
-    return pdf_bytes
+        logger.info("render_quotation_pdf_success", quotation_id=quotation_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_quotation_pdf_error", quotation_id=quotation_id, garage_id=garage_id)
+        raise
 
 
 async def render_invoice_pdf(
     db: AsyncSession, *, invoice_id: int, garage_id: int
 ) -> bytes:
     """Fetch the invoice from DB, render HTML template, return PDF bytes."""
-    invoice = await invoice_repo.get_by_id(db, invoice_id, garage_id)
-    if invoice is None:
-        raise ValueError(f"Invoice {invoice_id} not found")
+    logger.info("render_invoice_pdf_start", invoice_id=invoice_id, garage_id=garage_id)
+    try:
+        invoice = await invoice_repo.get_by_id(db, invoice_id, garage_id)
+        if invoice is None:
+            raise ValueError(f"Invoice {invoice_id} not found")
 
-    customer = await customer_repo.get_by_id(db, garage_id, invoice.customer_id)
-    vehicle = None
-    if invoice.vehicle_id:
-        vehicle = await vehicle_repo.get_by_id(
-            db, vehicle_id=invoice.vehicle_id, garage_id=garage_id
+        customer = await customer_repo.get_by_id(db, garage_id, invoice.customer_id)
+        vehicle = None
+        if invoice.vehicle_id:
+            vehicle = await vehicle_repo.get_by_id(
+                db, vehicle_id=invoice.vehicle_id, garage_id=garage_id
+            )
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": invoice,
+            "customer": customer,
+            "vehicle": vehicle,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("invoice.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
         )
-
-    settings = get_settings()
-    ctx: dict[str, Any] = {
-        **_garage_context(),
-        "doc": invoice,
-        "customer": customer,
-        "vehicle": vehicle,
-        "currency_symbol": settings.pdf_currency_symbol,
-    }
-
-    env = _get_jinja_env()
-    html_string = env.get_template("invoice.html").render(**ctx)
-    base_url = str(_TEMPLATES_DIR) + "/"
-
-    loop = asyncio.get_event_loop()
-    pdf_bytes: bytes = await loop.run_in_executor(
-        None, _render_pdf_sync, html_string, base_url
-    )
-    return pdf_bytes
+        logger.info("render_invoice_pdf_success", invoice_id=invoice_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_invoice_pdf_error", invoice_id=invoice_id, garage_id=garage_id)
+        raise

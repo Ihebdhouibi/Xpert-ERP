@@ -5,8 +5,9 @@ Xpert-ERP FastAPI application factory and lifespan.
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -14,6 +15,7 @@ from app.core.middleware import RequestIDMiddleware
 from app.core.redis import close_redis
 
 settings = get_settings()
+_app_logger = get_logger("app")
 
 
 @asynccontextmanager
@@ -161,6 +163,22 @@ def create_app() -> FastAPI:
     app.include_router(accounting_export_router, prefix="/api/v1")
     app.include_router(ocr_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
+
+    # ------------------------------------------------------------------
+    # Global exception handler — logs ALL unhandled 500s to system.log
+    # ------------------------------------------------------------------
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        _app_logger.exception(
+            "unhandled_exception",
+            method=request.method,
+            path=request.url.path,
+            error=str(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
     return app
 

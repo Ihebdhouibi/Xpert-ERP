@@ -155,6 +155,7 @@ async def dispatch(
 
     Call this from a FastAPI BackgroundTask or APScheduler job.
     """
+    logger.info("dispatch_start", garage_id=garage_id, channel=channel, template_code=template_code)
     settings = get_settings()
     max_retries: int = settings.cfg_notification_max_retries
     quiet_start = _parse_hhmm(settings.cfg_quiet_hours_start)

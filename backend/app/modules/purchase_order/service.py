@@ -96,6 +96,7 @@ async def create_po(
     expected_delivery_date: Optional[date] = None,
     notes: Optional[str] = None,
 ) -> PurchaseOrder:
+    logger.info("create_po_start", supplier_public_id=supplier_public_id, garage_id=garage_id)
     if not lines_data:
         raise POInvalidTransitionError("A purchase order must have at least one line")
 
@@ -147,6 +148,7 @@ async def update_po(
     expected_delivery_date: Optional[date] = None,
     notes: Optional[str] = None,
 ) -> PurchaseOrder:
+    logger.info("update_po_start", public_id=public_id, garage_id=garage_id)
     po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
     if not po:
         raise PONotFoundError(public_id)
@@ -187,6 +189,7 @@ async def send_po(
     public_id: str,
     submitted_version: int,
 ) -> PurchaseOrder:
+    logger.info("send_po_start", public_id=public_id, garage_id=garage_id)
     po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
     if not po:
         raise PONotFoundError(public_id)
@@ -216,6 +219,7 @@ async def receive_po(
     lines = [{"line_id": int, "quantity_received": int}, ...]
     Stock movements are created atomically in the same flush batch.
     """
+    logger.info("receive_po_start", public_id=public_id, garage_id=garage_id)
     po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
     if not po:
         raise PONotFoundError(public_id)
@@ -304,6 +308,7 @@ async def cancel_po(
     public_id: str,
     submitted_version: int,
 ) -> PurchaseOrder:
+    logger.info("cancel_po_start", public_id=public_id, garage_id=garage_id)
     po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
     if not po:
         raise PONotFoundError(public_id)
@@ -326,6 +331,7 @@ async def update_invoiced_qty(
     line_id: int,
     quantity_invoiced: int,
 ) -> PurchaseOrderLine:
+    logger.info("update_invoiced_qty_start", public_id=public_id, line_id=line_id, garage_id=garage_id)
     po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
     if not po:
         raise PONotFoundError(public_id)
@@ -355,6 +361,7 @@ async def create_po_from_alert(
     user_id: Optional[int] = None,
 ) -> PurchaseOrder:
     """Create a draft PO with one line derived from a low-stock alert."""
+    logger.info("create_po_from_alert_start", alert_id=alert_id, supplier_public_id=supplier_public_id, garage_id=garage_id)
     from app.modules.parts.stock_models import LowStockAlert
     from app.modules.parts.stock_repository import StockRepository
     from sqlalchemy import select

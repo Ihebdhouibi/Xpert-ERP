@@ -64,6 +64,7 @@ async def create_credit_note(
     user_id: int,
 ) -> CreditNoteOut:
     """Create a draft credit note against an invoice."""
+    logger.info("create_credit_note_start", invoice_id=request.invoice_id, garage_id=garage_id)
     from app.modules.invoice import repository as inv_repo
     from app.modules.invoice.models import InvoiceStatus
     from app.modules.invoice.service import InvoiceNotFoundError
@@ -133,6 +134,7 @@ async def issue_credit_note(
     user_id: int,
 ) -> CreditNoteOut:
     """DRAFT → ISSUED. Assigns doc_number and posts balance reversal."""
+    logger.info("issue_credit_note_start", cn_id=cn_id, garage_id=garage_id)
     cn = await repo.get_credit_note_by_id(db, cn_id, garage_id)
     if not cn:
         raise CreditNoteNotFoundError(cn_id)
@@ -177,6 +179,7 @@ async def void_credit_note(
     user_id: int,
 ) -> CreditNoteOut:
     """ISSUED → VOID. Reverses the balance event."""
+    logger.info("void_credit_note_start", cn_id=cn_id, garage_id=garage_id)
     cn = await repo.get_credit_note_by_id(db, cn_id, garage_id)
     if not cn:
         raise CreditNoteNotFoundError(cn_id)
@@ -253,6 +256,7 @@ async def record_refund(
     - Refund amount ≤ payment amount − already refunded.
     - If credit_note_id given: credit note must exist and be issued.
     """
+    logger.info("record_refund_start", payment_id=request.payment_id, garage_id=garage_id)
     from app.modules.payment import repository as pay_repo
 
     payment = await pay_repo.get_by_id(db, request.payment_id, garage_id)

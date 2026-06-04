@@ -87,6 +87,7 @@ async def open_session(
     garage_id: int,
     user_id: int,
 ) -> CashSessionOut:
+    logger.info("open_session_start", garage_id=garage_id, user_id=user_id)
     existing = await repo.get_open_session(db, garage_id)
     if existing:
         raise SessionAlreadyOpenError(
@@ -116,6 +117,7 @@ async def close_session(
     counted_total_cash: int,
     closing_reason: Optional[str] = None,
 ) -> CashSessionOut:
+    logger.info("close_session_start", session_id=session_id, garage_id=garage_id, user_id=user_id)
     settings = get_settings()
     session = await repo.get_by_id(db, session_id, garage_id)
     if not session:
@@ -163,6 +165,7 @@ async def close_session(
 async def get_session(
     db: AsyncSession, session_id: int, garage_id: int
 ) -> CashSessionOut:
+    logger.info("get_session_start", session_id=session_id, garage_id=garage_id)
     session = await repo.get_by_id(db, session_id, garage_id)
     if not session:
         raise SessionNotFoundError(session_id)
@@ -172,6 +175,7 @@ async def get_session(
 async def get_current_open_session(
     db: AsyncSession, garage_id: int
 ) -> Optional[CashSessionOut]:
+    logger.info("get_current_open_session_start", garage_id=garage_id)
     session = await repo.get_open_session(db, garage_id)
     if not session:
         return None
@@ -185,6 +189,7 @@ async def list_sessions(
     page: int = 1,
     page_size: int = 25,
 ) -> CashSessionListResponse:
+    logger.info("list_sessions_start", garage_id=garage_id, page=page)
     items, total = await repo.list_by_garage(db, garage_id, page=page, page_size=page_size)
     return CashSessionListResponse(
         items=[CashSessionOut.model_validate(s) for s in items],
@@ -197,6 +202,7 @@ async def list_sessions(
 async def get_z_report_data(
     db: AsyncSession, session_id: int, garage_id: int
 ) -> ZReportData:
+    logger.info("get_z_report_data_start", session_id=session_id, garage_id=garage_id)
     session = await repo.get_by_id(db, session_id, garage_id)
     if not session:
         raise SessionNotFoundError(session_id)
@@ -223,6 +229,7 @@ async def generate_z_report_pdf(
     db: AsyncSession, session_id: int, garage_id: int
 ) -> bytes:
     """Render Z-report as PDF bytes using WeasyPrint."""
+    logger.info("generate_z_report_pdf_start", session_id=session_id, garage_id=garage_id)
     from app.core.config import get_settings
     from jinja2 import Environment, FileSystemLoader
     from pathlib import Path

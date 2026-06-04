@@ -1,13 +1,18 @@
-"""
-Per-component structured logging with structlog.
+﻿"""Application logging — pure stdlib, grouped by business domain.
 
-Usage:
-    from app.core.logging import get_logger
-    logger = get_logger("auth")
-    logger.info("login_success", user_id=str(user.id), ip=ip_address)
+Log files (all rotating, in logs/):
+  auth.log         — authentication, authorization, RBAC
+  sales.log        — customers, quotations, invoices, payments, credit notes
+  workshop.log     — repair orders, parts, vehicles, inspections
+  procurement.log  — suppliers, purchase orders, supplier invoices
+  system.log       — startup, config, sequences, documents, audit, media, KPI
+  http.log         — every inbound HTTP request/response
 
-Each component writes to logs/<component>.log (rotating) and to stdout.
-Sensitive fields (password, token, secret, card) are redacted automatically.
+Usage (unchanged API):
+  from app.core.logging import get_logger
+  logger = get_logger("auth.service")
+  logger.info("login_success", user_id=str(user.id), ip="1.2.3.4")
+  logger.error("unexpected_error", exc=str(e))
 """
 
 import logging
@@ -16,113 +21,230 @@ import os
 import sys
 from typing import Any
 
-import structlog
+# ---------------------------------------------------------------------------
+# Sensitive-key redaction
+# ---------------------------------------------------------------------------
 
 _SENSITIVE_KEYS = frozenset(
-    {"password", "password_hash", "token", "access_token", "refresh_token",
-     "secret", "secret_key", "card_number", "cvv", "pin"}
+    {
+        "password", "password_hash", "token", "access_token", "refresh_token",
+        "secret", "secret_key", "card_number", "cvv", "pin",
+    }
 )
 
+# ---------------------------------------------------------------------------
+# Component -> group mapping
+# ---------------------------------------------------------------------------
 
-def _redact_sensitive(logger: Any, method: str, event_dict: dict) -> dict:  # noqa: ANN401
-    """structlog processor that redacts sensitive keys from log entries."""
-    for key in list(event_dict.keys()):
-        if key.lower() in _SENSITIVE_KEYS:
-            event_dict[key] = "***REDACTED***"
-    return event_dict
+_GROUP: dict[str, str] = {
+    # auth
+    "auth":             "auth",
+    "auth.router":      "auth",
+    "auth.service":     "auth",
+    "rbac":             "auth",
+    "rbac.router":      "auth",
+    "rbac.service":     "auth",
+    # sales
+    "customer":                "sales",
+    "customer.router":         "sales",
+    "customer.service":        "sales",
+    "customer.credit":         "sales",
+    "quotation":               "sales",
+    "quotation.router":        "sales",
+    "quotation.service":       "sales",
+    "invoice":                 "sales",
+    "invoice.router":          "sales",
+    "invoice.service":         "sales",
+    "payment":                 "sales",
+    "payment.router":          "sales",
+    "payment.service":         "sales",
+    "advance_payment":         "sales",
+    "advance_payment.router":  "sales",
+    "advance_payment.service": "sales",
+    "credit_note":             "sales",
+    "credit_note.router":      "sales",
+    "credit_note.service":     "sales",
+    "cash_session":            "sales",
+    "cash_session.router":     "sales",
+    "cash_session.service":    "sales",
+    # workshop
+    "repair_order":                    "workshop",
+    "repair_order.router":             "workshop",
+    "repair_order.service":            "workshop",
+    "repair_order.time_entry":         "workshop",
+    "repair_order.time_entry_router":  "workshop",
+    "inspection":                      "workshop",
+    "inspection.router":               "workshop",
+    "inspection.service":              "workshop",
+    "parts":                           "workshop",
+    "parts.router":                    "workshop",
+    "parts.service":                   "workshop",
+    "parts.stock":                     "workshop",
+    "parts.stock_router":              "workshop",
+    "vehicles":                        "workshop",
+    "vehicles.router":                 "workshop",
+    "vehicles.service":                "workshop",
+    # procurement
+    "supplier":                  "procurement",
+    "supplier.router":           "procurement",
+    "supplier.service":          "procurement",
+    "purchase_order":            "procurement",
+    "purchase_order.router":     "procurement",
+    "purchase_order.service":    "procurement",
+    "supplier_invoice":          "procurement",
+    "supplier_invoice.router":   "procurement",
+    "supplier_invoice.service":  "procurement",
+    # system
+    "app":                        "system",
+    "health":                     "system",
+    "health.router":              "system",
+    "config":                     "system",
+    "config.router":              "system",
+    "config.service":             "system",
+    "sequence":                   "system",
+    "sequence.router":            "system",
+    "sequence.service":           "system",
+    "documents":                  "system",
+    "documents.router":           "system",
+    "documents.service":          "system",
+    "documents.storage":          "system",
+    "accounting_export":          "system",
+    "accounting_export.router":   "system",
+    "accounting_export.service":  "system",
+    "notification":               "system",
+    "notification.router":        "system",
+    "notification.service":       "system",
+    "media":                      "system",
+    "media.router":               "system",
+    "media.service":              "system",
+    "media.storage":              "system",
+    "kpi":                        "system",
+    "kpi.router":                 "system",
+    "kpi.service":                "system",
+    "pdf":                        "system",
+    "pdf.router":                 "system",
+    "pdf.service":                "system",
+    "ocr":                        "system",
+    "ocr.router":                 "system",
+    "ocr.service":                "system",
+    "audit":                      "system",
+    # http
+    "http": "http",
+}
+
+_ALL_GROUPS = ("auth", "sales", "workshop", "procurement", "system", "http")
+
+# ---------------------------------------------------------------------------
+# Logger wrapper
+# ---------------------------------------------------------------------------
 
 
-def _setup_file_handler(component: str, log_dir: str, max_bytes: int, backup_count: int) -> logging.Handler:
-    os.makedirs(log_dir, exist_ok=True)
-    handler = logging.handlers.RotatingFileHandler(
-        filename=os.path.join(log_dir, f"{component}.log"),
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    return handler
-
-
-def configure_logging(log_level: str, log_dir: str, max_bytes: int, backup_count: int) -> None:
+class _ComponentLogger:
     """
-    Call once at application startup (in main.py lifespan).
-    Configures structlog with JSON rendering, timestamp, level, and redaction.
+    Thin wrapper that routes log calls to the correct group logger and prepends
+    the component name plus any keyword context to the message.
+
+    Safe to instantiate at module import time. The underlying stdlib logger is
+    resolved lazily on each call so it already has its handlers by the time
+    the first real log call is made (after configure_logging() runs at startup).
     """
-    level = getattr(logging, log_level.upper(), logging.INFO)
 
-    shared_processors: list[Any] = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
-        _redact_sensitive,
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-    ]
+    __slots__ = ("_component", "_group")
 
-    structlog.configure(
-        processors=shared_processors + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(level),
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True,
-    )
+    def __init__(self, component: str) -> None:
+        self._component = component
+        self._group = _GROUP.get(component, "system")
 
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            structlog.processors.JSONRenderer(),
-        ],
-        foreign_pre_chain=shared_processors,
-    )
+    def _fmt(self, msg: str, **kw: Any) -> str:
+        for key in list(kw):
+            if key.lower() in _SENSITIVE_KEYS:
+                kw[key] = "***REDACTED***"
+        if kw:
+            pairs = "  ".join(f"{k}={v!r}" for k, v in kw.items())
+            return f"[{self._component}] {msg}  {pairs}"
+        return f"[{self._component}] {msg}"
 
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
+    def _lg(self) -> logging.Logger:
+        return logging.getLogger(self._group)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    if not root_logger.handlers:
-        root_logger.addHandler(console_handler)
+    def debug(self, msg: str, **kw: Any) -> None:
+        self._lg().debug(self._fmt(msg, **kw), stacklevel=2)
 
-    # Per-component file handlers registered on demand in get_logger()
-    # Store config for later use
-    _logging_config["log_dir"] = log_dir
-    _logging_config["max_bytes"] = max_bytes
-    _logging_config["backup_count"] = backup_count
-    _logging_config["formatter"] = formatter
-    _logging_config["level"] = level
+    def info(self, msg: str, **kw: Any) -> None:
+        self._lg().info(self._fmt(msg, **kw), stacklevel=2)
+
+    def warning(self, msg: str, **kw: Any) -> None:
+        self._lg().warning(self._fmt(msg, **kw), stacklevel=2)
+
+    def error(self, msg: str, **kw: Any) -> None:
+        self._lg().error(self._fmt(msg, **kw), stacklevel=2)
+
+    def exception(self, msg: str, **kw: Any) -> None:
+        self._lg().exception(self._fmt(msg, **kw), stacklevel=2)
+
+    def critical(self, msg: str, **kw: Any) -> None:
+        self._lg().critical(self._fmt(msg, **kw), stacklevel=2)
 
 
-_logging_config: dict[str, Any] = {}
-_component_loggers: dict[str, Any] = {}
+# ---------------------------------------------------------------------------
+# Module-level cache
+# ---------------------------------------------------------------------------
+
+_component_loggers: dict[str, _ComponentLogger] = {}
 
 
-def get_logger(component: str) -> structlog.stdlib.BoundLogger:
-    """
-    Return a structlog bound logger for the given component name.
-    Creates and registers a per-component rotating file handler on first call.
-    """
+def get_logger(component: str) -> _ComponentLogger:
+    """Return a logger for *component*. Safe to call at module import time."""
     if component not in _component_loggers:
-        stdlib_logger = logging.getLogger(component)
-        stdlib_logger.setLevel(_logging_config.get("level", logging.INFO))
+        _component_loggers[component] = _ComponentLogger(component)
+    return _component_loggers[component]
 
-        if _logging_config.get("log_dir") and not any(
-            isinstance(h, logging.handlers.RotatingFileHandler)
-            for h in stdlib_logger.handlers
+
+# ---------------------------------------------------------------------------
+# Startup configuration — call once from main.py lifespan
+# ---------------------------------------------------------------------------
+
+
+def configure_logging(
+    log_level: str,
+    log_dir: str,
+    max_bytes: int,
+    backup_count: int,
+) -> None:
+    """Configure rotating file + console handlers for all log groups."""
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    fmt = logging.Formatter(
+        fmt="%(asctime)s - %(levelname)-8s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    os.makedirs(log_dir, exist_ok=True)
+
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(fmt)
+    console.setLevel(level)
+
+    for group in _ALL_GROUPS:
+        lg = logging.getLogger(group)
+        lg.setLevel(level)
+        lg.propagate = False  # don't bubble to root logger
+
+        # Console handler (add once)
+        if not any(
+            isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+            for h in lg.handlers
         ):
-            file_handler = _setup_file_handler(
-                component=component,
-                log_dir=_logging_config["log_dir"],
-                max_bytes=_logging_config["max_bytes"],
-                backup_count=_logging_config["backup_count"],
+            lg.addHandler(console)
+
+        # Rotating file handler (add once)
+        if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in lg.handlers):
+            fh = logging.handlers.RotatingFileHandler(
+                filename=os.path.join(log_dir, f"{group}.log"),
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
             )
-            if "formatter" in _logging_config:
-                file_handler.setFormatter(_logging_config["formatter"])
-            stdlib_logger.addHandler(file_handler)
-
-        _component_loggers[component] = structlog.get_logger(component)
-
-    return _component_loggers[component]  # type: ignore[return-value]
+            fh.setFormatter(fmt)
+            fh.setLevel(level)
+            lg.addHandler(fh)
