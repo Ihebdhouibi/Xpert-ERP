@@ -128,6 +128,7 @@ class CreditLimitUpdateRequest(BaseModel):
 
 class CustomerSummary(BaseModel):
     id: str  # public_id (UUID as string)
+    int_id: int  # internal integer PK — used by cross-module FKs (e.g. vehicle.customer_id)
     garage_id: int
     type: CustomerType
     full_name: str
