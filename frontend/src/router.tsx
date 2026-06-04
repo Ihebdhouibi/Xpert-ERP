@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './pages/auth/LoginPage'
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CustomersListPage } from './pages/customers/CustomersListPage'
 import { CustomerCreatePage } from './pages/customers/CustomerCreatePage'
@@ -47,6 +49,14 @@ export const router = createBrowserRouter(
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/approve/:token',
