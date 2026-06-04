@@ -38,6 +38,8 @@ import {
   type RepairOrderDetail,
   type Comment,
 } from '../../lib/repairOrderApi'
+import { customerApi } from '../../lib/customerApi'
+import { vehiclesApi } from '../../lib/vehiclesApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -548,6 +550,22 @@ export function RepairOrderDetailPage() {
     enabled: !!publicId,
   })
 
+  const roForQueries = data
+
+  const { data: customer } = useQuery({
+    queryKey: ['customer-by-int-id', roForQueries?.customer_id],
+    queryFn: () => customerApi.getByIntId(roForQueries!.customer_id),
+    enabled: !!roForQueries?.customer_id,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: vehicle } = useQuery({
+    queryKey: ['vehicle', roForQueries?.vehicle_id],
+    queryFn: () => vehiclesApi.get(roForQueries!.vehicle_id!),
+    enabled: !!roForQueries?.vehicle_id,
+    staleTime: 5 * 60 * 1000,
+  })
+
   const handleDelete = async () => {
     try {
       await repairOrderApi.remove(publicId)
@@ -585,7 +603,7 @@ export function RepairOrderDetailPage() {
     )
   }
 
-  const ro: RepairOrderDetail = data
+  const ro = data as RepairOrderDetail
   const currency = ro.estimated_cost_currency ?? 'EUR'
   const laborTotal = ro.labor_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
   const partsTotal = ro.part_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
@@ -654,10 +672,40 @@ export function RepairOrderDetailPage() {
               </Typography>
               <Grid container spacing={2.5}>
                 <Grid item xs={6} sm={3}>
-                  <InfoField label="Client" value={`#${ro.customer_id}`} />
+                  <InfoField
+                    label="Client"
+                    value={
+                      customer ? (
+                        <Typography
+                          variant="body2"
+                          fontWeight={500}
+                          component={RouterLink}
+                          to={`/customers/${customer.id}`}
+                          sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                        >
+                          {customer.full_name}
+                        </Typography>
+                      ) : `#${ro.customer_id}`
+                    }
+                  />
                 </Grid>
                 <Grid item xs={6} sm={3}>
-                  <InfoField label="Véhicule" value={ro.vehicle_id ? `#${ro.vehicle_id}` : '—'} />
+                  <InfoField
+                    label="Véhicule"
+                    value={
+                      vehicle ? (
+                        <Typography
+                          variant="body2"
+                          fontWeight={500}
+                          component={RouterLink}
+                          to={`/vehicles/${vehicle.id}`}
+                          sx={{ color: 'primary.main', textDecoration: 'none', fontFamily: vehicle.registration ? 'monospace' : 'inherit', '&:hover': { textDecoration: 'underline' } }}
+                        >
+                          {vehicle.registration ?? `${vehicle.make} ${vehicle.model}`}
+                        </Typography>
+                      ) : ro.vehicle_id ? `#${ro.vehicle_id}` : '—'
+                    }
+                  />
                 </Grid>
                 <Grid item xs={6} sm={3}>
                   <InfoField
