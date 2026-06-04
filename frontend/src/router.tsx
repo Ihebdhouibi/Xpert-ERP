@@ -27,6 +27,7 @@ import { KpiDashboardPage } from './pages/kpi/KpiDashboardPage'
 import { VehiclesPage } from './pages/vehicles/VehiclesPage'
 import { VehicleDetailPage } from './pages/vehicles/VehicleDetailPage'
 import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
+import { VehicleEditPage } from './pages/vehicles/VehicleEditPage'
 import { QuotationsPage } from './pages/quotations/QuotationsPage'
 import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
@@ -109,6 +110,7 @@ export const router = createBrowserRouter(
       { path: 'vehicles', element: <VehiclesPage /> },
       { path: 'vehicles/new', element: <VehicleCreatePage /> },
       { path: 'vehicles/:id', element: <VehicleDetailPage /> },
+      { path: 'vehicles/:id/edit', element: <VehicleEditPage /> },
 
       // Billing — quotations & invoices
       { path: 'quotations', element: <QuotationsPage /> },
