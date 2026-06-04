@@ -260,3 +260,24 @@ def configure_logging(
             fh.setFormatter(fmt)
             fh.setLevel(level)
             lg.addHandler(fh)
+
+    # ------------------------------------------------------------------
+    # Wire uvicorn's own loggers to logs/uvicorn.log so all startup
+    # messages, access lines, and tracebacks are captured regardless of
+    # whether uvicorn was started with --log-config.
+    # ------------------------------------------------------------------
+    uvicorn_file = logging.handlers.RotatingFileHandler(
+        filename=os.path.join(log_dir, "uvicorn.log"),
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    uvicorn_file.setFormatter(fmt)
+    uvicorn_file.setLevel(logging.DEBUG)
+
+    for uv_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_lg = logging.getLogger(uv_name)
+        uv_lg.setLevel(logging.DEBUG)
+        uv_lg.disabled = False
+        if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in uv_lg.handlers):
+            uv_lg.addHandler(uvicorn_file)

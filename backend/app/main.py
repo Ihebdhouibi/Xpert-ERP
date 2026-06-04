@@ -4,6 +4,7 @@ Xpert-ERP FastAPI application factory and lifespan.
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,12 +18,22 @@ from app.core.redis import close_redis
 settings = get_settings()
 _app_logger = get_logger("app")
 
+# Resolve log directory relative to the project root (two levels up from app/)
+# so logs always land in <project-root>/logs/ regardless of the CWD when
+# uvicorn is launched.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_LOG_DIR = str(
+    Path(settings.log_dir)
+    if Path(settings.log_dir).is_absolute()
+    else _PROJECT_ROOT / settings.log_dir
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(
         log_level=settings.log_level,
-        log_dir=settings.log_dir,
+        log_dir=_LOG_DIR,
         max_bytes=settings.log_max_bytes,
         backup_count=settings.log_backup_count,
     )
