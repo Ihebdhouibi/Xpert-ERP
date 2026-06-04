@@ -94,6 +94,11 @@ class Settings(BaseSettings):
     smtp_from_name: str = "Xpert-ERP"
 
     # -------------------------------------------------------------------------
+    # Frontend
+    # -------------------------------------------------------------------------
+    frontend_base_url: str = "http://localhost:5173"
+
+    # -------------------------------------------------------------------------
     # Document upload (CFG_* runtime tunables backed by env for now)
     # -------------------------------------------------------------------------
     max_upload_size_bytes: int = 10_485_760  # 10 MB

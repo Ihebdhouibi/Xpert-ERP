@@ -82,9 +82,10 @@ class EmailAdapter(NotificationAdapter):
                 username=settings.smtp_username or None,
                 password=settings.smtp_password or None,
                 use_tls=settings.smtp_use_tls,
+                start_tls=False if not settings.smtp_use_tls else None,
             )
         except Exception as exc:
-            logger.warning("email_send_failed", exc_type=type(exc).__name__, recipient=recipient)
+            logger.warning("email_send_failed: %s to %s", type(exc).__name__, recipient)
             return DeliveryResult(success=False, error=type(exc).__name__)
 
         return DeliveryResult(success=True)

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.core.redis import get_redis
@@ -20,6 +21,7 @@ from app.modules.auth.schemas import (
     RefreshRequest,
     TokenResponse,
 )
+from app.modules.notification.adapter import EmailAdapter
 from app.core.logging import get_logger
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -113,10 +115,51 @@ async def password_reset_request(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     garage_id = x_garage_id or 1
-    # Fire-and-forget — always return 202 to prevent user enumeration
-    await service.request_password_reset(
+    raw_token = await service.request_password_reset(
         db=db, garage_id=garage_id, email=body.email
     )
+
+    if raw_token:
+        cfg = get_settings()
+        reset_url = (
+            f"{cfg.frontend_base_url}/reset-password"
+            f"?token={raw_token}&email={body.email}"
+        )
+        html_body = f"""
+        <p>Bonjour,</p>
+        <p>Vous avez demandé la réinitialisation de votre mot de passe Xpert&nbsp;ERP.</p>
+        <p>
+          <a href="{reset_url}" style="
+            display:inline-block;
+            padding:10px 20px;
+            background:#1976D2;
+            color:#fff;
+            text-decoration:none;
+            border-radius:4px;
+            font-weight:bold;
+          ">Réinitialiser mon mot de passe</a>
+        </p>
+        <p>Ce lien expire dans {cfg.password_reset_expiry_minutes} minutes.</p>
+        <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+        <hr/>
+        <p style="font-size:12px;color:#666;">
+          Lien direct : {reset_url}
+        </p>
+        """
+        result = await EmailAdapter().send(
+            recipient=body.email,
+            channel="email",
+            subject="Réinitialisation de votre mot de passe — Xpert ERP",
+            body=html_body,
+        )
+        if not result.success:
+            logger.warning(
+                "password_reset_email_failed",
+                email=body.email,
+                error=result.error,
+            )
+
+    # Always return 202 — never reveal whether the email exists
     return {"detail": "If the email is registered, a reset link has been sent."}
 
 
