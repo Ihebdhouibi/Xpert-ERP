@@ -63,6 +63,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("migrations_failed", error=str(exc))
         raise
 
+    # Re-run configure_logging after migrations: Alembic's fileConfig (inside env.py)
+    # can set logger.disabled=True on our group loggers even with the env.py fix in
+    # place on older cached .pyc files.  Calling configure_logging again resets the
+    # disabled flag and ensures all group loggers are fully operational.
+    configure_logging(
+        log_level=settings.log_level,
+        log_dir=settings.log_dir,
+        max_bytes=settings.log_max_bytes,
+        backup_count=settings.log_backup_count,
+    )
+    logger.info("logging_ready", log_dir=settings.log_dir, log_level=settings.log_level)
+
     # Seed system notification templates (idempotent)
     try:
         from app.core.database import AsyncSessionFactory

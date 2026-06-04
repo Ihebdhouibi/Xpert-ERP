@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -152,6 +153,7 @@ async def login(
     password: str,
     garage_id: int,
 ) -> LoginResponse:
+    _start = time.perf_counter()
     logger.info("login_attempt", email=email, garage_id=garage_id)
     cfg = get_settings()
 
@@ -208,7 +210,7 @@ async def login(
     await repo.reset_failed_logins(db, user.id)
     await db.commit()
 
-    logger.info("login_success", user_id=user.id, garage_id=garage_id)
+    logger.info("[TIMING] login_success", user_id=user.id, garage_id=garage_id, elapsed_ms=round((time.perf_counter() - _start) * 1000, 1))
 
     user_out = UserOut(
         id=subject,
@@ -239,6 +241,7 @@ async def refresh(
     redis: Redis,
     refresh_token_str: str,
 ) -> LoginResponse:
+    _start = time.perf_counter()
     logger.info("refresh_attempt")
     cfg = get_settings()
     try:
@@ -285,7 +288,7 @@ async def refresh(
         created_at=user.created_at,
     )
 
-    logger.info("refresh_success", user_id=user.id, garage_id=user.garage_id)
+    logger.info("[TIMING] refresh_success", user_id=user.id, garage_id=user.garage_id, elapsed_ms=round((time.perf_counter() - _start) * 1000, 1))
     return LoginResponse(
         access_token=access_token,
         refresh_token=new_refresh_token,
@@ -299,6 +302,7 @@ async def refresh(
 # ---------------------------------------------------------------------------
 
 async def logout(redis: Redis, refresh_token_str: str) -> None:
+    _start = time.perf_counter()
     logger.info("logout_attempt")
     cfg = get_settings()
     try:
@@ -316,6 +320,7 @@ async def logout(redis: Redis, refresh_token_str: str) -> None:
             remaining = int(exp) - int(_utcnow().timestamp())
             if remaining > 0:
                 await _deny_list_token(redis, jti, remaining)
+    logger.info("[TIMING] logout_complete", elapsed_ms=round((time.perf_counter() - _start) * 1000, 1))
 
 
 # ---------------------------------------------------------------------------

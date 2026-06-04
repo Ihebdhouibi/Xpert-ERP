@@ -211,16 +211,27 @@ def configure_logging(
     max_bytes: int,
     backup_count: int,
 ) -> None:
-    """Configure rotating file + console handlers for all log groups."""
+    """Configure rotating file + console handlers for all log groups.
+
+    Safe to call more than once (hot-reload / test setup):
+    - Duplicate handlers are not added.
+    - logger.disabled is explicitly reset so Alembic's fileConfig
+      (which sets disabled=True on unknown loggers by default) cannot
+      silence our handlers even when called between two configure_logging
+      calls.
+    """
     level = getattr(logging, log_level.upper(), logging.INFO)
+
+    # Format matches the reference project: timestamp with ms, logger name, level, message
+    # e.g.  2026-06-04 12:34:56,789 - auth - INFO - [auth.service] login_attempt  user_id='3'
     fmt = logging.Formatter(
-        fmt="%(asctime)s - %(levelname)-8s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        fmt="%(asctime)s - %(name)-12s - %(levelname)-8s - %(message)s",
+        # No datefmt → Python default includes milliseconds: "2026-06-04 12:34:56,789"
     )
 
     os.makedirs(log_dir, exist_ok=True)
 
-    console = logging.StreamHandler(sys.stdout)
+    console = logging.StreamHandler(sys.stderr)
     console.setFormatter(fmt)
     console.setLevel(level)
 
@@ -228,8 +239,9 @@ def configure_logging(
         lg = logging.getLogger(group)
         lg.setLevel(level)
         lg.propagate = False  # don't bubble to root logger
+        lg.disabled = False   # undo any disable set by alembic fileConfig
 
-        # Console handler (add once)
+        # Console handler (add once — share the single instance)
         if not any(
             isinstance(h, logging.StreamHandler)
             and not isinstance(h, logging.FileHandler)
