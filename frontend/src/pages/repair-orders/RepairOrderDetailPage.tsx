@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -27,6 +27,8 @@ import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import StopRoundedIcon from '@mui/icons-material/StopRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
+import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateRounded'
+import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
 import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
@@ -37,6 +39,7 @@ import {
   type ROStatus,
   type RepairOrderDetail,
   type Comment,
+  type ROPhotoSummary,
 } from '../../lib/repairOrderApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
@@ -534,6 +537,115 @@ function CommentsPanel({ publicId }: { publicId: string }) {
   )
 }
 
+// ─── Photos ──────────────────────────────────────────────────────────────────
+
+function PhotosPanel({ publicId }: { publicId: string }) {
+  const queryClient = useQueryClient()
+  const { error: toastError } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [brokenIds, setBrokenIds] = useState<Set<number>>(new Set())
+
+  const { data } = useQuery({
+    queryKey: ['photos', publicId],
+    queryFn: () => repairOrderApi.listPhotos(publicId),
+  })
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => repairOrderApi.uploadPhoto(publicId, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['photos', publicId] }),
+    onError: () => toastError("Impossible d'envoyer la photo."),
+  })
+
+  function handleFiles(files: FileList | null) {
+    if (!files) return
+    Array.from(files).forEach(f => uploadMutation.mutate(f))
+  }
+
+  const photos: ROPhotoSummary[] = data?.items ?? []
+
+  return (
+    <Box>
+      {photos.length === 0 && !uploadMutation.isPending && (
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Aucune photo pour l'instant.
+        </Typography>
+      )}
+
+      {photos.length > 0 && (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+            gap: 1,
+            mb: 2,
+          }}
+        >
+          {photos.map(photo => (
+            <Box
+              key={photo.id}
+              component="a"
+              href={photo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: 'block',
+                aspectRatio: '1',
+                borderRadius: 1,
+                overflow: 'hidden',
+                bgcolor: '#F1F5F9',
+                border: '1px solid #E2E8F0',
+                '&:hover': { opacity: 0.85 },
+              }}
+            >
+              {brokenIds.has(photo.id) ? (
+                <Box
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <BrokenImageRoundedIcon sx={{ color: '#CBD5E1', fontSize: 32 }} />
+                </Box>
+              ) : (
+                <img
+                  src={photo.url}
+                  alt={photo.filename}
+                  onError={() => setBrokenIds(prev => new Set(prev).add(photo.id))}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      <PermissionGate permission="repair_order.update">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic"
+          multiple
+          style={{ display: 'none' }}
+          onChange={e => handleFiles(e.target.files)}
+        />
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AddPhotoAlternateRoundedIcon />}
+          disabled={uploadMutation.isPending}
+          onClick={() => fileInputRef.current?.click()}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
+          {uploadMutation.isPending ? 'Envoi…' : 'Ajouter des photos'}
+        </Button>
+      </PermissionGate>
+    </Box>
+  )
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function RepairOrderDetailPage() {
@@ -909,6 +1021,16 @@ export function RepairOrderDetailPage() {
                 Commentaires
               </Typography>
               <CommentsPanel publicId={publicId} />
+            </CardContent>
+          </Card>
+
+          {/* Photos */}
+          <Card>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="subtitle2" fontWeight={700} mb={2}>
+                Photos
+              </Typography>
+              <PhotosPanel publicId={publicId} />
             </CardContent>
           </Card>
         </Grid>
