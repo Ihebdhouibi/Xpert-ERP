@@ -29,9 +29,9 @@ export interface ConfirmFieldsRequest {
 }
 
 export const ocrApi = {
-  enqueue: (documentId: number) =>
+  enqueue: (documentPublicId: string) =>
     apiClient
-      .post<OcrExtractionOut>(`/ocr/enqueue/${documentId}`)
+      .post<OcrExtractionOut>(`/ocr/enqueue/${documentPublicId}`)
       .then((r) => r.data),
 
   get: (extractionId: string) =>

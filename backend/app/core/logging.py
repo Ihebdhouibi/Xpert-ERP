@@ -127,6 +127,8 @@ _GROUP: dict[str, str] = {
     "ocr":                        "system",
     "ocr.router":                 "system",
     "ocr.service":                "system",
+    "ocr.engine":                 "system",
+    "app.modules.ocr.engine":     "system",
     "audit":                      "system",
     # http
     "http": "http",
@@ -281,3 +283,18 @@ def configure_logging(
         uv_lg.disabled = False
         if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in uv_lg.handlers):
             uv_lg.addHandler(uvicorn_file)
+
+    # ------------------------------------------------------------------
+    # Some internal modules use stdlib logging.getLogger(__name__) directly
+    # instead of get_logger().  Point their loggers at the system group
+    # handlers so their output still lands in system.log.
+    # ------------------------------------------------------------------
+    system_lg = logging.getLogger("system")
+    for raw_name in ("app.modules.ocr.engine",):
+        raw_lg = logging.getLogger(raw_name)
+        raw_lg.setLevel(level)
+        raw_lg.propagate = False
+        raw_lg.disabled = False
+        for h in system_lg.handlers:
+            if not any(type(existing) is type(h) for existing in raw_lg.handlers):
+                raw_lg.addHandler(h)

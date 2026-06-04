@@ -24,7 +24,8 @@ apiClient.interceptors.request.use(
 
 // Handle 401: attempt silent token refresh, else redirect to /login
 let isRefreshing = false
-let pendingRequests: Array<(token: string) => void> = []
+type PendingEntry = { resolve: (token: string) => void; reject: (err: unknown) => void }
+let pendingRequests: PendingEntry[] = []
 
 apiClient.interceptors.response.use(
   (response) => response,
@@ -33,12 +34,21 @@ apiClient.interceptors.response.use(
       _retry?: boolean
     }
 
-    if (error.response?.status === 401 && !original._retry) {
+    // Never intercept auth endpoints — their 401s are credential errors, not expired tokens
+    const url = original.url ?? ''
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/logout')
+
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          pendingRequests.push((token) => {
-            original.headers.Authorization = `Bearer ${token}`
-            resolve(apiClient(original))
+        // Queue this request until the in-flight refresh completes or fails.
+        // Both resolve AND reject paths are wired so the promise always settles.
+        return new Promise((resolve, reject) => {
+          pendingRequests.push({
+            resolve: (token) => {
+              original.headers.Authorization = `Bearer ${token}`
+              resolve(apiClient(original))
+            },
+            reject,
           })
         })
       }
@@ -57,17 +67,22 @@ apiClient.interceptors.response.use(
         localStorage.setItem('access_token', data.access_token)
         localStorage.setItem('refresh_token', data.refresh_token)
 
-        pendingRequests.forEach((cb) => cb(data.access_token))
+        const queue = pendingRequests
         pendingRequests = []
         isRefreshing = false
+        queue.forEach(({ resolve }) => resolve(data.access_token))
 
         original.headers.Authorization = `Bearer ${data.access_token}`
         return apiClient(original)
-      } catch {
+      } catch (refreshError) {
+        const queue = pendingRequests
         pendingRequests = []
         isRefreshing = false
+        // Reject all queued promises so their callers (e.g. logout) can settle
+        queue.forEach(({ reject }) => reject(refreshError))
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('auth_user')
         window.location.href = '/login'
         return Promise.reject(error)
       }

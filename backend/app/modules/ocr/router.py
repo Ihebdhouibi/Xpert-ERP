@@ -15,25 +15,30 @@ from app.modules.ocr.service import (
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.core.logging import get_logger
+from app.modules.documents import repository as doc_repo
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
 logger = get_logger("ocr.router")
 
 
 @router.post(
-    "/enqueue/{document_id}",
+    "/enqueue/{document_public_id}",
     response_model=OcrExtractionOut,
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[require_permission("document.read")],
     summary="Enqueue OCR processing for a document",
 )
 async def enqueue_ocr(
-    document_id: int,
+    document_public_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> OcrExtractionOut:
     """Create a pending extraction row and immediately kick off processing in the background."""
-    extraction = await service.enqueue_ocr(db, document_id=document_id)
+    document = await doc_repo.get_by_public_id(db, public_id=document_public_id, garage_id=user.garage_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    extraction = await service.enqueue_ocr(db, document_id=document.id)
     background_tasks.add_task(service.process_ocr_job, db, extraction_id=extraction.id)
     return OcrExtractionOut.from_model(extraction)
 

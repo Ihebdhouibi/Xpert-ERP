@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -29,15 +30,17 @@ import {
 } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import DownloadIcon from '@mui/icons-material/Download'
+import PageviewIcon from '@mui/icons-material/Pageview'
 import SearchIcon from '@mui/icons-material/Search'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import type { DocumentCategory, DocumentOut, OwnerEntityType } from '../../lib/documentsApi'
 import { documentsApi } from '../../lib/documentsApi'
+import { ocrApi } from '../../lib/ocrApi'
 
 const CATEGORIES: { value: DocumentCategory | ''; label: string }[] = [
   { value: '', label: 'Toutes les catégories' },
   { value: 'registration_card', label: 'Carte grise' },
-  { value: 'national_id', label: 'Pièce d\'identité' },
+  { value: 'id_doc', label: 'Pièce d\'identité' },
   { value: 'insurance', label: 'Assurance' },
   { value: 'accident_photo', label: 'Photo accident' },
   { value: 'repair_attachment', label: 'Annexe OR' },
@@ -61,6 +64,8 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
   return `${(bytes / 1024 / 1024).toFixed(1)} Mo`
 }
+
+const OCR_ELIGIBLE_CATEGORIES: DocumentCategory[] = ['registration_card', 'id_doc']
 
 function categoryLabel(cat: DocumentCategory): string {
   return CATEGORIES.find((c) => c.value === cat)?.label ?? cat
@@ -179,6 +184,7 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
 // Main page
 // ---------------------------------------------------------------------------
 export function DocumentsPage() {
+  const navigate = useNavigate()
   const [docs, setDocs] = useState<DocumentOut[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -191,6 +197,19 @@ export function DocumentsPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [enqueuingId, setEnqueuingId] = useState<string | null>(null)
+
+  const handleLaunchOcr = async (doc: DocumentOut) => {
+    setEnqueuingId(doc.id)
+    try {
+      const extraction = await ocrApi.enqueue(doc.id)
+      navigate(`/ocr/${extraction.id}`)
+    } catch {
+      alert('Impossible de lancer l\'analyse OCR.')
+    } finally {
+      setEnqueuingId(null)
+    }
+  }
 
   const fetchDocs = async () => {
     setLoading(true)
@@ -359,6 +378,24 @@ export function DocumentsPage() {
                     )}
                   </TableCell>
                   <TableCell align="right">
+                    {OCR_ELIGIBLE_CATEGORIES.includes(doc.category) && (
+                      <Tooltip title="Lancer l'analyse OCR">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleLaunchOcr(doc)}
+                            disabled={enqueuingId === doc.id}
+                          >
+                            {enqueuingId === doc.id ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <PageviewIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Télécharger">
                       <IconButton size="small" onClick={() => handleDownload(doc)}>
                         <DownloadIcon fontSize="small" />

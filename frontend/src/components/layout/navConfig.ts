@@ -23,6 +23,7 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
 import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded'
+import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
 
 export interface NavItem {
   label: string
@@ -64,6 +65,12 @@ export const navSections: NavSection[] = [
         path: '/inspections',
         icon: FindInPageRoundedIcon,
         permission: 'inspection.read',
+      },
+      {
+        label: 'Documents',
+        path: '/documents',
+        icon: FolderRoundedIcon,
+        permission: 'document.read',
       },
     ],
   },

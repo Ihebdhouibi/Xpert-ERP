@@ -5,7 +5,7 @@ import { apiClient } from './apiClient'
 
 export type DocumentCategory =
   | 'registration_card'
-  | 'national_id'
+  | 'id_doc'
   | 'insurance'
   | 'accident_photo'
   | 'repair_attachment'

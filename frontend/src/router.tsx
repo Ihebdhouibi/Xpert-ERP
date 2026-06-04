@@ -42,6 +42,8 @@ import { UsersPage } from './pages/admin/UsersPage'
 import { RolesPage } from './pages/admin/RolesPage'
 import { SettingsPage } from './pages/admin/SettingsPage'
 import { AuditLogsPage } from './pages/admin/AuditLogsPage'
+import { DocumentsPage } from './pages/documents/DocumentsPage'
+import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
 
 export const router = createBrowserRouter(
   [
@@ -142,6 +144,10 @@ export const router = createBrowserRouter(
       { path: 'roles', element: <RolesPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
+
+      // Documents & OCR
+      { path: 'documents', element: <DocumentsPage /> },
+      { path: 'ocr/:extractionId', element: <OcrReviewPage /> },
 
       // Catch-all
       { path: '*', element: <Navigate to="/" replace /> },
