@@ -704,3 +704,39 @@ async def get_customer_spending_summary(
         advance_balance_minor=adv_unapplied,
         loyalty_points=c.loyalty_points,
     )
+
+
+@router.get(
+    "/{public_id}/delivery-notes",
+    dependencies=[require_permission("customer.read"), require_permission("invoice.read")],
+    summary="List all delivery notes for this customer",
+)
+async def list_customer_delivery_notes(
+    public_id: str,
+    user: AuthUser,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.modules.delivery_note import service as dn_service
+    from app.modules.delivery_note.models import DeliveryNoteStatus
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+
+    dn_status: Optional[DeliveryNoteStatus] = None
+    if status_filter:
+        try:
+            dn_status = DeliveryNoteStatus(status_filter)
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Invalid status: {status_filter}")
+
+    result = await dn_service.list_delivery_notes(
+        db,
+        user.garage_id,
+        customer_id=c.id,
+        status=dn_status,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
