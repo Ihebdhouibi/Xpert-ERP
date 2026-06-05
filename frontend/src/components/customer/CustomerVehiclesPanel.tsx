@@ -163,7 +163,7 @@ export function CustomerVehiclesPanel({ customerPublicId, customerIntId }: Props
               size="small"
               variant="outlined"
               startIcon={<AddRoundedIcon />}
-              onClick={() => navigate(`/vehicles/new?customerId=${customerPublicId}`)}
+              onClick={() => navigate(`/vehicles/new?customerId=${customerIntId}&returnTo=/customers/${customerPublicId}`)}
             >
               Ajouter un véhicule
             </Button>
@@ -195,7 +195,7 @@ export function CustomerVehiclesPanel({ customerPublicId, customerIntId }: Props
                 size="small"
                 variant="text"
                 startIcon={<AddRoundedIcon />}
-                onClick={() => navigate(`/vehicles/new?customerId=${customerPublicId}`)}
+                onClick={() => navigate(`/vehicles/new?customerId=${customerIntId}&returnTo=/customers/${customerPublicId}`)}
                 sx={{ mt: 1 }}
               >
                 Ajouter un véhicule

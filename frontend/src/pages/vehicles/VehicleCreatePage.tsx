@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'import axios from 'axios'
 import {
   Autocomplete,
   Alert,
@@ -128,8 +127,13 @@ function SectionCard({
 
 export function VehicleCreatePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { success, error: toastError } = useToast()
+
+  // Query params for prefill
+  const prefillCustomerId = searchParams.get('customerId') ? Number(searchParams.get('customerId')) : null
+  const returnTo = searchParams.get('returnTo') ?? null
 
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -156,6 +160,25 @@ export function VehicleCreatePage() {
     debounceRef.current = setTimeout(() => setDebouncedSearch(customerSearch), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [customerSearch])
+
+  // Prefill customer from query param
+  const { data: prefillCustomer } = useQuery({
+    queryKey: ['customer-prefill', prefillCustomerId],
+    queryFn: () => customerApi.getByIntId(prefillCustomerId!),
+    enabled: !!prefillCustomerId,
+    staleTime: Infinity,
+  })
+
+  useEffect(() => {
+    if (prefillCustomer) {
+      setSelectedCustomer(prefillCustomer)
+      setCustomerSearch(
+        prefillCustomer.company_name
+          ? `${prefillCustomer.full_name} (${prefillCustomer.company_name})`
+          : prefillCustomer.full_name,
+      )
+    }
+  }, [prefillCustomer])
 
   // Fetch customers from the API whenever the debounced query changes
   const { data: customersData, isFetching: customersLoading } = useQuery({
@@ -192,7 +215,7 @@ export function VehicleCreatePage() {
       const created = await vehiclesApi.create(input)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       success('Véhicule créé avec succès')
-      navigate(`/vehicles/${created.id}`, { replace: true })
+      navigate(returnTo ?? `/vehicles/${created.id}`, { replace: true })
     } catch (err) {
       let detail = 'Erreur lors de la création. Vérifiez les données saisies.'
       if (axios.isAxiosError(err) && err.response?.data) {
@@ -430,6 +453,7 @@ export function VehicleCreatePage() {
                 inputValue={customerSearch}
                 onInputChange={(_e, value) => setCustomerSearch(value)}
                 filterOptions={x => x}
+                disabled={!!prefillCustomerId}
                 noOptionsText={
                   debouncedSearch.length === 0
                     ? 'Tapez un nom pour rechercher'
