@@ -6,11 +6,12 @@ JSONResponse so the body shape matches `MergePromptResponse`.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -35,6 +36,7 @@ from app.modules.customer.schemas import (
     CustomerSummary,
     CustomerUpdateRequest,
     MergePromptResponse,
+    CustomerSpendingSummary,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
 from app.core.logging import get_logger
@@ -447,3 +449,258 @@ async def restore_customer(
     )
     assert fresh is not None
     return _to_detail(fresh)
+
+
+# ---------------------------------------------------------------------------
+# Customer-scoped sub-resource endpoints
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_customer_by_public_id(
+    db: AsyncSession, garage_id: int, public_id: str
+) -> Customer:
+    """Resolve a customer by public UUID, raising 404 if not found."""
+    c = await repo.get_by_public_id(db, garage_id, public_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    return c
+
+
+@router.get(
+    "/{public_id}/vehicles",
+    dependencies=[require_permission("customer.read"), require_permission("vehicle.read")],
+    summary="List all vehicles linked to this customer",
+)
+async def list_customer_vehicles(
+    public_id: str,
+    user: AuthUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.modules.vehicles import service as vehicle_service
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+    result = await vehicle_service.list_vehicles(
+        db,
+        garage_id=user.garage_id,
+        search=None,
+        customer_id=c.id,
+        status=None,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
+
+
+@router.get(
+    "/{public_id}/repair-orders",
+    dependencies=[require_permission("customer.read"), require_permission("repair_order.read")],
+    summary="List all repair orders for this customer",
+)
+async def list_customer_repair_orders(
+    public_id: str,
+    user: AuthUser,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    vehicle_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.modules.repair_order.repository import RepairOrderRepository
+    from app.modules.repair_order.models import ROStatus
+    from app.modules.repair_order.schemas import RepairOrderSummary
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+
+    ro_status: Optional[ROStatus] = None
+    if status_filter:
+        try:
+            ro_status = ROStatus(status_filter)
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Invalid status: {status_filter}")
+
+    rows, total = await RepairOrderRepository.list(
+        db,
+        garage_id=user.garage_id,
+        customer_id=c.id,
+        vehicle_id=vehicle_id,
+        status=ro_status,
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        "items": [RepairOrderSummary.model_validate(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get(
+    "/{public_id}/quotations",
+    dependencies=[require_permission("customer.read"), require_permission("quotation.read")],
+    summary="List all quotations for this customer",
+)
+async def list_customer_quotations(
+    public_id: str,
+    user: AuthUser,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.modules.quotation import service as quot_service
+    from app.modules.quotation.models import QuotationStatus
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+
+    q_status: Optional[QuotationStatus] = None
+    if status_filter:
+        try:
+            q_status = QuotationStatus(status_filter)
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Invalid status: {status_filter}")
+
+    result = await quot_service.list_quotations(
+        db,
+        user.garage_id,
+        customer_id=c.id,
+        status=q_status,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
+
+
+@router.get(
+    "/{public_id}/invoices",
+    dependencies=[require_permission("customer.read"), require_permission("invoice.read")],
+    summary="List all invoices for this customer",
+)
+async def list_customer_invoices(
+    public_id: str,
+    user: AuthUser,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.modules.invoice import service as inv_service
+    from app.modules.invoice.models import InvoiceStatus
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+
+    inv_status: Optional[InvoiceStatus] = None
+    if status_filter:
+        try:
+            inv_status = InvoiceStatus(status_filter)
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Invalid status: {status_filter}")
+
+    result = await inv_service.list_invoices(
+        db,
+        user.garage_id,
+        customer_id=c.id,
+        status=inv_status,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
+
+
+@router.get(
+    "/{public_id}/spending-summary",
+    response_model=CustomerSpendingSummary,
+    dependencies=[require_permission("customer.read"), require_permission("invoice.read")],
+    summary="Aggregated spending statistics for this customer",
+)
+async def get_customer_spending_summary(
+    public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerSpendingSummary:
+    from app.modules.invoice.models import Invoice, InvoiceStatus
+    from app.modules.repair_order.models import RepairOrder, ROStatus
+    from app.modules.advance_payment.models import AdvancePayment
+
+    c = await _resolve_customer_by_public_id(db, user.garage_id, public_id)
+    cid = c.id
+    gid = user.garage_id
+
+    now = datetime.now(tz=timezone.utc)
+    year_start = datetime(now.year, 1, 1, tzinfo=timezone.utc)
+
+    # --- Invoice aggregates (exclude draft & cancelled) ---
+    inv_row = (await db.execute(
+        select(
+            func.coalesce(func.sum(Invoice.total_minor), 0).label("total_invoiced"),
+            func.coalesce(func.sum(Invoice.paid_amount_minor), 0).label("total_paid"),
+            func.coalesce(func.sum(Invoice.outstanding_minor), 0).label("total_outstanding"),
+        ).where(
+            Invoice.garage_id == gid,
+            Invoice.customer_id == cid,
+            Invoice.deleted_at.is_(None),
+            Invoice.status.in_([InvoiceStatus.issued, InvoiceStatus.partial, InvoiceStatus.paid]),
+        )
+    )).one()
+
+    # Current year invoiced
+    inv_year_row = (await db.execute(
+        select(
+            func.coalesce(func.sum(Invoice.total_minor), 0).label("year_invoiced"),
+        ).where(
+            Invoice.garage_id == gid,
+            Invoice.customer_id == cid,
+            Invoice.deleted_at.is_(None),
+            Invoice.status.in_([InvoiceStatus.issued, InvoiceStatus.partial, InvoiceStatus.paid]),
+            Invoice.issued_at >= year_start,
+        )
+    )).one()
+
+    # --- Repair order counts ---
+    ro_total = (await db.execute(
+        select(func.count()).where(
+            RepairOrder.garage_id == gid,
+            RepairOrder.customer_id == cid,
+            RepairOrder.deleted_at.is_(None),
+        )
+    )).scalar_one()
+
+    ro_completed = (await db.execute(
+        select(func.count()).where(
+            RepairOrder.garage_id == gid,
+            RepairOrder.customer_id == cid,
+            RepairOrder.deleted_at.is_(None),
+            RepairOrder.status == ROStatus.delivered,
+        )
+    )).scalar_one()
+
+    last_ro_at = (await db.execute(
+        select(RepairOrder.created_at).where(
+            RepairOrder.garage_id == gid,
+            RepairOrder.customer_id == cid,
+            RepairOrder.deleted_at.is_(None),
+        ).order_by(RepairOrder.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    # --- Unapplied advance payment balance ---
+    adv_unapplied = (await db.execute(
+        select(func.coalesce(func.sum(AdvancePayment.amount_minor), 0)).where(
+            AdvancePayment.garage_id == gid,
+            AdvancePayment.customer_id == cid,
+            AdvancePayment.applied_to_invoice_id.is_(None),
+        )
+    )).scalar_one()
+
+    return CustomerSpendingSummary(
+        total_invoiced_minor=inv_row.total_invoiced,
+        total_paid_minor=inv_row.total_paid,
+        total_outstanding_minor=inv_row.total_outstanding,
+        current_year_invoiced_minor=inv_year_row.year_invoiced,
+        total_repair_orders=ro_total,
+        completed_repair_orders=ro_completed,
+        last_order_at=last_ro_at,
+        advance_balance_minor=adv_unapplied,
+        loyalty_points=c.loyalty_points,
+    )
