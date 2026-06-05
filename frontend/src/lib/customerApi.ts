@@ -152,3 +152,69 @@ export const customerApi = {
     return data
   },
 }
+
+// ---------------------------------------------------------------------------
+// Customer sub-resource types
+// ---------------------------------------------------------------------------
+
+export interface CustomerSpendingSummary {
+  total_invoiced_minor: number
+  total_paid_minor: number
+  total_outstanding_minor: number
+  current_year_invoiced_minor: number
+  total_repair_orders: number
+  completed_repair_orders: number
+  last_order_at: string | null
+  advance_balance_minor: number
+  loyalty_points: number
+}
+
+// ---------------------------------------------------------------------------
+// Customer sub-resource API
+// ---------------------------------------------------------------------------
+
+export const customerSubApi = {
+  getVehicles: async (publicId: string, params: { page?: number; page_size?: number } = {}) => {
+    const { data } = await apiClient.get(`/customers/${publicId}/vehicles`, { params })
+    return data
+  },
+
+  getRepairOrders: async (
+    publicId: string,
+    params: { status?: string; vehicle_id?: number; page?: number; page_size?: number } = {},
+  ) => {
+    const { data } = await apiClient.get(`/customers/${publicId}/repair-orders`, { params })
+    return data
+  },
+
+  getQuotations: async (
+    publicId: string,
+    params: { status?: string; page?: number; page_size?: number } = {},
+  ) => {
+    const { data } = await apiClient.get(`/customers/${publicId}/quotations`, { params })
+    return data
+  },
+
+  getInvoices: async (
+    publicId: string,
+    params: { status?: string; page?: number; page_size?: number } = {},
+  ) => {
+    const { data } = await apiClient.get(`/customers/${publicId}/invoices`, { params })
+    return data
+  },
+
+  getDeliveryNotes: async (
+    publicId: string,
+    params: { status?: string; page?: number; page_size?: number } = {},
+  ) => {
+    const { data } = await apiClient.get(`/customers/${publicId}/delivery-notes`, { params })
+    return data
+  },
+
+  getSpendingSummary: async (publicId: string): Promise<CustomerSpendingSummary> => {
+    const { data } = await apiClient.get<CustomerSpendingSummary>(
+      `/customers/${publicId}/spending-summary`,
+    )
+    return data
+  },
+}
