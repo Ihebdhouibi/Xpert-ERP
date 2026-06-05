@@ -44,6 +44,9 @@ import { SettingsPage } from './pages/admin/SettingsPage'
 import { AuditLogsPage } from './pages/admin/AuditLogsPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
 import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
+import { DeliveryNoteCreatePage } from './pages/delivery-notes/DeliveryNoteCreatePage'
+import { DeliveryNoteDetailPage } from './pages/delivery-notes/DeliveryNoteDetailPage'
+import { DeliveryNotesListPage } from './pages/delivery-notes/DeliveryNotesListPage'
 
 export const router = createBrowserRouter(
   [
@@ -129,6 +132,11 @@ export const router = createBrowserRouter(
       { path: 'quotations/:publicId', element: <QuotationDetailPage /> },
       { path: 'invoices', element: <InvoicesPage /> },
       { path: 'invoices/:publicId', element: <InvoiceDetailPage /> },
+
+      // Delivery notes
+      { path: 'delivery-notes', element: <DeliveryNotesListPage /> },
+      { path: 'delivery-notes/new', element: <DeliveryNoteCreatePage /> },
+      { path: 'delivery-notes/:publicId', element: <DeliveryNoteDetailPage /> },
 
       // Finance utilities
       { path: 'advance-payments', element: <AdvancePaymentsPage /> },
