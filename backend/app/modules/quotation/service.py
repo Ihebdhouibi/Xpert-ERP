@@ -146,6 +146,21 @@ async def get_quotation(db: AsyncSession, quotation_id: int, garage_id: int) -> 
     return QuotationOut.model_validate(quotation)
 
 
+async def get_quotation_by_public_id(db: AsyncSession, public_id: str, garage_id: int) -> QuotationOut:
+    quotation = await repo.get_by_public_id(db, public_id, garage_id)
+    if not quotation:
+        raise QuotationNotFoundError(public_id)
+    return QuotationOut.model_validate(quotation)
+
+
+async def _resolve(db: AsyncSession, public_id: str, garage_id: int) -> Quotation:
+    """Resolve a public_id to a Quotation ORM object."""
+    quotation = await repo.get_by_public_id(db, public_id, garage_id)
+    if not quotation:
+        raise QuotationNotFoundError(public_id)
+    return quotation
+
+
 async def list_quotations(
     db: AsyncSession,
     garage_id: int,

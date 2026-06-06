@@ -34,6 +34,23 @@ async def get_by_id(
     return result.scalar_one_or_none()
 
 
+async def get_by_public_id(
+    db: AsyncSession,
+    public_id: str,
+    garage_id: int,
+    include_deleted: bool = False,
+) -> Optional[Quotation]:
+    stmt = (
+        select(Quotation)
+        .options(selectinload(Quotation.lines))
+        .where(Quotation.public_id == public_id, Quotation.garage_id == garage_id)
+    )
+    if not include_deleted:
+        stmt = stmt.where(Quotation.deleted_at.is_(None))
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def list_quotations(
     db: AsyncSession,
     garage_id: int,
