@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import {
   Alert,
@@ -345,6 +345,7 @@ export function DeliveryNoteCreatePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { success, error: toastError } = useToast()
+  const queryClient = useQueryClient()
 
   const prefillCustomerId = searchParams.get('customerId')
     ? Number(searchParams.get('customerId'))
@@ -476,6 +477,8 @@ export function DeliveryNoteCreatePage() {
       })
 
       success('Bon de livraison créé')
+      void queryClient.invalidateQueries({ queryKey: ['customer-delivery-notes'] })
+      void queryClient.invalidateQueries({ queryKey: ['delivery-notes'] })
       navigate(returnTo ?? `/delivery-notes/${dn.public_id}`, { replace: true })
     } catch (err) {
       let msg = 'Erreur lors de la création.'
