@@ -384,7 +384,7 @@ export function VehicleDetailPage() {
                       {i > 0 && <Divider />}
                       <Stack
                         component={RouterLink}
-                        to={`/repair-orders/${ro.id}`}
+                        to={`/repair-orders/${ro.public_id}`}
                         direction="row"
                         justifyContent="space-between"
                         alignItems="center"
