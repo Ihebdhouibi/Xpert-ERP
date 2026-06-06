@@ -145,7 +145,7 @@ class InvoiceLine(Base):
         BigInteger, ForeignKey("invoice.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[InvoiceLineKind] = mapped_column(
-        Enum(InvoiceLineKind, name="invoice_line_kind_enum"),
+        String(20),
         nullable=False,
         default=InvoiceLineKind.service,
     )

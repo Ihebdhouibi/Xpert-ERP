@@ -131,7 +131,7 @@ class QuotationLine(Base):
     )
 
     kind: Mapped[LineKind] = mapped_column(
-        Enum(LineKind, name="quotation_line_kind_enum"),
+        String(20),
         nullable=False,
         default=LineKind.service,
     )
