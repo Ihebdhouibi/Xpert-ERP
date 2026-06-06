@@ -143,6 +143,21 @@ async def get_invoice(db: AsyncSession, invoice_id: int, garage_id: int) -> Invo
     return await _to_out(db, inv)
 
 
+async def get_invoice_by_public_id(db: AsyncSession, public_id: str, garage_id: int) -> InvoiceOut:
+    inv = await repo.get_by_public_id(db, public_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(public_id)
+    return await _to_out(db, inv)
+
+
+async def _resolve(db: AsyncSession, public_id: str, garage_id: int) -> Invoice:
+    """Resolve a public_id to an Invoice ORM object, raising InvoiceNotFoundError if missing."""
+    inv = await repo.get_by_public_id(db, public_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(public_id)
+    return inv
+
+
 async def list_invoices(
     db: AsyncSession,
     garage_id: int,

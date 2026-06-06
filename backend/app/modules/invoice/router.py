@@ -135,11 +135,11 @@ async def convert_quotation(
 )
 async def get_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     try:
-        return await service.get_invoice(db, invoice_id, user.garage_id)
+        return await service.get_invoice_by_public_id(db, invoice_id, user.garage_id)
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
 
@@ -152,15 +152,16 @@ async def get_invoice(
 )
 async def update_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     request: InvoiceUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.update_invoice(
-            db, invoice_id, user.garage_id,
+            db, inv.id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -180,11 +181,12 @@ async def update_invoice(
 )
 async def delete_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
-        await service.delete_invoice(db, invoice_id, user.garage_id, user_id=user.user_id)
+        inv = await service._resolve(db, invoice_id, user.garage_id)
+        await service.delete_invoice(db, inv.id, user.garage_id, user_id=user.user_id)
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except InvoiceStateError as e:
@@ -204,15 +206,16 @@ async def delete_invoice(
 )
 async def add_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     request: InvoiceLineCreateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.add_line(
-            db, invoice_id, user.garage_id,
+            db, inv.id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -229,7 +232,7 @@ async def add_line(
 )
 async def update_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     line_id: int,
     request: InvoiceLineUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
@@ -237,8 +240,9 @@ async def update_line(
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.update_line(
-            db, invoice_id, line_id, user.garage_id,
+            db, inv.id, line_id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -257,15 +261,16 @@ async def update_line(
 )
 async def remove_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     line_id: int,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.remove_line(
-            db, invoice_id, line_id, user.garage_id,
+            db, inv.id, line_id, user.garage_id,
             expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -288,14 +293,15 @@ async def remove_line(
 )
 async def issue_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.issue_invoice(
-            db, invoice_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, inv.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -311,14 +317,15 @@ async def issue_invoice(
 )
 async def cancel_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.cancel_invoice(
-            db, invoice_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, inv.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
