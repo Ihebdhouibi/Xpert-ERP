@@ -135,6 +135,7 @@ export function CustomerVehiclesPanel({ customerPublicId, customerIntId }: Props
     queryKey: ['customer-vehicles', customerPublicId],
     queryFn: () => customerSubApi.getVehicles(customerPublicId, { page_size: 50 }),
     enabled: !!customerPublicId,
+    staleTime: 0,
   })
 
   const vehicles: VehicleOut[] = data?.items ?? []

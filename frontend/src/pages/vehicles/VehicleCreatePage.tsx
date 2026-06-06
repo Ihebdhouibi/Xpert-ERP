@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'import axios from 'axios'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import {
   Autocomplete,
   Alert,
@@ -214,6 +215,10 @@ export function VehicleCreatePage() {
       }
       const created = await vehiclesApi.create(input)
       await queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      // Also invalidate customer-scoped vehicle list so CustomerVehiclesPanel refreshes on return
+      if (prefillCustomerId) {
+        await queryClient.invalidateQueries({ queryKey: ['customer-vehicles'] })
+      }
       success('Véhicule créé avec succès')
       navigate(returnTo ?? `/vehicles/${created.id}`, { replace: true })
     } catch (err) {
