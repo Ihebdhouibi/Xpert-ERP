@@ -19,7 +19,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -70,7 +69,7 @@ class DeliveryNote(Base):
     doc_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     status: Mapped[DeliveryNoteStatus] = mapped_column(
-        Enum(DeliveryNoteStatus, name="delivery_note_status_enum"),
+        String(20),
         nullable=False,
         default=DeliveryNoteStatus.draft,
         server_default="draft",
@@ -124,7 +123,7 @@ class DeliveryNoteLine(Base):
         BigInteger, ForeignKey("delivery_note.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[DeliveryNoteLineKind] = mapped_column(
-        Enum(DeliveryNoteLineKind, name="dn_line_kind_enum"),
+        String(20),
         nullable=False,
         default=DeliveryNoteLineKind.part,
         server_default="part",
