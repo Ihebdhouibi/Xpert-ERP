@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -12,26 +13,21 @@ import {
   Divider,
   Grid,
   IconButton,
-  InputAdornment,
   MenuItem,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
-import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
-import { Autocomplete } from '@mui/material'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
+import { partsApi, type PartCategory, type PartSummary } from '../../lib/partsApi'
 import {
   deliveryNoteApi,
   DELIVERY_NOTE_LINE_KIND_LABELS,
@@ -72,9 +68,13 @@ const LINE_KINDS = Object.entries(DELIVERY_NOTE_LINE_KIND_LABELS).map(([value, l
 interface LineRow {
   tempId: number
   kind: DeliveryNoteLineKind
-  description: string
-  quantity: string
-  unit_price: string
+  // part / accessory only
+  selectedCategory: PartCategory | null
+  selectedPart: PartSummary | null
+  // all kinds
+  description: string   // auto-filled for parts, manual for service/other
+  quantity: string      // not used for 'service'
+  unit_price: string    // decimal TND string
   vat_rate: string
 }
 
@@ -83,11 +83,261 @@ function newLine(): LineRow {
   return {
     tempId: ++_lineIdCounter,
     kind: 'part',
+    selectedCategory: null,
+    selectedPart: null,
     description: '',
     quantity: '1',
     unit_price: '',
     vat_rate: '0',
   }
+}
+
+function computeLineTotalMinor(l: LineRow): number {
+  const qty = l.kind === 'service' ? 1 : (parseFloat(l.quantity) || 0)
+  const priceMinor = Math.round((parseFloat(l.unit_price) || 0) * 100)
+  const vat = parseFloat(l.vat_rate) || 0
+  const sub = qty * priceMinor
+  return sub + Math.round((sub * vat) / 100)
+}
+
+// ─── Per-line card component ──────────────────────────────────────────────────
+function LineCard({
+  line,
+  lineNumber,
+  categories,
+  onUpdate,
+  onRemove,
+  canRemove,
+}: {
+  line: LineRow
+  lineNumber: number
+  categories: PartCategory[]
+  onUpdate: (id: number, updates: Partial<LineRow>) => void
+  onRemove: (id: number) => void
+  canRemove: boolean
+}) {
+  const [partSearch, setPartSearch] = useState('')
+  const [debouncedPartSearch, setDebouncedPartSearch] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setDebouncedPartSearch(partSearch), 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [partSearch])
+
+  const isPart = line.kind === 'part' || line.kind === 'accessory'
+  const isService = line.kind === 'service'
+
+  const { data: partsData, isFetching: partsLoading } = useQuery({
+    queryKey: ['parts', 'for-dn-line', line.selectedCategory?.id, debouncedPartSearch],
+    queryFn: () =>
+      partsApi.list({
+        search: debouncedPartSearch || undefined,
+        category_id: line.selectedCategory?.id,
+        status: 'active',
+        page_size: 40,
+      }),
+    enabled: isPart && !!line.selectedCategory,
+    placeholderData: (prev) => prev,
+  })
+  const parts = partsData?.items ?? []
+
+  // Progressive visibility
+  const showCategoryPicker = isPart
+  const showPartPicker = isPart && !!line.selectedCategory
+  const showDescriptionField = !isPart
+  const showPriceFields = isPart ? !!line.selectedPart : !!line.description.trim()
+  const lineTotal = computeLineTotalMinor(line)
+
+  return (
+    <Card variant="outlined" sx={{ borderRadius: 2 }}>
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Stack direction="row" alignItems="flex-start" spacing={1}>
+          <Stack spacing={2} flex={1}>
+            {/* Type selector */}
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <Typography variant="caption" color="text.disabled" fontWeight={700} sx={{ minWidth: 22 }}>
+                #{lineNumber}
+              </Typography>
+              <TextField
+                select
+                label="Type"
+                value={line.kind}
+                onChange={(e) =>
+                  onUpdate(line.tempId, {
+                    kind: e.target.value as DeliveryNoteLineKind,
+                    selectedCategory: null,
+                    selectedPart: null,
+                    description: '',
+                    unit_price: '',
+                    quantity: '1',
+                  })
+                }
+                size="small"
+                sx={{ minWidth: 170 }}
+              >
+                {LINE_KINDS.map((k) => (
+                  <MenuItem key={k.value} value={k.value}>{k.label}</MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            {/* Part/Accessory: category picker */}
+            {showCategoryPicker && (
+              <Autocomplete
+                options={categories}
+                value={line.selectedCategory}
+                onChange={(_e, v) =>
+                  onUpdate(line.tempId, {
+                    selectedCategory: v,
+                    selectedPart: null,
+                    description: '',
+                    unit_price: '',
+                  })
+                }
+                getOptionLabel={(c) => c.name}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                noOptionsText="Aucune catégorie"
+                renderInput={(params) => (
+                  <TextField {...params} label="Catégorie *" size="small" />
+                )}
+                sx={{ maxWidth: 340 }}
+              />
+            )}
+
+            {/* Part/Accessory: part picker (only after category selected) */}
+            {showPartPicker && (
+              <Autocomplete
+                options={parts}
+                loading={partsLoading}
+                value={line.selectedPart}
+                onChange={(_e, v) => {
+                  onUpdate(line.tempId, {
+                    selectedPart: v,
+                    description: v?.name ?? '',
+                    unit_price: v ? String((v.selling_price_minor / 100).toFixed(2)) : '',
+                  })
+                }}
+                inputValue={partSearch}
+                onInputChange={(_e, v) => setPartSearch(v)}
+                filterOptions={(x) => x}
+                getOptionLabel={(p) => `${p.sku_code} — ${p.name}`}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                noOptionsText={debouncedPartSearch ? 'Aucun résultat' : 'Tapez pour rechercher…'}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Pièce *"
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {partsLoading && <CircularProgress size={14} />}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            )}
+
+            {/* Service / Other: free-text description */}
+            {showDescriptionField && (
+              <TextField
+                label={isService ? 'Prestation *' : 'Description *'}
+                value={line.description}
+                onChange={(e) => onUpdate(line.tempId, { description: e.target.value })}
+                size="small"
+                fullWidth
+                placeholder={
+                  isService
+                    ? 'Ex: Vidange moteur, diagnostic électronique…'
+                    : 'Description…'
+                }
+              />
+            )}
+
+            {/* Qty / Price / VAT — shown after part selected OR description entered */}
+            {showPriceFields && (
+              <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+                {/* No quantity for service */}
+                {!isService && (
+                  <TextField
+                    label="Quantité"
+                    value={line.quantity}
+                    onChange={(e) => onUpdate(line.tempId, { quantity: e.target.value })}
+                    size="small"
+                    type="number"
+                    inputProps={{ min: 0, step: 1, style: { textAlign: 'right' } }}
+                    sx={{ width: 100 }}
+                  />
+                )}
+                <TextField
+                  label="P.U. (TND)"
+                  value={line.unit_price}
+                  onChange={(e) => onUpdate(line.tempId, { unit_price: e.target.value })}
+                  size="small"
+                  type="number"
+                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                  sx={{ width: 140 }}
+                />
+                <TextField
+                  label="TVA %"
+                  value={line.vat_rate}
+                  onChange={(e) => onUpdate(line.tempId, { vat_rate: e.target.value })}
+                  size="small"
+                  type="number"
+                  inputProps={{ min: 0, max: 100, step: 1, style: { textAlign: 'right' } }}
+                  sx={{ width: 90 }}
+                />
+                {lineTotal > 0 && (
+                  <Typography
+                    variant="body2"
+                    fontFamily="monospace"
+                    fontWeight={700}
+                    color="primary.main"
+                    sx={{ pl: 1 }}
+                  >
+                    ={' '}
+                    {(lineTotal / 100).toLocaleString('fr-TN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    TND
+                  </Typography>
+                )}
+              </Stack>
+            )}
+
+            {/* Part: show auto-filled description */}
+            {isPart && line.selectedPart && (
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', mt: -1 }}>
+                {line.description}
+              </Typography>
+            )}
+          </Stack>
+
+          {/* Delete button */}
+          <Tooltip title="Supprimer cette ligne">
+            <span>
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => onRemove(line.tempId)}
+                disabled={!canRemove}
+                sx={{ mt: 0.5 }}
+              >
+                <DeleteOutlineRoundedIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function DeliveryNoteCreatePage() {
@@ -175,24 +425,22 @@ export function DeliveryNoteCreatePage() {
   })
   const vehicles = vehiclesData?.items ?? []
 
-  const updateLine = (tempId: number, field: keyof LineRow, value: string) => {
-    setLines((prev) =>
-      prev.map((l) => (l.tempId === tempId ? { ...l, [field]: value } : l)),
-    )
+  // Categories fetched once, shared across all line cards
+  const { data: categories = [] } = useQuery({
+    queryKey: ['part-categories', 'for-dn'],
+    queryFn: () => partsApi.listCategories({ flat: true }),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const updateLine = (tempId: number, updates: Partial<LineRow>) => {
+    setLines((prev) => prev.map((l) => (l.tempId === tempId ? { ...l, ...updates } : l)))
   }
 
   const removeLine = (tempId: number) => {
     setLines((prev) => prev.filter((l) => l.tempId !== tempId))
   }
 
-  // Computed total
-  const total = lines.reduce((sum, l) => {
-    const qty = parseFloat(l.quantity) || 0
-    const price = parseFloat(l.unit_price) * 100 || 0 // convert to minor
-    const vat = parseFloat(l.vat_rate) || 0
-    const lineTotal = qty * price
-    return sum + lineTotal + (lineTotal * vat) / 100
-  }, 0)
+  const grandTotal = lines.reduce((sum, l) => sum + computeLineTotalMinor(l), 0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -205,11 +453,15 @@ export function DeliveryNoteCreatePage() {
     setSubmitError(null)
     try {
       const apiLines: DeliveryNoteLineCreateInput[] = lines
-        .filter((l) => l.description.trim() && l.unit_price)
+        .filter((l) => {
+          if (l.kind === 'part' || l.kind === 'accessory') return !!l.selectedPart && !!l.unit_price
+          return !!l.description.trim() && !!l.unit_price
+        })
         .map((l) => ({
           kind: l.kind,
-          description: l.description.trim(),
-          quantity: parseFloat(l.quantity) || 1,
+          part_id: l.selectedPart?.int_id ?? null,
+          description: (l.description.trim() || l.selectedPart?.name || '').slice(0, 500),
+          quantity: l.kind === 'service' ? 1 : (parseFloat(l.quantity) || 1),
           unit_price_minor: Math.round((parseFloat(l.unit_price) || 0) * 100),
           vat_rate: parseFloat(l.vat_rate) || 0,
         }))
@@ -223,11 +475,7 @@ export function DeliveryNoteCreatePage() {
       })
 
       success('Bon de livraison créé')
-      if (returnTo) {
-        navigate(returnTo, { replace: true })
-      } else {
-        navigate(`/delivery-notes/${dn.public_id}`, { replace: true })
-      }
+      navigate(returnTo ?? `/delivery-notes/${dn.public_id}`, { replace: true })
     } catch (err) {
       let msg = 'Erreur lors de la création.'
       if (axios.isAxiosError(err) && err.response?.data) {
@@ -274,9 +522,8 @@ export function DeliveryNoteCreatePage() {
         }
       />
 
-      {submitError && (
-        <Alert severity="error" sx={{ mb: 3 }}>{submitError}</Alert>
-      )}
+      {submitError && <Alert severity="error" sx={{ mb: 3 }}>{submitError}</Alert>}
+
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
@@ -357,108 +604,39 @@ export function DeliveryNoteCreatePage() {
               title="Lignes du bon de livraison"
               icon={<LocalShippingRoundedIcon sx={{ fontSize: 20 }} />}
             >
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ width: 110 }}>Type</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell sx={{ width: 80 }} align="right">Qté</TableCell>
-                    <TableCell sx={{ width: 120 }} align="right">P.U. (TND)</TableCell>
-                    <TableCell sx={{ width: 80 }} align="right">TVA %</TableCell>
-                    <TableCell sx={{ width: 40 }} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {lines.map((line) => (
-                    <TableRow key={line.tempId}>
-                      <TableCell>
-                        <TextField
-                          select
-                          value={line.kind}
-                          onChange={(e) => updateLine(line.tempId, 'kind', e.target.value)}
-                          size="small"
-                          fullWidth
-                          variant="standard"
-                        >
-                          {LINE_KINDS.map((k) => (
-                            <MenuItem key={k.value} value={k.value}>{k.label}</MenuItem>
-                          ))}
-                        </TextField>
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          value={line.description}
-                          onChange={(e) => updateLine(line.tempId, 'description', e.target.value)}
-                          size="small"
-                          fullWidth
-                          variant="standard"
-                          placeholder="Description…"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          value={line.quantity}
-                          onChange={(e) => updateLine(line.tempId, 'quantity', e.target.value)}
-                          size="small"
-                          type="number"
-                          inputProps={{ min: 0, step: 1, style: { textAlign: 'right' } }}
-                          variant="standard"
-                          sx={{ width: 60 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          value={line.unit_price}
-                          onChange={(e) => updateLine(line.tempId, 'unit_price', e.target.value)}
-                          size="small"
-                          type="number"
-                          inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                          variant="standard"
-                          sx={{ width: 100 }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <TextField
-                          value={line.vat_rate}
-                          onChange={(e) => updateLine(line.tempId, 'vat_rate', e.target.value)}
-                          size="small"
-                          type="number"
-                          inputProps={{ min: 0, max: 100, step: 1, style: { textAlign: 'right' } }}
-                          variant="standard"
-                          sx={{ width: 60 }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => removeLine(line.tempId)}
-                          disabled={lines.length === 1}
-                        >
-                          <DeleteRoundedIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <Stack spacing={2}>
+                {lines.map((line, idx) => (
+                  <LineCard
+                    key={line.tempId}
+                    line={line}
+                    lineNumber={idx + 1}
+                    categories={categories}
+                    onUpdate={updateLine}
+                    onRemove={removeLine}
+                    canRemove={lines.length > 1}
+                  />
+                ))}
 
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mt={2}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<AddRoundedIcon />}
-                  onClick={() => setLines((prev) => [...prev, newLine()])}
-                >
-                  Ajouter une ligne
-                </Button>
-                <Typography variant="body2" fontFamily="monospace" fontWeight={700}>
-                  Total estimé:{' '}
-                  {(total / 100).toLocaleString('fr-FR', {
-                    style: 'currency',
-                    currency,
-                    minimumFractionDigits: 3,
-                  })}
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<AddRoundedIcon />}
+                    onClick={() => setLines((prev) => [...prev, newLine()])}
+                  >
+                    Ajouter une ligne
+                  </Button>
+                  {grandTotal > 0 && (
+                    <Typography variant="body2" fontFamily="monospace" fontWeight={700}>
+                      Total estimé:{' '}
+                      {(grandTotal / 100).toLocaleString('fr-TN', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      {currency}
+                    </Typography>
+                  )}
+                </Stack>
               </Stack>
             </SectionCard>
           </Stack>
@@ -495,3 +673,4 @@ export function DeliveryNoteCreatePage() {
     </Box>
   )
 }
+

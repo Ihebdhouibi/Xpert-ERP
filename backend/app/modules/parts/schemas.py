@@ -80,6 +80,7 @@ class PartSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    int_id: int
     sku_code: str
     name: str
     description: Optional[str]
@@ -99,6 +100,7 @@ class PartSummary(BaseModel):
     @classmethod
     def _remap_public_id(cls, data: Any) -> Any:
         if hasattr(data, "public_id"):
+            data.__dict__["int_id"] = data.id  # capture integer PK before overwriting
             data.__dict__["id"] = str(data.public_id)
         return data
 

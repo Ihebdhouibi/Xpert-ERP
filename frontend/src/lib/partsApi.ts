@@ -14,6 +14,7 @@ export interface PartCategory {
 
 export interface PartSummary {
   id: string
+  int_id: number
   sku_code: string
   name: string
   description: string | null
