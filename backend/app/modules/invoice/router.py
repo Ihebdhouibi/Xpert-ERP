@@ -91,6 +91,37 @@ async def create_invoice(
 
 
 # ---------------------------------------------------------------------------
+# Create invoice directly from a repair order
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/from-repair-order/{ro_public_id}",
+    response_model=InvoiceOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("invoice.create")],
+    summary="Create a draft invoice pre-linked to a repair order",
+)
+async def create_invoice_from_repair_order(
+    user: AuthUser,
+    ro_public_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> InvoiceOut:
+    from app.modules.repair_order.repository import RepairOrderRepository
+    ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
+    if not ro:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+    request = InvoiceCreateRequest(
+        customer_id=ro.customer_id,
+        vehicle_id=ro.vehicle_id,
+        repair_order_id=ro.id,
+        notes=ro.notes,
+    )
+    return await service.create_invoice(
+        db, request=request, garage_id=user.garage_id, user_id=user.user_id
+    )
+
+
+# ---------------------------------------------------------------------------
 # Convert quotation → invoice  (lives under /invoices for clarity)
 # ---------------------------------------------------------------------------
 

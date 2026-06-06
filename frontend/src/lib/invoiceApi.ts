@@ -160,4 +160,8 @@ export const invoiceApi = {
   remove(publicId: string): Promise<void> {
     return apiClient.delete(`/invoices/${publicId}`).then(() => undefined)
   },
+
+  fromRepairOrder(roPublicId: string): Promise<InvoiceOut> {
+    return apiClient.post(`/invoices/from-repair-order/${roPublicId}`).then(r => r.data)
+  },
 }
