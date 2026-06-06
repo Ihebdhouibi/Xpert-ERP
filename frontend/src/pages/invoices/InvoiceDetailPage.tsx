@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import {
   Box,
   Button,
@@ -25,6 +26,7 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
+import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -94,6 +96,29 @@ export function InvoiceDetailPage() {
   const { success, error: toastError } = useToast()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const handlePdfPreview = async () => {
+    if (!invoice) return
+    setPdfLoading(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      const response = await axios.get(
+        `/api/v1/pdf/invoices/${invoice.id}`,
+        {
+          responseType: 'blob',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      )
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toastError('Impossible de générer le PDF.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   const { data: invoice, isLoading, isError } = useQuery({
     queryKey: ['invoice', publicId],
@@ -165,17 +190,30 @@ export function InvoiceDetailPage() {
           { label: invoice.doc_number ?? 'Brouillon' },
         ]}
         actions={
-          invoice.status === 'draft' ? (
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteRoundedIcon />}
-              onClick={() => setDeleteOpen(true)}
-              size="small"
-            >
-              Supprimer
-            </Button>
-          ) : undefined
+          <Stack direction="row" spacing={1}>
+            {invoice.status !== 'draft' && (
+              <Button
+                variant="outlined"
+                startIcon={<PictureAsPdfRoundedIcon />}
+                onClick={handlePdfPreview}
+                disabled={pdfLoading}
+                size="small"
+              >
+                {pdfLoading ? 'Génération…' : 'Aperçu PDF'}
+              </Button>
+            )}
+            {invoice.status === 'draft' && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteRoundedIcon />}
+                onClick={() => setDeleteOpen(true)}
+                size="small"
+              >
+                Supprimer
+              </Button>
+            )}
+          </Stack>
         }
       />
 
