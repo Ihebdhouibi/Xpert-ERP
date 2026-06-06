@@ -76,7 +76,8 @@ interface LineRow {
   // all kinds
   description: string   // auto-filled for parts, manual for service/other
   quantity: string      // not used for 'service'
-  unit_price: string    // decimal TND string
+  unit_price: string    // decimal TND string (read-only for parts — from catalogue)
+  remise_pct: string    // discount %, 0-100
   vat_rate: string
 }
 
@@ -90,15 +91,18 @@ function newLine(): LineRow {
     description: '',
     quantity: '1',
     unit_price: '',
+    remise_pct: '0',
     vat_rate: '0',
   }
 }
 
 function computeLineTotalMinor(l: LineRow): number {
   const qty = l.kind === 'service' ? 1 : (parseFloat(l.quantity) || 0)
-  const priceMinor = Math.round((parseFloat(l.unit_price) || 0) * 100)
+  const basePriceMinor = Math.round((parseFloat(l.unit_price) || 0) * 100)
+  const remise = Math.min(Math.max(parseFloat(l.remise_pct) || 0, 0), 100)
+  const netPriceMinor = Math.round(basePriceMinor * (1 - remise / 100))
   const vat = parseFloat(l.vat_rate) || 0
-  const sub = qty * priceMinor
+  const sub = qty * netPriceMinor
   return sub + Math.round((sub * vat) / 100)
 }
 
@@ -172,6 +176,7 @@ function LineCard({
                     selectedPart: null,
                     description: '',
                     unit_price: '',
+                    remise_pct: '0',
                     quantity: '1',
                   })
                 }
@@ -195,6 +200,7 @@ function LineCard({
                     selectedPart: null,
                     description: '',
                     unit_price: '',
+                    remise_pct: '0',
                   })
                 }
                 getOptionLabel={(c) => c.name}
@@ -276,14 +282,37 @@ function LineCard({
                     sx={{ width: 100 }}
                   />
                 )}
+                <Tooltip
+                  title={isPart ? 'Prix fixé depuis le catalogue pièces — non modifiable ici' : ''}
+                  placement="top"
+                >
+                  <TextField
+                    label="P.U. (TND)"
+                    value={line.unit_price}
+                    onChange={(e) => !isPart && onUpdate(line.tempId, { unit_price: e.target.value })}
+                    size="small"
+                    type="number"
+                    inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                    InputProps={{ readOnly: isPart }}
+                    sx={{
+                      width: 140,
+                      ...(isPart && {
+                        '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                        '& input': { color: 'text.secondary' },
+                      }),
+                    }}
+                  />
+                </Tooltip>
                 <TextField
-                  label="P.U. (TND)"
-                  value={line.unit_price}
-                  onChange={(e) => onUpdate(line.tempId, { unit_price: e.target.value })}
+                  label="Remise %"
+                  value={line.remise_pct}
+                  onChange={(e) => onUpdate(line.tempId, { remise_pct: e.target.value })}
                   size="small"
                   type="number"
-                  inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
-                  sx={{ width: 140 }}
+                  inputProps={{ min: 0, max: 100, step: 1, style: { textAlign: 'right' } }}
+                  sx={{ width: 100 }}
+                  helperText={parseFloat(line.remise_pct) > 0 ? `−${line.remise_pct}%` : undefined}
+                  FormHelperTextProps={{ sx: { color: 'success.main', fontWeight: 600, m: 0 } }}
                 />
                 <TextField
                   label="TVA %"
@@ -464,7 +493,10 @@ export function DeliveryNoteCreatePage() {
           part_id: l.selectedPart?.int_id ?? null,
           description: (l.description.trim() || l.selectedPart?.name || '').slice(0, 500),
           quantity: l.kind === 'service' ? 1 : (parseFloat(l.quantity) || 1),
-          unit_price_minor: Math.round((parseFloat(l.unit_price) || 0) * 100),
+          unit_price_minor: Math.round(
+            Math.round((parseFloat(l.unit_price) || 0) * 100) *
+            (1 - Math.min(Math.max(parseFloat(l.remise_pct) || 0, 0), 100) / 100)
+          ),
           vat_rate: parseFloat(l.vat_rate) || 0,
         }))
 
