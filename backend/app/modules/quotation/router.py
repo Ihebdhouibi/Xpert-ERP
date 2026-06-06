@@ -86,6 +86,33 @@ async def create_quotation(
     )
 
 
+@router.post(
+    "/from-repair-order/{ro_public_id}",
+    response_model=QuotationOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("quotation.create")],
+    summary="Create a draft quotation pre-linked to a repair order",
+)
+async def create_quotation_from_repair_order(
+    user: AuthUser,
+    ro_public_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> QuotationOut:
+    from app.modules.repair_order.repository import RepairOrderRepository
+    ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
+    if not ro:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+    request = QuotationCreateRequest(
+        customer_id=ro.customer_id,
+        vehicle_id=ro.vehicle_id,
+        repair_order_id=ro.id,
+        notes=ro.notes,
+    )
+    return await service.create_quotation(
+        db, request=request, garage_id=user.garage_id, user_id=user.user_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # Single quotation
 # ---------------------------------------------------------------------------

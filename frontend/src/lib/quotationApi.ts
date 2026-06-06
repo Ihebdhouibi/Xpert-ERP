@@ -161,4 +161,8 @@ export const quotationApi = {
   remove(publicId: string): Promise<void> {
     return apiClient.delete(`/quotations/${publicId}`).then(() => undefined)
   },
+
+  fromRepairOrder(roPublicId: string): Promise<QuotationOut> {
+    return apiClient.post(`/quotations/from-repair-order/${roPublicId}`).then(r => r.data)
+  },
 }
