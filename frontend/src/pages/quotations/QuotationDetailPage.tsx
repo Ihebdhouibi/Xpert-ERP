@@ -720,13 +720,6 @@ export function QuotationDetailPage() {
 }
 
 
-const KIND_COLORS: Record<string, { bg: string; color: string }> = {
-  labor: { bg: '#EFF6FF', color: '#2563EB' },
-  part: { bg: '#FFFBEB', color: '#D97706' },
-  service: { bg: '#F0FDF4', color: '#16A34A' },
-  other: { bg: '#F1F5F9', color: '#64748B' },
-}
-
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" py={1.25} gap={2}>
