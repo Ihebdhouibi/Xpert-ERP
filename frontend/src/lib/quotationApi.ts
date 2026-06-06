@@ -165,4 +165,10 @@ export const quotationApi = {
   fromRepairOrder(roPublicId: string): Promise<QuotationOut> {
     return apiClient.post(`/quotations/from-repair-order/${roPublicId}`).then(r => r.data)
   },
+
+  getPdf(id: number): Promise<string> {
+    return apiClient
+      .get(`/pdf/quotations/${id}`, { responseType: 'blob' })
+      .then(r => URL.createObjectURL(r.data as Blob))
+  },
 }
