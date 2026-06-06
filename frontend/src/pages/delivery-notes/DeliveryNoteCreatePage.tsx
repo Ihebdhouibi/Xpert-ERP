@@ -60,9 +60,11 @@ function SectionCard({
   )
 }
 
-const LINE_KINDS = Object.entries(DELIVERY_NOTE_LINE_KIND_LABELS).map(([value, label]) => ({
-  value: value as DeliveryNoteLineKind,
-  label,
+// Only expose 3 types in the UI — 'accessory' is kept in the type for DB compat
+// but 'part' now covers both parts and accessories (categories distinguish them)
+const LINE_KINDS = (['part', 'service', 'other'] as DeliveryNoteLineKind[]).map((value) => ({
+  value,
+  label: DELIVERY_NOTE_LINE_KIND_LABELS[value],
 }))
 
 interface LineRow {
@@ -126,7 +128,7 @@ function LineCard({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [partSearch])
 
-  const isPart = line.kind === 'part' || line.kind === 'accessory'
+  const isPart = line.kind === 'part' || line.kind === 'accessory' // accessory = legacy DB value
   const isService = line.kind === 'service'
 
   const { data: partsData, isFetching: partsLoading } = useQuery({

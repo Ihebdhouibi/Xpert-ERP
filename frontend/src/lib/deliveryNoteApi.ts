@@ -10,9 +10,10 @@ export const DELIVERY_NOTE_STATUS_LABELS: Record<DeliveryNoteStatus, string> = {
   cancelled: 'Annulé',
 }
 
+// 'accessory' kept for backward-compat with existing DB rows but not shown in UI
 export const DELIVERY_NOTE_LINE_KIND_LABELS: Record<DeliveryNoteLineKind, string> = {
-  part: 'Pièce',
-  accessory: 'Accessoire',
+  part: 'Pièce / Accessoire',
+  accessory: 'Accessoire',  // legacy — not shown in create form
   service: 'Prestation',
   other: 'Autre',
 }
