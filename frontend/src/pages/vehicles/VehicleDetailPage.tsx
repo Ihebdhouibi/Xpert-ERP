@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link as RouterLink } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
@@ -27,6 +27,7 @@ import SpeedRoundedIcon from '@mui/icons-material/SpeedRounded'
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
 import NumbersRoundedIcon from '@mui/icons-material/NumbersRounded'
 import { vehiclesApi, FUEL_TYPE_LABELS } from '../../lib/vehiclesApi'
+import { STATUS_LABELS as RO_STATUS_LABELS } from '../../lib/repairOrderApi'
 import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -378,12 +379,32 @@ export function VehicleDetailPage() {
                 </Typography>
               ) : (
                 <Stack spacing={0}>
-                  {history.repair_orders.slice(0, 5).map((ro, i) => (
-                    <Box key={i}>
+                  {history.repair_orders.slice(0, 10).map((ro, i) => (
+                    <Box key={ro.id}>
                       {i > 0 && <Divider />}
-                      <Typography variant="body2" py={1.25} color="text.secondary">
-                        {JSON.stringify(ro)}
-                      </Typography>
+                      <Stack
+                        component={RouterLink}
+                        to={`/repair-orders/${ro.id}`}
+                        direction="row"
+                        justifyContent="space-between"
+                        alignItems="center"
+                        py={1.25}
+                        sx={{ textDecoration: 'none', color: 'inherit', '&:hover': { bgcolor: 'action.hover' }, px: 0.5, borderRadius: 1 }}
+                      >
+                        <Stack spacing={0.25}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {ro.description.length > 50 ? ro.description.slice(0, 50) + '…' : ro.description}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(ro.created_at).toLocaleDateString('fr-FR')}
+                          </Typography>
+                        </Stack>
+                        <Chip
+                          label={RO_STATUS_LABELS[ro.status as keyof typeof RO_STATUS_LABELS] ?? ro.status}
+                          size="small"
+                          sx={{ fontSize: '0.65rem', height: 20 }}
+                        />
+                      </Stack>
                     </Box>
                   ))}
                 </Stack>

@@ -102,11 +102,19 @@ export interface RegistrationAliasOut {
   created_at: string
 }
 
+export interface VehicleROSummary {
+  id: number
+  public_id: string
+  status: string
+  description: string
+  created_at: string
+}
+
 export interface VehicleHistoryOut {
   vehicle: VehicleOut
   ownership_history: OwnershipHistoryOut[]
   registration_aliases: RegistrationAliasOut[]
-  repair_orders: Record<string, unknown>[]
+  repair_orders: VehicleROSummary[]
 }
 
 export const vehiclesApi = {

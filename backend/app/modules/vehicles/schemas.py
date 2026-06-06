@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.vehicles.models import FuelType, VehicleStatus
 
@@ -115,9 +115,26 @@ class VehicleListResponse(BaseModel):
     page_size: int
 
 
+class VehicleROSummary(BaseModel):
+    """Minimal repair-order summary embedded in the vehicle history response."""
+    id: int
+    public_id: str
+    status: str
+    description: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap(cls, data: Any) -> Any:
+        if hasattr(data, "public_id"):
+            data.__dict__["public_id"] = str(data.public_id)
+        return data
+
+
 class VehicleHistoryOut(BaseModel):
     vehicle: VehicleOut
     ownership_history: list[OwnershipHistoryOut]
     registration_aliases: list[RegistrationAliasOut]
-    # Populated by the repair orders module once implemented
-    repair_orders: list[dict] = Field(default_factory=list)
+    repair_orders: list[VehicleROSummary] = Field(default_factory=list)
