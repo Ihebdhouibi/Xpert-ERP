@@ -32,6 +32,7 @@ import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
 import { VehicleEditPage } from './pages/vehicles/VehicleEditPage'
 import { QuotationsPage } from './pages/quotations/QuotationsPage'
 import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
+import { QuotationCreatePage } from './pages/quotations/QuotationCreatePage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
 import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
@@ -129,6 +130,7 @@ export const router = createBrowserRouter(
 
       // Billing — quotations & invoices
       { path: 'quotations', element: <QuotationsPage /> },
+      { path: 'quotations/new', element: <QuotationCreatePage /> },
       { path: 'quotations/:publicId', element: <QuotationDetailPage /> },
       { path: 'invoices', element: <InvoicesPage /> },
       { path: 'invoices/:publicId', element: <InvoiceDetailPage /> },
