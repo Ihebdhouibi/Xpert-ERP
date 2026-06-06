@@ -82,6 +82,8 @@ services:
       # Override host-mapped ports with Docker internal service names
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-xpert}:${POSTGRES_PASSWORD:-xpert_dev_password}@db:5432/${POSTGRES_DB:-xpert_erp}"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0"
+      # Logo is inside the backend volume mounted at /app
+      PDF_GARAGE_LOGO_PATH: "/app/assets/logo.png"
     ports:
       - "8000:8000"
     volumes:
