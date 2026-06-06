@@ -135,7 +135,6 @@ function LineCard({
       partsApi.list({
         search: debouncedPartSearch || undefined,
         category_id: line.selectedCategory?.id,
-        status: 'active',
         page_size: 40,
       }),
     enabled: isPart && !!line.selectedCategory,
