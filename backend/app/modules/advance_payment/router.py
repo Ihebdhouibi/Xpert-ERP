@@ -21,7 +21,7 @@ logger = get_logger("advance_payment.router")
     "/advance-payments",
     status_code=status.HTTP_201_CREATED,
     response_model=AdvancePaymentOut,
-    dependencies=[require_permission("invoice.pay")],
+    dependencies=[require_permission("deposit.record")],
 )
 async def record_advance_payment(
     body: AdvancePaymentCreateRequest,
