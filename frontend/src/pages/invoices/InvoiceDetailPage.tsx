@@ -27,6 +27,7 @@ import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
+import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -38,6 +39,8 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
+import { RecordPaymentDialog } from '../../components/invoice/RecordPaymentDialog'
+import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPanel'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -96,6 +99,7 @@ export function InvoiceDetailPage() {
   const { success, error: toastError } = useToast()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [paymentOpen, setPaymentOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
 
   const handlePdfPreview = async () => {
@@ -329,6 +333,11 @@ export function InvoiceDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Payment history */}
+            {invoice.status !== 'draft' && (
+              <PaymentHistoryPanel invoiceId={invoice.id} currency={invoice.currency} />
+            )}
+
             {/* Lines card */}
             <Card>
               <CardContent sx={{ p: 3 }}>
@@ -526,6 +535,19 @@ export function InvoiceDetailPage() {
 
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (
                     <Button
+                      variant="contained"
+                      color="success"
+                      fullWidth
+                      startIcon={<PaymentsRoundedIcon />}
+                      onClick={() => setPaymentOpen(true)}
+                      disabled={anyMutating}
+                    >
+                      Enregistrer un paiement
+                    </Button>
+                  )}
+
+                  {(invoice.status === 'issued' || invoice.status === 'partial') && (
+                    <Button
                       variant="outlined"
                       color="error"
                       fullWidth
@@ -558,6 +580,14 @@ export function InvoiceDetailPage() {
           </Box>
         </Grid>
       </Grid>
+
+      {invoice && (
+        <RecordPaymentDialog
+          open={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          invoice={invoice}
+        />
+      )}
 
       <ConfirmDialog
         open={cancelOpen}
