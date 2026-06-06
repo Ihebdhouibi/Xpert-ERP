@@ -159,7 +159,7 @@ export function InvoiceDetailPage() {
     <Box>
       <PageHeader
         title={invoice.doc_number ?? 'Facture brouillon'}
-        subtitle={`Client #${invoice.customer_id}`}
+        subtitle={invoice.customer_name ?? `Client #${invoice.customer_id}`}
         breadcrumbs={[
           { label: 'Factures', href: '/invoices' },
           { label: invoice.doc_number ?? 'Brouillon' },
@@ -202,7 +202,7 @@ export function InvoiceDetailPage() {
                 } />
                 <Divider />
                 <InfoRow label="Client" value={
-                  <Typography variant="body2" fontWeight={500}>Client #{invoice.customer_id}</Typography>
+                  <Typography variant="body2" fontWeight={500}>{invoice.customer_name ?? `Client #${invoice.customer_id}`}</Typography>
                 } />
                 {invoice.vehicle_id && (
                   <>

@@ -19,6 +19,7 @@ from app.modules.invoice.schemas import (
     InvoiceUpdateRequest,
     InvoiceListResponse,
 )
+from app.modules.customer import repository as customer_repo
 from app.modules.sequence import service as seq_service
 
 logger = get_logger("invoice.service")
@@ -84,6 +85,19 @@ def _recalculate_totals(invoice: Invoice) -> None:
     invoice.outstanding_minor = invoice.total_minor - paid
 
 
+async def _to_out(db: AsyncSession, invoice: Invoice) -> InvoiceOut:
+    """Build InvoiceOut, enriching with the customer display name."""
+    out = InvoiceOut.model_validate(invoice)
+    customer = await customer_repo.get_by_id(db, invoice.garage_id, invoice.customer_id)
+    if customer:
+        out.customer_name = (
+            f"{customer.full_name} ({customer.company_name})"
+            if customer.company_name
+            else customer.full_name
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -126,7 +140,7 @@ async def get_invoice(db: AsyncSession, invoice_id: int, garage_id: int) -> Invo
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
-    return InvoiceOut.model_validate(inv)
+    return await _to_out(db, inv)
 
 
 async def list_invoices(
