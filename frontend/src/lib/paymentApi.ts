@@ -38,7 +38,7 @@ export const paymentApi = {
     return apiClient.post('/payments', input).then(r => r.data)
   },
 
-  listByInvoice(invoiceId: number): Promise<{ items: PaymentOut[] }> {
+  listByInvoice(invoiceId: number): Promise<PaymentOut[]> {
     return apiClient.get(`/payments/invoices/${invoiceId}`).then(r => r.data)
   },
 }
