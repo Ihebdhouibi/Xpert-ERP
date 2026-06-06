@@ -271,15 +271,17 @@ function PartDialog({
               inputProps={{ min: 1, step: 1 }}
             />
           </Stack>
-          <Select
-            value={form.status}
-            onChange={(e) => field('status', e.target.value as PartStatus)}
-            fullWidth
-          >
-            {(Object.keys(STATUS_LABELS) as PartStatus[]).map((s) => (
-              <MenuItem key={s} value={s}>{STATUS_LABELS[s]}</MenuItem>
-            ))}
-          </Select>
+          {editing && (
+            <Select
+              value={form.status}
+              onChange={(e) => field('status', e.target.value as PartStatus)}
+              fullWidth
+            >
+              {(Object.keys(STATUS_LABELS) as PartStatus[]).map((s) => (
+                <MenuItem key={s} value={s}>{STATUS_LABELS[s]}</MenuItem>
+              ))}
+            </Select>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
