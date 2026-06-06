@@ -28,6 +28,9 @@ import StopRoundedIcon from '@mui/icons-material/StopRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateRounded'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
+import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
 import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
@@ -43,6 +46,8 @@ import {
 } from '../../lib/repairOrderApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
+import { quotationApi } from '../../lib/quotationApi'
+import { invoiceApi } from '../../lib/invoiceApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -652,9 +657,21 @@ export function RepairOrderDetailPage() {
   const { publicId = '' } = useParams<{ publicId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { error: toastError } = useToast()
+  const { success, error: toastError } = useToast()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Add-labor inline form state
+  const [showAddLabor, setShowAddLabor] = useState(false)
+  const [laborType, setLaborType] = useState('')
+  const [laborMinutes, setLaborMinutes] = useState('')
+  const [laborRate, setLaborRate] = useState('')
+
+  // Add-part inline form state
+  const [showAddPart, setShowAddPart] = useState(false)
+  const [partName, setPartName] = useState('')
+  const [partQty, setPartQty] = useState('')
+  const [partCost, setPartCost] = useState('')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -676,6 +693,54 @@ export function RepairOrderDetailPage() {
     queryFn: () => vehiclesApi.get(roForQueries!.vehicle_id!),
     enabled: !!roForQueries?.vehicle_id,
     staleTime: 5 * 60 * 1000,
+  })
+
+  const createDevisMutation = useMutation({
+    mutationFn: () => quotationApi.fromRepairOrder(publicId),
+    onSuccess: (quotation) => {
+      success('Devis créé avec succès.')
+      navigate(`/quotations/${quotation.public_id}`)
+    },
+    onError: () => toastError('Impossible de créer le devis.'),
+  })
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: () => invoiceApi.fromRepairOrder(publicId),
+    onSuccess: (invoice) => {
+      success('Facture créée avec succès.')
+      navigate(`/invoices/${invoice.public_id}`)
+    },
+    onError: () => toastError('Impossible de créer la facture.'),
+  })
+
+  const addLaborMutation = useMutation({
+    mutationFn: () => repairOrderApi.addLaborLine(publicId, {
+      labor_type: laborType,
+      duration_minutes: parseInt(laborMinutes, 10),
+      rate_minor: Math.round(parseFloat(laborRate) * 1000),
+    }),
+    onSuccess: () => {
+      success('Ligne de main d\'œuvre ajoutée.')
+      setShowAddLabor(false)
+      setLaborType(''); setLaborMinutes(''); setLaborRate('')
+      refetch()
+    },
+    onError: () => toastError('Impossible d\'ajouter la ligne.'),
+  })
+
+  const addPartMutation = useMutation({
+    mutationFn: () => repairOrderApi.addPartLine(publicId, {
+      part_name: partName,
+      quantity: parseInt(partQty, 10),
+      unit_cost_minor: Math.round(parseFloat(partCost) * 1000),
+    }),
+    onSuccess: () => {
+      success('Pièce ajoutée.')
+      setShowAddPart(false)
+      setPartName(''); setPartQty(''); setPartCost('')
+      refetch()
+    },
+    onError: () => toastError('Impossible d\'ajouter la pièce.'),
   })
 
   const handleDelete = async () => {
@@ -884,10 +949,39 @@ export function RepairOrderDetailPage() {
                     {ro.labor_lines.length} ligne{ro.labor_lines.length !== 1 ? 's' : ''}
                   </Typography>
                 </Typography>
-                <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
-                  {formatMinor(laborTotal, currency)}
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
+                    {formatMinor(laborTotal, currency)}
+                  </Typography>
+                  {(ro.status === 'paused_approval' || ro.status === 'in_repair') && (
+                    <PermissionGate permission="repair_order.update">
+                      <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddLabor(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
+                        Ajouter
+                      </Button>
+                    </PermissionGate>
+                  )}
+                </Stack>
               </Stack>
+              {showAddLabor && (
+                <Box sx={{ px: 3, pb: 2 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
+                    <TextField size="small" label="Type de travail" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
+                    <TextField size="small" label="Durée (min)" type="number" value={laborMinutes} onChange={e => setLaborMinutes(e.target.value)} sx={{ flex: 1 }} />
+                    <TextField size="small" label="Taux (TND)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} sx={{ flex: 1 }} />
+                  </Stack>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" onClick={() => setShowAddLabor(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
+                    <Button
+                      size="small" variant="contained"
+                      disabled={addLaborMutation.isPending || !laborType.trim() || !laborMinutes || !laborRate}
+                      onClick={() => addLaborMutation.mutate()}
+                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {addLaborMutation.isPending ? 'Enregistrement…' : 'Ajouter'}
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
               <Divider />
               {ro.labor_lines.length === 0 ? (
                 <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
@@ -946,10 +1040,39 @@ export function RepairOrderDetailPage() {
                     {ro.part_lines.length} ligne{ro.part_lines.length !== 1 ? 's' : ''}
                   </Typography>
                 </Typography>
-                <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
-                  {formatMinor(partsTotal, currency)}
-                </Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
+                    {formatMinor(partsTotal, currency)}
+                  </Typography>
+                  {(ro.status === 'paused_parts' || ro.status === 'in_repair') && (
+                    <PermissionGate permission="repair_order.update">
+                      <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddPart(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
+                        Ajouter
+                      </Button>
+                    </PermissionGate>
+                  )}
+                </Stack>
               </Stack>
+              {showAddPart && (
+                <Box sx={{ px: 3, pb: 2 }}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
+                    <TextField size="small" label="Désignation pièce" value={partName} onChange={e => setPartName(e.target.value)} sx={{ flex: 2 }} />
+                    <TextField size="small" label="Quantité" type="number" value={partQty} onChange={e => setPartQty(e.target.value)} sx={{ flex: 1 }} />
+                    <TextField size="small" label="Prix unit. (TND)" type="number" value={partCost} onChange={e => setPartCost(e.target.value)} sx={{ flex: 1 }} />
+                  </Stack>
+                  <Stack direction="row" spacing={1}>
+                    <Button size="small" onClick={() => setShowAddPart(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
+                    <Button
+                      size="small" variant="contained"
+                      disabled={addPartMutation.isPending || !partName.trim() || !partQty || !partCost}
+                      onClick={() => addPartMutation.mutate()}
+                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {addPartMutation.isPending ? 'Enregistrement…' : 'Ajouter'}
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
               <Divider />
               {ro.part_lines.length === 0 ? (
                 <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
@@ -1047,6 +1170,53 @@ export function RepairOrderDetailPage() {
                 </CardContent>
               </Card>
             </PermissionGate>
+
+            {/* Create Devis (diagnosis only) */}
+            {ro.status === 'diagnosis' && (
+              <PermissionGate permission="quotation.create">
+                <Card>
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Actions
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      startIcon={<DescriptionRoundedIcon />}
+                      disabled={createDevisMutation.isPending}
+                      onClick={() => createDevisMutation.mutate()}
+                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {createDevisMutation.isPending ? 'Création…' : 'Créer un devis'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </PermissionGate>
+            )}
+
+            {/* Create Invoice (finished or delivered) */}
+            {(ro.status === 'finished' || ro.status === 'delivered') && (
+              <PermissionGate permission="invoice.create">
+                <Card>
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Actions
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      fullWidth
+                      startIcon={<ReceiptRoundedIcon />}
+                      disabled={createInvoiceMutation.isPending}
+                      onClick={() => createInvoiceMutation.mutate()}
+                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {createInvoiceMutation.isPending ? 'Création…' : 'Créer une facture'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </PermissionGate>
+            )}
 
             {/* Timer */}
             <PermissionGate permission="repair_order.update">
