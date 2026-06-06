@@ -811,9 +811,9 @@ export function RepairOrderDetailPage() {
                           fontWeight={500}
                           component={RouterLink}
                           to={`/vehicles/${vehicle.id}`}
-                          sx={{ color: 'primary.main', textDecoration: 'none', fontFamily: vehicle.registration ? 'monospace' : 'inherit', '&:hover': { textDecoration: 'underline' } }}
+                          sx={{ color: 'primary.main', textDecoration: 'none', fontFamily: 'monospace', '&:hover': { textDecoration: 'underline' } }}
                         >
-                          {vehicle.registration ?? `${vehicle.make} ${vehicle.model}`}
+                          {[vehicle.registration, `${vehicle.make} ${vehicle.model}`].filter(Boolean).join(' — ')}
                         </Typography>
                       ) : ro.vehicle_id ? `#${ro.vehicle_id}` : '—'
                     }
