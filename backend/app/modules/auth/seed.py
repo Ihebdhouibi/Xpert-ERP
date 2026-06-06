@@ -84,6 +84,10 @@ PERMISSIONS: list[dict[str, str]] = [
     {"code": "cash_session.close", "resource": "cash_session", "action": "close", "description": "Close cash session"},
     {"code": "cash_session.read", "resource": "cash_session", "action": "read", "description": "View session details"},
     {"code": "refund.execute", "resource": "refund", "action": "execute", "description": "Execute refund"},
+    {"code": "credit_note.read", "resource": "credit_note", "action": "read", "description": "View credit notes"},
+    {"code": "credit_note.create", "resource": "credit_note", "action": "create", "description": "Create draft credit note"},
+    {"code": "credit_note.issue", "resource": "credit_note", "action": "issue", "description": "Issue credit note (assigns CN number)"},
+    {"code": "credit_note.void", "resource": "credit_note", "action": "void", "description": "Void an issued credit note"},
     # --- Supplier / Purchasing ---
     {"code": "supplier.read", "resource": "supplier", "action": "read", "description": "View suppliers"},
     {"code": "supplier.create", "resource": "supplier", "action": "create", "description": "Create supplier"},
