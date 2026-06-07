@@ -36,7 +36,7 @@ import { useToast } from '../../contexts/ToastContext'
 
 const LINE_KINDS: LineKind[] = ['labor', 'part', 'service', 'other']
 
-const CURRENCIES = ['TND', 'EUR', 'USD']
+const CURRENCIES = ['EUR']
 
 interface DraftLine extends QuotationLineCreateInput {
   _key: number
@@ -196,7 +196,7 @@ export function QuotationCreatePage() {
   // Header fields
   const [notes, setNotes] = useState('')
   const [validUntil, setValidUntil] = useState('')
-  const [currency, setCurrency] = useState('TND')
+  const [currency, setCurrency] = useState('EUR')
 
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({})
@@ -658,15 +658,12 @@ export function QuotationCreatePage() {
               <Stack spacing={2.5}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField
-                    select
                     size="small"
                     label="Devise"
                     value={currency}
-                    onChange={e => setCurrency(e.target.value)}
+                    disabled
                     sx={{ width: 130 }}
-                  >
-                    {CURRENCIES.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                  </TextField>
+                  />
                   <TextField
                     size="small"
                     label="Valide jusqu'au"

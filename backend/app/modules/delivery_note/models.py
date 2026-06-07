@@ -83,7 +83,7 @@ class DeliveryNote(Base):
     vat_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     total_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
 
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="TND")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")

@@ -135,7 +135,7 @@ function RepairOrdersTab({
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
-                      {formatMinor(ro.actual_cost_minor, ro.estimated_cost_currency ?? 'TND')}
+                      {formatMinor(ro.actual_cost_minor, ro.estimated_cost_currency ?? 'EUR')}
                     </Typography>
                   </TableCell>
                 </TableRow>

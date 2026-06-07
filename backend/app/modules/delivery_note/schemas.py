@@ -53,7 +53,7 @@ class DeliveryNoteLineOut(BaseModel):
 class DeliveryNoteCreateRequest(BaseModel):
     customer_id: int
     vehicle_id: Optional[int] = None
-    currency: str = Field(default="TND", min_length=3, max_length=3)
+    currency: str = Field(default="EUR", min_length=3, max_length=3)
     notes: Optional[str] = Field(None, max_length=2000)
     lines: list[DeliveryNoteLineCreateRequest] = Field(default_factory=list)
 

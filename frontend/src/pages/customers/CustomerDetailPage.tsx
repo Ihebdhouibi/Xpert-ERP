@@ -326,7 +326,7 @@ export function CustomerDetailPage() {
             >
               <InfoRow label="Limite de crédit" value={
                 <Typography variant="body2" fontWeight={600} fontFamily="monospace">
-                  {formatMinor(c.credit_limit_minor, c.credit_currency ?? 'TND')}
+                  {formatMinor(c.credit_limit_minor, c.credit_currency ?? 'EUR')}
                 </Typography>
               } />
               <Divider />
@@ -337,7 +337,7 @@ export function CustomerDetailPage() {
                   fontFamily="monospace"
                   color={c.outstanding_minor > 0 ? 'error.main' : 'text.secondary'}
                 >
-                  {formatMinor(c.outstanding_minor, c.credit_currency ?? 'TND')}
+                  {formatMinor(c.outstanding_minor, c.credit_currency ?? 'EUR')}
                 </Typography>
               } />
               <Divider />
@@ -354,19 +354,19 @@ export function CustomerDetailPage() {
                   <Divider />
                   <InfoRow label="Total facturé" value={
                     <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
-                      {formatMinor(spending.total_invoiced_minor, 'TND')}
+                      {formatMinor(spending.total_invoiced_minor, 'EUR')}
                     </Typography>
                   } />
                   <Divider />
                   <InfoRow label="Total encaissé" value={
                     <Typography variant="body2" fontFamily="monospace" fontWeight={600} color="success.main">
-                      {formatMinor(spending.total_paid_minor, 'TND')}
+                      {formatMinor(spending.total_paid_minor, 'EUR')}
                     </Typography>
                   } />
                   <Divider />
                   <InfoRow label={`Facturé ${new Date().getFullYear()}`} value={
                     <Typography variant="body2" fontFamily="monospace">
-                      {formatMinor(spending.current_year_invoiced_minor, 'TND')}
+                      {formatMinor(spending.current_year_invoiced_minor, 'EUR')}
                     </Typography>
                   } />
                   {spending.advance_balance_minor > 0 && (
@@ -374,7 +374,7 @@ export function CustomerDetailPage() {
                       <Divider />
                       <InfoRow label="Acomptes disponibles" value={
                         <Typography variant="body2" fontFamily="monospace" fontWeight={600} color="primary.main">
-                          {formatMinor(spending.advance_balance_minor, 'TND')}
+                          {formatMinor(spending.advance_balance_minor, 'EUR')}
                         </Typography>
                       } />
                     </>

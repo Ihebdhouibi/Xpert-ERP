@@ -401,7 +401,7 @@ export function DeliveryNoteCreatePage() {
 
   // Header
   const [notes, setNotes] = useState('')
-  const [currency, setCurrency] = useState('TND')
+  const [currency, setCurrency] = useState('EUR')
 
   // Validation
   const [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({})
@@ -684,15 +684,10 @@ export function DeliveryNoteCreatePage() {
             <Stack spacing={2}>
               <TextField
                 label="Devise"
-                select
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
                 fullWidth
-              >
-                <MenuItem value="TND">TND — Dinar Tunisien</MenuItem>
-                <MenuItem value="EUR">EUR — Euro</MenuItem>
-                <MenuItem value="USD">USD — Dollar</MenuItem>
-              </TextField>
+                disabled
+              />
               <TextField
                 label="Notes internes"
                 multiline
