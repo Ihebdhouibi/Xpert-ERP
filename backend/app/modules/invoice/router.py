@@ -109,14 +109,45 @@ async def create_invoice_from_repair_order(
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     from app.modules.repair_order.repository import RepairOrderRepository
-    ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
+    ro = await RepairOrderRepository.get_by_public_id(
+        db, garage_id=user.garage_id, public_id=ro_public_id, load_relationships=True
+    )
     if not ro:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+
+    from decimal import Decimal
+    from app.modules.invoice.models import InvoiceLineKind
+
+    lines: list[InvoiceLineCreateRequest] = []
+
+    # Labor lines → kind=labor, quantity=1, unit_price=amount_minor
+    for ll in ro.labor_lines:
+        lines.append(InvoiceLineCreateRequest(
+            kind=InvoiceLineKind.labor,
+            description=ll.labor_type,
+            quantity=Decimal("1.000"),
+            unit_price_minor=ll.amount_minor,
+            discount_percent=Decimal("0"),
+            vat_rate=Decimal("0"),
+        ))
+
+    # Part lines → kind=part, quantity=qty, unit_price=unit_cost_minor
+    for pl in ro.part_lines:
+        lines.append(InvoiceLineCreateRequest(
+            kind=InvoiceLineKind.part,
+            description=pl.part_name,
+            quantity=Decimal(str(pl.quantity)),
+            unit_price_minor=pl.unit_cost_minor,
+            discount_percent=Decimal("0"),
+            vat_rate=Decimal("0"),
+        ))
+
     request = InvoiceCreateRequest(
         customer_id=ro.customer_id,
         vehicle_id=ro.vehicle_id,
         repair_order_id=ro.id,
         notes=ro.notes,
+        lines=lines,
     )
     return await service.create_invoice(
         db, request=request, garage_id=user.garage_id, user_id=user.user_id

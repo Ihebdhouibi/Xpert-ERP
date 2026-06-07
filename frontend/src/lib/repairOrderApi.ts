@@ -110,13 +110,13 @@ export const STATUS_LABELS: Record<ROStatus, string> = {
 }
 
 export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
-  created: ['diagnosis', 'paused_approval'],
-  diagnosis: ['in_repair', 'paused_parts', 'paused_approval', 'created'],
-  in_repair: ['finished', 'paused_parts', 'paused_approval', 'diagnosis'],
-  finished: ['delivered', 'paused_approval', 'in_repair'],
+  created: ['diagnosis'],
+  diagnosis: ['in_repair'],
+  in_repair: ['paused_parts', 'finished'],
+  finished: ['delivered'],
   delivered: [],
-  paused_parts: ['in_repair', 'diagnosis'],
-  paused_approval: ['in_repair', 'diagnosis', 'created'],
+  paused_parts: ['in_repair'],
+  paused_approval: ['in_repair'],
 }
 
 export interface TimeEntry {
