@@ -276,7 +276,7 @@ export function QuotationDetailPage() {
         kind: lineKind,
         description: desc,
         quantity: lineKind === 'labor' ? 1 : parseInt(lineQty, 10) || 1,
-        unit_price_minor: Math.round(parseFloat(linePrice) * 1000),
+        unit_price_minor: Math.round(parseFloat(linePrice) * 100),
         discount_percent: parseFloat(lineDiscount) || 0,
         vat_rate: parseFloat(lineVat) || 0,
       })
@@ -499,7 +499,7 @@ export function QuotationDetailPage() {
                             onInputChange={setLinePartInput}
                             onChange={p => {
                               setLineSelectedPart(p)
-                              if (p) setLinePrice(String(p.selling_price_minor / 1000))
+                              if (p) setLinePrice(String(p.selling_price_minor / 100))
                             }}
                           />
                         ) : (

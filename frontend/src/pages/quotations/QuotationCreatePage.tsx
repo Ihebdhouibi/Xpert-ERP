@@ -591,8 +591,8 @@ export function QuotationCreatePage() {
                               size="small"
                               label="Prix"
                               type="number"
-                              value={lineUnitMinor === 0 ? '' : String(lineUnitMinor / 1000)}
-                              onChange={e => updateLine(line._key, { unit_price_minor: Math.round((parseFloat(e.target.value) || 0) * 1000) })}
+                              value={lineUnitMinor === 0 ? '' : String(lineUnitMinor / 100)}
+                              onChange={e => updateLine(line._key, { unit_price_minor: Math.round((parseFloat(e.target.value) || 0) * 100) })}
                               sx={{ flex: 1, minWidth: 120 }}
                               inputProps={{ min: 0, step: 0.001 }}
                               InputProps={{
