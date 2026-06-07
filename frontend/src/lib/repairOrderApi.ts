@@ -116,7 +116,7 @@ export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   finished: ['delivered'],
   delivered: [],
   paused_parts: ['paused_approval'],
-  paused_approval: ['in_repair'],
+  paused_approval: ['finished'],
 }
 
 export interface TimeEntry {

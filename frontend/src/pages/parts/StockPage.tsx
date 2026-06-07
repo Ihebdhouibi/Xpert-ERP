@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   Chip,
@@ -48,23 +47,32 @@ function money(minor: number) {
 }
 
 // ---------------------------------------------------------------------------
-// Add stock dialog (pick part from catalogue → record "in" movement)
+// Add stock dialog (category → parts → quantity/cost)
 // ---------------------------------------------------------------------------
 function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | ''>('')
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [quantity, setQuantity] = useState('')
   const [unitCostEur, setUnitCostEur] = useState('')
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const partsQ = useQuery({
-    queryKey: ['parts', 'search', search],
-    queryFn: () => partsApi.list({ search, page_size: 30, status: 'active' }),
-    enabled: search.length >= 1,
-    staleTime: 10000,
+  const categoriesQ = useQuery({
+    queryKey: ['part-categories'],
+    queryFn: () => partsApi.listCategories({ flat: true }),
   })
+
+  const partsQ = useQuery({
+    queryKey: ['parts', 'by-category', selectedCategoryId],
+    queryFn: () => partsApi.list({ category_id: selectedCategoryId as number, page_size: 100, status: 'active' }),
+    enabled: selectedCategoryId !== '',
+  })
+
+  const handleClose = () => {
+    setSelectedCategoryId(''); setSelectedPart(null); setQuantity(''); setUnitCostEur(''); setReason(''); setError(null)
+    onClose()
+  }
 
   const mut = useMutation({
     mutationFn: () => {
@@ -79,8 +87,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['stock'] })
-      onClose()
-      setSelectedPart(null); setQuantity(''); setUnitCostEur(''); setReason(''); setSearch('')
+      handleClose()
     },
     onError: (err: unknown) => {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
@@ -88,44 +95,65 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
         const d = detail as { code: string; available: number; requested: number }
         setError(`Stock insuffisant : disponible=${d.available}, demandé=${d.requested}`)
       } else {
-        setError(typeof detail === 'string' ? detail : 'Erreur lors de l\'approvisionnement.')
+        setError(typeof detail === 'string' ? detail : "Erreur lors de l'approvisionnement.")
       }
     },
   })
 
+  const categories = categoriesQ.data ?? []
+  const parts = partsQ.data?.items ?? []
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Approvisionner une pièce</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <Autocomplete
-            options={partsQ.data ?? []}
-            getOptionLabel={(p) => `${p.sku_code} — ${p.name}`}
-            filterOptions={(x) => x}
-            loading={partsQ.isFetching}
-            value={selectedPart}
-            onChange={(_, v) => {
-              setSelectedPart(v)
-              if (v) setUnitCostEur((v.selling_price_minor / 100).toFixed(2))
+          {/* Step 1: Category */}
+          <TextField
+            select
+            label="Catégorie"
+            value={selectedCategoryId}
+            onChange={(e) => {
+              setSelectedCategoryId(e.target.value === '' ? '' : Number(e.target.value))
+              setSelectedPart(null)
+              setUnitCostEur('')
             }}
-            inputValue={search}
-            onInputChange={(_, v) => setSearch(v)}
-            renderOption={(props, p) => (
-              <Box component="li" {...props} key={p.id}>
+            fullWidth
+          >
+            <MenuItem value="">— Toutes les catégories —</MenuItem>
+            {categories.map((c) => (
+              <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+            ))}
+          </TextField>
+
+          {/* Step 2: Part in selected category */}
+          <TextField
+            select
+            label="Pièce"
+            value={selectedPart?.id ?? ''}
+            onChange={(e) => {
+              const found = parts.find((p) => p.id === e.target.value) ?? null
+              setSelectedPart(found)
+              if (found) setUnitCostEur((found.selling_price_minor / 100).toFixed(2))
+            }}
+            fullWidth
+            disabled={selectedCategoryId === '' || partsQ.isLoading}
+            helperText={selectedCategoryId === '' ? 'Sélectionnez une catégorie d\'abord' : partsQ.isLoading ? 'Chargement…' : parts.length === 0 ? 'Aucune pièce dans cette catégorie' : undefined}
+          >
+            <MenuItem value="">— Sélectionner une pièce —</MenuItem>
+            {parts.map((p) => (
+              <MenuItem key={p.id} value={p.id}>
                 <Stack>
                   <Typography variant="body2" fontWeight={600}>{p.sku_code} — {p.name}</Typography>
                   <Typography variant="caption" color="text.secondary">
                     Prix vente : {money(p.selling_price_minor)} · Stock actuel : {p.stock_on_hand}
                   </Typography>
                 </Stack>
-              </Box>
-            )}
-            renderInput={(params) => (
-              <TextField {...params} label="Rechercher une pièce" placeholder="Tapez le nom ou code..." />
-            )}
-            noOptionsText={search.length < 1 ? 'Tapez pour chercher' : 'Aucune pièce trouvée'}
-          />
+              </MenuItem>
+            ))}
+          </TextField>
+
           <TextField
             label="Quantité à ajouter"
             type="number"
@@ -133,6 +161,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             onChange={(e) => setQuantity(e.target.value)}
             inputProps={{ min: 1, step: 1 }}
             fullWidth
+            disabled={!selectedPart}
           />
           <TextField
             label="Coût unitaire (optionnel)"
@@ -142,7 +171,8 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
             inputProps={{ min: 0, step: 0.01 }}
             fullWidth
-            helperText="Pré-rempli avec le prix de vente si disponible"
+            disabled={!selectedPart}
+            helperText="Pré-rempli avec le prix de vente"
           />
           <TextField
             label="Raison"
@@ -150,11 +180,12 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             onChange={(e) => setReason(e.target.value)}
             placeholder="Approvisionnement initial"
             fullWidth
+            disabled={!selectedPart}
           />
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Annuler</Button>
+        <Button onClick={handleClose}>Annuler</Button>
         <Button
           variant="contained"
           disabled={!selectedPart || !quantity || parseInt(quantity) < 1 || mut.isPending}

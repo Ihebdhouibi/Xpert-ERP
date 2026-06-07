@@ -726,7 +726,7 @@ export function RepairOrderDetailPage() {
     mutationFn: () => repairOrderApi.addLaborLine(publicId, {
       labor_type: laborType,
       duration_minutes: parseInt(laborMinutes, 10),
-      rate_minor: Math.round(parseFloat(laborRate) * 1000),
+      rate_minor: Math.round(parseFloat(laborRate) * 100),
     }),
     onSuccess: () => {
       success('Ligne de main d\'œuvre ajoutée.')
@@ -974,9 +974,9 @@ export function RepairOrderDetailPage() {
               {showAddLabor && (
                 <Box sx={{ px: 3, pb: 2 }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
-                    <TextField size="small" label="Type de travail" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
+                    <TextField size="small" label="Désignation" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
                     <TextField size="small" label="Durée (min)" type="number" value={laborMinutes} onChange={e => setLaborMinutes(e.target.value)} sx={{ flex: 1 }} />
-                    <TextField size="small" label="Taux (TND)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} sx={{ flex: 1 }} />
+                    <TextField size="small" label="Prix (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
                   </Stack>
                   <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => setShowAddLabor(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
@@ -1000,9 +1000,9 @@ export function RepairOrderDetailPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Type</TableCell>
+                      <TableCell>Désignation</TableCell>
                       <TableCell align="right">Durée</TableCell>
-                      <TableCell align="right">Taux</TableCell>
+                      <TableCell align="right">Prix</TableCell>
                       <TableCell align="right">Montant</TableCell>
                     </TableRow>
                   </TableHead>
