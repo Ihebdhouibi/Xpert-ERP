@@ -9,6 +9,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   IconButton,
@@ -155,6 +159,8 @@ export function QuotationDetailPage() {
   const { success, error: toastError } = useToast()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [sendDialogOpen, setSendDialogOpen] = useState(false)
+  const [sendEmail, setSendEmail] = useState('')
 
   // Add-line form state
   const [showAddLine, setShowAddLine] = useState(false)
@@ -190,6 +196,8 @@ export function QuotationDetailPage() {
     mutationFn: () => quotationApi.send(publicId!, quotation!.version),
     onSuccess: () => {
       success('Devis marqué comme envoyé')
+      setSendDialogOpen(false)
+      setSendEmail('')
       queryClient.invalidateQueries({ queryKey: ['quotation', publicId] })
       queryClient.invalidateQueries({ queryKey: ['quotations'] })
     },
@@ -497,7 +505,7 @@ export function QuotationDetailPage() {
                         )}
                         <TextField size="small" label="Prix" type="number" value={linePrice}
                           onChange={e => setLinePrice(e.target.value)}
-                          sx={{ flex: 1 }} inputProps={{ min: 0, step: 0.001 }}
+                          sx={{ flex: 1 }} inputProps={{ min: 0, step: 1 }}
                           InputProps={{ endAdornment: <Typography variant="caption" color="text.secondary">{quotation.currency}</Typography> }}
                           required />
                         <TextField size="small" label="Remise %" type="number" value={lineDiscount}
@@ -616,26 +624,17 @@ export function QuotationDetailPage() {
                 <Stack spacing={1.25}>
                   {quotation.status === 'draft' && (
                     <>
-                      <Tooltip
-                        title="Marque le devis comme 'Envoyé' et lui attribue un numéro officiel. Aucun email n'est envoyé automatiquement — transmettez le PDF au client manuellement."
-                        placement="left" arrow>
-                        <span>
-                          <Button variant="contained" fullWidth startIcon={<SendRoundedIcon />}
-                            onClick={() => sendMutation.mutate()}
-                            disabled={anyMutating || quotation.lines.length === 0}>
-                            Marquer comme envoyé
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Typography variant="caption" color="text.secondary" textAlign="center">
-                        ℹ️ Imprimez ou téléchargez le PDF pour l'envoyer au client.
-                      </Typography>
+                      <Button variant="contained" fullWidth startIcon={<SendRoundedIcon />}
+                        onClick={() => setSendDialogOpen(true)}
+                        disabled={anyMutating || quotation.lines.length === 0}>
+                        Envoyer au client
+                      </Button>
+                      {quotation.lines.length === 0 && (
+                        <Typography variant="caption" color="warning.main" textAlign="center">
+                          Ajoutez au moins une ligne pour continuer.
+                        </Typography>
+                      )}
                     </>
-                  )}
-                  {quotation.status === 'draft' && quotation.lines.length === 0 && (
-                    <Typography variant="caption" color="warning.main" textAlign="center">
-                      Ajoutez au moins une ligne pour continuer.
-                    </Typography>
                   )}
 
                   {quotation.status === 'sent' && (
@@ -684,6 +683,40 @@ export function QuotationDetailPage() {
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteOpen(false)}
       />
+
+      {/* Send dialog */}
+      <Dialog open={sendDialogOpen} onClose={() => !sendMutation.isPending && setSendDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Envoyer le devis</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Saisissez l'adresse email du destinataire. Le devis recevra un numéro officiel et son statut passera à «&nbsp;Envoyé&nbsp;».
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Email du client"
+            type="email"
+            value={sendEmail}
+            onChange={e => setSendEmail(e.target.value)}
+            placeholder="client@exemple.com"
+          />
+          <Typography variant="caption" color="text.secondary" mt={1.5} display="block">
+            ℹ️ Aucun email n'est envoyé automatiquement — transmettez le PDF manuellement à cette adresse.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSendDialogOpen(false)} disabled={sendMutation.isPending} sx={{ textTransform: 'none' }}>
+            Annuler
+          </Button>
+          <Button variant="contained" startIcon={<SendRoundedIcon />}
+            onClick={() => sendMutation.mutate()}
+            disabled={sendMutation.isPending}
+            sx={{ textTransform: 'none', fontWeight: 700 }}>
+            {sendMutation.isPending ? 'Envoi…' : 'Confirmer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
