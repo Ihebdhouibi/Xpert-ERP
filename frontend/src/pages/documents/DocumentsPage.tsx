@@ -65,8 +65,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} Mo`
 }
 
-const OCR_ELIGIBLE_CATEGORIES: DocumentCategory[] = ['registration_card', 'id_doc']
-
 function categoryLabel(cat: DocumentCategory): string {
   return CATEGORIES.find((c) => c.value === cat)?.label ?? cat
 }
@@ -102,8 +100,13 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
       )
       onUploaded(doc)
       onClose()
-    } catch {
-      setError('Erreur lors du téléchargement. Vérifiez le fichier et réessayez.')
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(
+        detail
+          ? `Erreur lors du téléchargement : ${detail}`
+          : 'Erreur lors du téléchargement. Vérifiez le fichier et réessayez.',
+      )
     } finally {
       setLoading(false)
     }
@@ -378,24 +381,22 @@ export function DocumentsPage() {
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {OCR_ELIGIBLE_CATEGORIES.includes(doc.category) && (
-                      <Tooltip title="Lancer l'analyse OCR">
-                        <span>
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleLaunchOcr(doc)}
-                            disabled={enqueuingId === doc.id}
-                          >
-                            {enqueuingId === doc.id ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <PageviewIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
+                    <Tooltip title="Analyser (OCR)">
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleLaunchOcr(doc)}
+                          disabled={enqueuingId === doc.id}
+                        >
+                          {enqueuingId === doc.id ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <PageviewIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                     <Tooltip title="Télécharger">
                       <IconButton size="small" onClick={() => handleDownload(doc)}>
                         <DownloadIcon fontSize="small" />

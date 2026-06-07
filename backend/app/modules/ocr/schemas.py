@@ -13,6 +13,8 @@ from app.modules.ocr.models import OcrStatus
 class OcrExtractionOut(BaseModel):
     id: str  # public_id as string
     document_id: int
+    document_public_id: Optional[str] = None
+    document_category: Optional[str] = None
     engine_version: str
     status: OcrStatus
     raw_text: Optional[str]
@@ -24,10 +26,17 @@ class OcrExtractionOut(BaseModel):
     reviewed_at: Optional[datetime]
 
     @classmethod
-    def from_model(cls, row: Any) -> "OcrExtractionOut":
+    def from_model(cls, row: Any, document: Any = None) -> "OcrExtractionOut":
+        category = getattr(document, "category", None)
         return cls(
             id=str(row.public_id),
             document_id=row.document_id,
+            document_public_id=(
+                str(document.public_id) if document is not None else None
+            ),
+            document_category=(
+                category.value if hasattr(category, "value") else category
+            ),
             engine_version=row.engine_version,
             status=row.status,
             raw_text=row.raw_text,
@@ -43,3 +52,38 @@ class OcrExtractionOut(BaseModel):
 class ConfirmFieldsRequest(BaseModel):
     """Fields that the human operator has reviewed and confirmed / corrected."""
     confirmed_fields: dict[str, str]
+
+
+class IngestLine(BaseModel):
+    """One best-effort line item parsed from an invoice (for prefill only)."""
+    description: Optional[str] = None
+    quantity: Optional[str] = None
+    unit_price: Optional[str] = None
+    line_total: Optional[str] = None
+
+
+class IngestionResult(BaseModel):
+    """Result of an ingest action: where the data goes + an optional prefill.
+
+    For ``vehicle`` / ``customer`` targets the write-back already happened
+    server-side and ``prefill`` is null. For invoice targets the caller uses
+    ``prefill`` to open the relevant create dialog (no auto-create, because a
+    supplier invoice must be linked to a purchase order first).
+    """
+    target: str  # "vehicle" | "customer" | "supplier_invoice" | "invoice" | "none"
+    prefill: Optional["InvoicePrefill"] = None
+    # Public id of a record created by the ingest action (e.g. supplier invoice).
+    created_id: Optional[str] = None
+
+
+class InvoicePrefill(BaseModel):
+    number: Optional[str] = None
+    invoice_date: Optional[str] = None  # ISO date
+    due_date: Optional[str] = None  # ISO date
+    party: Optional[str] = None  # supplier or client name (free text hint)
+    total_ht_cents: Optional[int] = None
+    total_ttc_cents: Optional[int] = None
+    suggested_lines: list[IngestLine] = []
+
+
+IngestionResult.model_rebuild()

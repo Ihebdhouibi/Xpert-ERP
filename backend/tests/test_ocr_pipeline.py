@@ -351,3 +351,73 @@ class TestConfirmFields:
                 confirmed_fields={"nom": "TEST"},
                 reviewer_id=1,
             )
+
+
+# ---------------------------------------------------------------------------
+# Test: supplier-invoice extraction dispatch + ingestion prefill
+# ---------------------------------------------------------------------------
+
+class TestSupplierInvoiceOcr:
+    async def _seed_and_process(self, ocr_db: AsyncSession):
+        from app.modules.documents import repository as doc_repo
+        from app.modules.documents.models import DocumentCategory, OwnerEntityType
+        from app.modules.ocr.service import enqueue_ocr, process_ocr_job
+
+        doc = await doc_repo.create_document(
+            ocr_db,
+            garage_id=1,
+            owner_entity_type=OwnerEntityType.supplier_invoice,
+            owner_entity_id=None,
+            category=DocumentCategory.supplier_invoice,
+            filename="facture_fournisseur.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            sha256="ffaa11",
+            storage_key="1/supplier_invoice/f.pdf",
+            uploaded_by=1,
+        )
+        extraction = await enqueue_ocr(ocr_db, document_id=doc.id)
+
+        result = RawOcrResult(
+            lines=[
+                OcrLine(text="Facture N° INV-2024-077", confidence=0.95),
+                OcrLine(text="Date facture 12/03/2024", confidence=0.90),
+                OcrLine(text="Fournisseur", confidence=0.92),
+                OcrLine(text="PIECES AUTO SARL", confidence=0.91),
+                OcrLine(text="Total HT 1 250,00", confidence=0.93),
+                OcrLine(text="Total TTC 1 500,00", confidence=0.94),
+            ],
+            full_text="...",
+        )
+        with (
+            patch("app.modules.documents.storage.download_object", new_callable=AsyncMock) as mock_dl,
+            patch("app.modules.ocr.engine.PaddleOcrEngine.run_ocr", new_callable=AsyncMock) as mock_ocr,
+        ):
+            mock_dl.return_value = b"%PDF-1.7 fake"
+            mock_ocr.return_value = result
+            updated = await process_ocr_job(ocr_db, extraction_id=extraction.id)
+        return extraction, updated
+
+    async def test_dispatch_extracts_invoice_fields(self, ocr_db: AsyncSession) -> None:
+        _extraction, updated = await self._seed_and_process(ocr_db)
+        fields = updated.structured_fields
+        assert fields["numero_facture"] == "INV-2024-077"
+        assert fields["total_ttc"] == "1500.00"
+        # raw lines are also retained for the reviewer
+        assert any(k.startswith("ligne_") for k in fields)
+
+    async def test_ingest_returns_supplier_invoice_prefill(self, ocr_db: AsyncSession) -> None:
+        from app.modules.ocr.service import ingest_extraction
+
+        extraction, updated = await self._seed_and_process(ocr_db)
+        result = await ingest_extraction(
+            ocr_db,
+            extraction_public_id=extraction.public_id,
+            confirmed_fields={k: v for k, v in updated.structured_fields.items()},
+            reviewer_id=1,
+        )
+        assert result.target == "supplier_invoice"
+        assert result.prefill is not None
+        assert result.prefill.number == "INV-2024-077"
+        assert result.prefill.total_ttc_cents == 150000
+        assert result.prefill.invoice_date == "2024-03-12"

@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.ocr import service
-from app.modules.ocr.schemas import ConfirmFieldsRequest, OcrExtractionOut
+from app.modules.ocr.schemas import (
+    ConfirmFieldsRequest,
+    IngestionResult,
+    OcrExtractionOut,
+)
 from app.modules.ocr.service import (
     OcrInvalidStateError,
     OcrNotFoundError,
@@ -40,7 +44,7 @@ async def enqueue_ocr(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     extraction = await service.enqueue_ocr(db, document_id=document.id)
     background_tasks.add_task(service.process_ocr_job, db, extraction_id=extraction.id)
-    return OcrExtractionOut.from_model(extraction)
+    return OcrExtractionOut.from_model(extraction, document)
 
 
 @router.get(
@@ -58,7 +62,8 @@ async def get_extraction(
     extraction = await repo.get_by_public_id(db, public_id=extraction_id)
     if extraction is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
-    return OcrExtractionOut.from_model(extraction)
+    document = await doc_repo.get_by_id(db, document_id=extraction.document_id)
+    return OcrExtractionOut.from_model(extraction, document)
 
 
 @router.post(
@@ -88,7 +93,39 @@ async def confirm_extraction(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
     except OcrInvalidStateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    return OcrExtractionOut.from_model(extraction)
+    document = await doc_repo.get_by_id(db, document_id=extraction.document_id)
+    return OcrExtractionOut.from_model(extraction, document)
+
+
+@router.post(
+    "/{extraction_id}/ingest",
+    response_model=IngestionResult,
+    dependencies=[require_permission("document.read")],
+    summary="Confirm reviewed fields and route them to their destination",
+)
+async def ingest_extraction(
+    extraction_id: uuid.UUID,
+    body: ConfirmFieldsRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> IngestionResult:
+    """
+    Persist the operator-reviewed fields (write-back for vehicle / customer) and
+    return where the data goes plus, for invoices, a prefill for the create
+    dialog.
+    """
+    try:
+        result = await service.ingest_extraction(
+            db,
+            extraction_public_id=extraction_id,
+            confirmed_fields=body.confirmed_fields,
+            reviewer_id=user.user_id,
+        )
+    except OcrNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
+    except OcrInvalidStateError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    return result
 
 
 @router.post(

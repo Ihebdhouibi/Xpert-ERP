@@ -11,6 +11,7 @@ Design rules:
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Optional
 
@@ -157,3 +158,157 @@ def extract_national_id(result: RawOcrResult) -> FieldMap:
             break
 
     return fields
+
+
+# ---------------------------------------------------------------------------
+# Invoices — customer invoice (facture) & supplier invoice (facture fournisseur)
+# ---------------------------------------------------------------------------
+
+# A monetary amount in French format: 1 234,56 / 1.234,56 / 1234.56 / 99,00
+_RE_AMOUNT = re.compile(r"\b(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})\b")
+# Invoice number: "Facture N° INV-2024-001", "N° 2024/123", "FAC123"
+_RE_INVOICE_NO = re.compile(
+    r"(?:facture|invoice)\s+(?:n[°ºo.]*\s*)?[:#]?\s*([A-Z0-9][A-Z0-9\-/]{2,})",
+    re.IGNORECASE,
+)
+# Day/month may be single- or double-digit (e.g. 2.6.2021 or 02/06/2021)
+_RE_DATE_ANY = re.compile(r"\b(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})\b")
+# A line that looks like a description followed by qty / unit price / total
+_RE_LINE_ITEM = re.compile(
+    r"^(?P<desc>.+?)\s+(?P<qty>\d{1,4})\s+(?P<unit>\d{1,3}(?:[ .]\d{3})*[.,]\d{2})"
+    r"(?:\s+(?P<total>\d{1,3}(?:[ .]\d{3})*[.,]\d{2}))?\s*$"
+)
+
+# Deliberately stricter than a bare "Facture" title so the fallback doesn't grab
+# the document heading instead of the actual number.
+_KW_INVOICE_NO = re.compile(
+    r"num[ée]ro\s*(de)?\s*facture|n[°ºo]\s*facture|facture\s*n[°ºo]|invoice\s*(number|no)",
+    re.IGNORECASE,
+)
+_KW_DATE_FACTURE = re.compile(r"date\s*(de)?\s*facture|date\s*d.[ée]mission|invoice\s*date", re.IGNORECASE)
+_KW_DATE_ECHEANCE = re.compile(r"[ée]ch[ée]ance|date\s*limite|due\s*date|paiement\s*avant", re.IGNORECASE)
+_KW_TOTAL_HT = re.compile(r"total\s*h\.?t\.?|montant\s*h\.?t\.?|sous[- ]?total", re.IGNORECASE)
+_KW_TOTAL_TTC = re.compile(r"total\s*t\.?t\.?c\.?|net\s*[àa]\s*payer|montant\s*[àa]\s*payer", re.IGNORECASE)
+_KW_TVA = re.compile(r"\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
+_KW_FOURNISSEUR = re.compile(r"fournisseur|[ée]metteur|vendeur|raison\s*sociale", re.IGNORECASE)
+_KW_CLIENT = re.compile(r"\bclient\b|destinataire|factur[ée]\s*[àa]|adress[ée]\s*[àa]", re.IGNORECASE)
+
+
+def _amount_on_keyword_line(lines, keyword_re: re.Pattern) -> Optional[tuple[str, float]]:
+    """Find an amount on the first line matching ``keyword_re`` (or the next line)."""
+    for idx, line in enumerate(lines):
+        if keyword_re.search(line.text):
+            m = _RE_AMOUNT.search(line.text)
+            if m:
+                return _normalise_amount(m.group(1)), line.confidence
+            # Amount may be on the following line
+            if idx + 1 < len(lines):
+                nxt = lines[idx + 1]
+                m2 = _RE_AMOUNT.search(nxt.text)
+                if m2:
+                    return _normalise_amount(m2.group(1)), nxt.confidence
+    return None
+
+
+def _normalise_amount(raw: str) -> str:
+    """Normalise a FR-formatted amount to a plain ``1234.56`` string."""
+    s = raw.replace(" ", "")
+    if "," in s:
+        # comma is the decimal separator; dots are thousands separators
+        s = s.replace(".", "").replace(",", ".")
+    return s
+
+
+def _extract_line_items(lines) -> Optional[tuple[str, float]]:
+    """Best-effort line-item extraction, returned as a JSON-encoded string.
+
+    Always low-confidence — invoice tables vary wildly, so these are a hint for
+    the human reviewer, never an authoritative value.
+    """
+    items: list[dict] = []
+    for line in lines:
+        m = _RE_LINE_ITEM.match(line.text.strip())
+        if not m:
+            continue
+        desc = m.group("desc").strip()
+        # Skip rows that are clearly totals/headers
+        if _KW_TOTAL_HT.search(desc) or _KW_TOTAL_TTC.search(desc) or _KW_TVA.search(desc):
+            continue
+        items.append(
+            {
+                "description": desc,
+                "quantity": m.group("qty"),
+                "unit_price": _normalise_amount(m.group("unit")),
+                "line_total": _normalise_amount(m.group("total")) if m.group("total") else None,
+            }
+        )
+    if not items:
+        return None
+    # Confidence kept deliberately low so the field is flagged needs_review.
+    return json.dumps(items, ensure_ascii=False), 0.40
+
+
+def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, party_field: str) -> FieldMap:
+    """Shared header extraction for customer and supplier invoices."""
+    fields: FieldMap = {}
+    lines = result.lines
+
+    # Invoice number — inline regex first, then keyword-followed line
+    for line in lines:
+        m = _RE_INVOICE_NO.search(line.text)
+        if m:
+            fields["numero_facture"] = (m.group(1).upper(), line.confidence)
+            break
+    if "numero_facture" not in fields:
+        after_no = _best_line_after_keyword(lines, _KW_INVOICE_NO)
+        # Only trust the after-keyword candidate if it looks like a number — in
+        # column/table layouts the next OCR line is often an adjacent header.
+        if after_no and any(ch.isdigit() for ch in after_no[0]):
+            fields["numero_facture"] = after_no
+
+    # Dates
+    for line in lines:
+        if _KW_DATE_FACTURE.search(line.text):
+            m = _RE_DATE_ANY.search(line.text)
+            if m:
+                fields["date_facture"] = (m.group(1), line.confidence)
+                break
+    for line in lines:
+        if _KW_DATE_ECHEANCE.search(line.text):
+            m = _RE_DATE_ANY.search(line.text)
+            if m:
+                fields["date_echeance"] = (m.group(1), line.confidence)
+                break
+
+    # Party (supplier or client)
+    after_party = _best_line_after_keyword(lines, party_keyword)
+    if after_party:
+        fields[party_field] = after_party
+
+    # Amounts
+    ht = _amount_on_keyword_line(lines, _KW_TOTAL_HT)
+    if ht:
+        fields["total_ht"] = ht
+    tva = _amount_on_keyword_line(lines, _KW_TVA)
+    if tva:
+        fields["tva"] = tva
+    ttc = _amount_on_keyword_line(lines, _KW_TOTAL_TTC)
+    if ttc:
+        fields["total_ttc"] = ttc
+
+    # Best-effort line items (JSON string, low confidence)
+    items = _extract_line_items(lines)
+    if items:
+        fields["lignes"] = items
+
+    return fields
+
+
+def extract_invoice(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a customer-facing invoice (facture)."""
+    return _extract_invoice_common(result, _KW_CLIENT, "client")
+
+
+def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a supplier invoice (facture fournisseur)."""
+    return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")

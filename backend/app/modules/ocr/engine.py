@@ -3,20 +3,15 @@
 PaddleOCR is CPU-bound. All calls to PaddleOCR are run in a thread executor
 so the event loop is not blocked.
 
-During the one-time model initialisation PaddleOCR emits model-loading messages
-via Python print() calls and C++ writes to raw file descriptors 1/2.
-`_redirect_paddle_output()` captures all of these and appends them to system.log.
+PaddleOCR prints model-loading messages to stdout during first initialisation
+(lazy, one-time only). These are expected in a dev environment and are harmless.
 """
 from __future__ import annotations
 
 import asyncio
 import io
 import logging
-import logging.handlers
-import os
-import sys
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
@@ -24,73 +19,15 @@ logger = logging.getLogger(__name__)
 
 ENGINE_VERSION = "paddleocr-3"
 
+# Max PDF pages to OCR (guards against huge multi-page documents).
+MAX_PDF_PAGES = 5
+# Render resolution for PDF pages — higher DPI = better OCR on small text.
+PDF_RENDER_DPI = 200
 
-@contextmanager
-def _redirect_paddle_output():
-    """Capture PaddleOCR init output (Python print + C-level fds) → system.log.
 
-    Strategy:
-    - Replace sys.stdout / sys.stderr so Python print() calls go to the log file.
-    - os.dup2 fd 1 and fd 2 so C++ glog writes also go to the log file.
-    - Python logging handlers are NOT affected: StreamHandler stores the original
-      terminal stderr object at creation time, not via sys.stderr lookup.
-    - On any OS error (e.g. unavailable log path) we fall through silently.
-    """
-    # Locate system.log from the running logger configuration
-    log_path: str | None = None
-    for _h in logging.getLogger("system").handlers:
-        if isinstance(_h, logging.handlers.RotatingFileHandler):
-            log_path = _h.baseFilename
-            break
-
-    if log_path is None:
-        yield
-        return
-
-    # Flush Python buffers before touching fds
-    try:
-        sys.stdout.flush()
-    except Exception:
-        pass
-    try:
-        sys.stderr.flush()
-    except Exception:
-        pass
-
-    try:
-        _log_fh = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
-    except OSError:
-        yield
-        return
-
-    _saved_fd1 = os.dup(1)
-    _saved_fd2 = os.dup(2)
-    _saved_stdout = sys.stdout
-    _saved_stderr = sys.stderr
-    try:
-        # Redirect C-level fds first
-        os.dup2(_log_fh.fileno(), 1)
-        os.dup2(_log_fh.fileno(), 2)
-        # Redirect Python-level streams (captures print() and warnings.warn())
-        sys.stdout = _log_fh
-        sys.stderr = _log_fh
-        yield
-    finally:
-        try:
-            _log_fh.flush()
-        except Exception:
-            pass
-        # Restore Python streams before restoring fds
-        sys.stdout = _saved_stdout
-        sys.stderr = _saved_stderr
-        os.dup2(_saved_fd1, 1)
-        os.dup2(_saved_fd2, 2)
-        os.close(_saved_fd1)
-        os.close(_saved_fd2)
-        try:
-            _log_fh.close()
-        except Exception:
-            pass
+def _is_pdf(data: bytes) -> bool:
+    """Detect a PDF by its magic header."""
+    return data[:5] == b"%PDF-"
 
 
 def _bytes_to_numpy(image_bytes: bytes):
@@ -105,12 +42,42 @@ def _bytes_to_numpy(image_bytes: bytes):
         raise ValueError(f"Cannot decode image bytes: {exc}") from exc
 
 
+def _pdf_to_image_bytes(pdf_bytes: bytes) -> list[bytes]:
+    """Render the first ``MAX_PDF_PAGES`` pages of a PDF to PNG bytes.
+
+    Uses PyMuPDF (fitz) which ships self-contained wheels (no system poppler).
+    """
+    try:
+        import fitz  # type: ignore[import]  # PyMuPDF
+    except ImportError:
+        logger.warning("pymupdf not installed — cannot OCR PDF documents")
+        return []
+
+    images: list[bytes] = []
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        page_count = doc.page_count
+        for page_index in range(min(page_count, MAX_PDF_PAGES)):
+            page = doc.load_page(page_index)
+            pix = page.get_pixmap(dpi=PDF_RENDER_DPI)
+            images.append(pix.tobytes("png"))
+        if page_count > MAX_PDF_PAGES:
+            logger.info(
+                "pdf_truncated_for_ocr page_count=%d max=%d", page_count, MAX_PDF_PAGES
+            )
+    return images
+
+
 @dataclass
 class OcrLine:
-    """One recognised text block with its confidence."""
+    """One recognised text block with its confidence and bounding box.
+
+    ``box`` is ``[x1, y1, x2, y2]`` in the source image's pixel coordinates
+    (or ``None`` when unavailable). Used to highlight the line in the preview.
+    """
 
     text: str
     confidence: float
+    box: Optional[list[int]] = None
 
 
 @dataclass
@@ -119,6 +86,29 @@ class RawOcrResult:
 
     lines: list[OcrLine]
     full_text: str
+    # Source image dimensions (first page for PDFs) for scaling highlight boxes.
+    width: int = 0
+    height: int = 0
+
+
+def _poly_to_box(raw_box) -> Optional[list[int]]:
+    """Normalise a PaddleOCR box/polygon to ``[x1, y1, x2, y2]`` ints."""
+    try:
+        import numpy as np
+
+        arr = np.array(raw_box).reshape(-1)
+        if arr.size == 4:
+            x1, y1, x2, y2 = arr
+            return [int(x1), int(y1), int(x2), int(y2)]
+        pts = np.array(raw_box).reshape(-1, 2)
+        return [
+            int(pts[:, 0].min()),
+            int(pts[:, 1].min()),
+            int(pts[:, 0].max()),
+            int(pts[:, 1].max()),
+        ]
+    except Exception:
+        return None
 
 
 class OcrEngine(ABC):
@@ -148,30 +138,38 @@ class PaddleOcrEngine(OcrEngine):
 
     def _get_paddle(self):
         if self._paddle is None:
+            from app.core.config import get_settings
+
+            cfg = get_settings()
+            lang = cfg.cfg_ocr_lang
+            version = cfg.cfg_ocr_engine_version
             try:
                 from paddleocr import PaddleOCR  # type: ignore[import]
 
-                logger.info("PaddleOCR: initialising (lang=fr, version=PP-OCRv3)")
-                with _redirect_paddle_output():
-                    self._paddle = PaddleOCR(lang="fr", ocr_version="PP-OCRv3")
+                logger.info("PaddleOCR: initialising (lang=%s, version=%s)", lang, version)
+                self._paddle = PaddleOCR(lang=lang, ocr_version=version)
                 logger.info("PaddleOCR: initialised successfully")
-            except ImportError:
+            except Exception as exc:  # ImportError, missing native libs, model download, etc.
                 logger.warning(
-                    "paddleocr not installed — OCR will return empty results. "
-                    "Install it: pip install paddleocr paddlepaddle"
+                    "PaddleOCR unavailable — OCR will return empty results. "
+                    "Cause: %s: %s",
+                    type(exc).__name__,
+                    exc,
                 )
                 self._paddle = _NullPaddle()
         return self._paddle
 
-    def _run_sync(self, image_bytes: bytes) -> RawOcrResult:
+    def _ocr_image(self, image_bytes: bytes) -> tuple[list[OcrLine], tuple[int, int]]:
+        """Run PaddleOCR on a single image; return (lines, (width, height))."""
         paddle = self._get_paddle()
         try:
             img_array = _bytes_to_numpy(image_bytes)
+            height, width = img_array.shape[:2]
             logger.debug("PaddleOCR: running predict on image shape=%s", img_array.shape)
             results = paddle.predict(img_array)
         except Exception as exc:
             logger.error("PaddleOCR execution error: %s", exc)
-            return RawOcrResult(lines=[], full_text="")
+            return [], (0, 0)
 
         lines: list[OcrLine] = []
         logger.debug("PaddleOCR: predict returned %d result block(s)", len(results) if results else 0)
@@ -179,18 +177,40 @@ class PaddleOcrEngine(OcrEngine):
             try:
                 texts = res["rec_texts"]
                 scores = res["rec_scores"]
+                boxes = res.get("rec_boxes")
+                if boxes is None or len(boxes) == 0:
+                    boxes = res.get("rec_polys")
                 logger.debug(
                     "PaddleOCR: block %d has %d text line(s)", block_idx, len(texts)
                 )
-                for text, conf in zip(texts, scores):
-                    lines.append(OcrLine(text=str(text), confidence=float(conf)))
+                for i, (text, conf) in enumerate(zip(texts, scores)):
+                    box = None
+                    if boxes is not None and i < len(boxes):
+                        box = _poly_to_box(boxes[i])
+                    lines.append(OcrLine(text=str(text), confidence=float(conf), box=box))
             except (KeyError, TypeError, ValueError) as exc:
                 logger.warning("PaddleOCR: could not parse result block %d: %s", block_idx, exc)
                 continue
+        return lines, (width, height)
 
-        logger.info("PaddleOCR: extracted %d line(s) from image", len(lines))
+    def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
+        # PDFs are rasterised page-by-page; images are OCR'd directly.
+        width, height = 0, 0
+        if _is_pdf(file_bytes):
+            page_images = _pdf_to_image_bytes(file_bytes)
+            lines: list[OcrLine] = []
+            for page_idx, page_bytes in enumerate(page_images):
+                page_lines, page_dims = self._ocr_image(page_bytes)
+                if page_idx == 0:
+                    width, height = page_dims  # highlight overlay only applies to page 1
+                logger.debug("PaddleOCR: page %d -> %d line(s)", page_idx + 1, len(page_lines))
+                lines.extend(page_lines)
+        else:
+            lines, (width, height) = self._ocr_image(file_bytes)
+
+        logger.info("PaddleOCR: extracted %d line(s)", len(lines))
         full_text = "\n".join(line.text for line in lines)
-        return RawOcrResult(lines=lines, full_text=full_text)
+        return RawOcrResult(lines=lines, full_text=full_text, width=width, height=height)
 
 
 class _NullPaddle:

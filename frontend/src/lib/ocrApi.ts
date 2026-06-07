@@ -13,6 +13,8 @@ export type OcrStatus =
 export interface OcrExtractionOut {
   id: string
   document_id: number
+  document_public_id: string | null
+  document_category: string | null
   engine_version: string
   status: OcrStatus
   raw_text: string | null
@@ -26,6 +28,36 @@ export interface OcrExtractionOut {
 
 export interface ConfirmFieldsRequest {
   confirmed_fields: Record<string, string>
+}
+
+export interface IngestLine {
+  description: string | null
+  quantity: string | null
+  unit_price: string | null
+  line_total: string | null
+}
+
+export interface InvoicePrefill {
+  number: string | null
+  invoice_date: string | null
+  due_date: string | null
+  party: string | null
+  total_ht_cents: number | null
+  total_ttc_cents: number | null
+  suggested_lines: IngestLine[]
+}
+
+export type IngestTarget =
+  | 'vehicle'
+  | 'customer'
+  | 'supplier_invoice'
+  | 'invoice'
+  | 'none'
+
+export interface IngestionResult {
+  target: IngestTarget
+  prefill: InvoicePrefill | null
+  created_id: string | null
 }
 
 export const ocrApi = {
@@ -42,6 +74,11 @@ export const ocrApi = {
   confirm: (extractionId: string, body: ConfirmFieldsRequest) =>
     apiClient
       .post<OcrExtractionOut>(`/ocr/${extractionId}/confirm`, body)
+      .then((r) => r.data),
+
+  ingest: (extractionId: string, body: ConfirmFieldsRequest) =>
+    apiClient
+      .post<IngestionResult>(`/ocr/${extractionId}/ingest`, body)
       .then((r) => r.data),
 
   reject: (extractionId: string) =>

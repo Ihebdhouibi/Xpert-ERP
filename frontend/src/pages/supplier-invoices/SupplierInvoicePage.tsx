@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -50,6 +51,7 @@ import {
 } from '../../lib/supplierInvoiceApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
+import type { InvoicePrefill } from '../../lib/ocrApi'
 import { apiClient } from '../../lib/apiClient'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -95,6 +97,7 @@ interface CreateDialogProps {
   open: boolean
   onClose: () => void
   onCreated: (si: SupplierInvoice) => void
+  prefill?: InvoicePrefill | null
 }
 
 interface LineForm {
@@ -105,7 +108,7 @@ interface LineForm {
   vat_rate: number
 }
 
-function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
+function CreateDialog({ open, onClose, onCreated, prefill }: CreateDialogProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [pos, setPos] = useState<PurchaseOrder[]>([])
   const [supplierPublicId, setSupplierPublicId] = useState('')
@@ -123,6 +126,14 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
     if (!open) return
     supplierApi.list({ status: 'active', page_size: 100 }).then((r) => setSuppliers(r.items))
   }, [open])
+
+  // Seed header fields from an OCR prefill (supplier + PO are still chosen manually)
+  useEffect(() => {
+    if (!open || !prefill) return
+    if (prefill.number) setNumber(prefill.number)
+    if (prefill.due_date) setDueDate(prefill.due_date)
+    if (prefill.invoice_date) setReceivedAt(`${prefill.invoice_date}T00:00`)
+  }, [open, prefill])
 
   useEffect(() => {
     if (!supplierPublicId) {
@@ -222,6 +233,29 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
       <DialogContent>
         <Stack spacing={2} mt={1}>
           {error && <Alert severity="error">{error}</Alert>}
+          {prefill && (
+            <Alert severity="info">
+              Pré-rempli depuis l'OCR
+              {prefill.party ? ` — fournisseur détecté : ${prefill.party}` : ''}
+              {prefill.total_ttc_cents != null
+                ? ` · Total TTC détecté : ${fmt(prefill.total_ttc_cents)}`
+                : ''}
+              . Sélectionnez le fournisseur et le bon de commande pour charger les lignes.
+              {prefill.suggested_lines.length > 0 && (
+                <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2 }}>
+                  {prefill.suggested_lines.map((l, i) => (
+                    <li key={i}>
+                      <Typography variant="caption">
+                        {l.description ?? '—'}
+                        {l.quantity ? ` ×${l.quantity}` : ''}
+                        {l.unit_price ? ` @ ${l.unit_price}` : ''}
+                      </Typography>
+                    </li>
+                  ))}
+                </Box>
+              )}
+            </Alert>
+          )}
           <Stack direction="row" spacing={2}>
             <FormControl fullWidth>
               <InputLabel>Fournisseur</InputLabel>
@@ -837,11 +871,14 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
 export function SupplierInvoicePage() {
   const { success: toastSuccess } = useToast()
   const qc = useQueryClient()
+  const location = useLocation()
+  const ocrPrefill =
+    (location.state as { ocrPrefill?: InvoicePrefill } | null)?.ocrPrefill ?? null
   const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<SIStatus | ''>('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<SupplierInvoice | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(Boolean(ocrPrefill))
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['supplier-invoices', statusFilter, search, page],
@@ -988,6 +1025,7 @@ export function SupplierInvoicePage() {
 
       <CreateDialog
         open={createOpen}
+        prefill={ocrPrefill}
         onClose={() => setCreateOpen(false)}
         onCreated={(si) => {
           setCreateOpen(false)
