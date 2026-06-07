@@ -63,6 +63,10 @@ class InvoiceCreateRequest(BaseModel):
     lines: list[InvoiceLineCreateRequest] = Field(default_factory=list)
 
 
+class ConvertQuotationRequest(BaseModel):
+    due_at: Optional[datetime] = None
+
+
 class InvoiceUpdateRequest(BaseModel):
     vehicle_id: Optional[int] = None
     repair_order_id: Optional[int] = None

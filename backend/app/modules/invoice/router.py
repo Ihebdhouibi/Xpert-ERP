@@ -13,6 +13,7 @@ from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.invoice import service
 from app.modules.invoice.models import InvoiceStatus
 from app.modules.invoice.schemas import (
+    ConvertQuotationRequest,
     InvoiceCreateRequest,
     InvoiceLineCreateRequest,
     InvoiceLineUpdateRequest,
@@ -135,12 +136,12 @@ async def create_invoice_from_repair_order(
 async def convert_quotation(
     user: AuthUser,
     quotation_id: int,
-    due_at: Optional[datetime] = Body(None),
+    body: ConvertQuotationRequest = Body(default_factory=ConvertQuotationRequest),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     try:
         return await service.convert_quotation(
-            db, quotation_id, user.garage_id, due_at=due_at, user_id=user.user_id
+            db, quotation_id, user.garage_id, due_at=body.due_at, user_id=user.user_id
         )
     except Exception as exc:
         # Import lazily to avoid circular import at module load

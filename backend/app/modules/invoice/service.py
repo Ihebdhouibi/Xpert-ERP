@@ -587,13 +587,14 @@ async def convert_quotation(
     quotation.version += 1
     quotation.updated_by = user_id
     await db.flush()
+    invoice_id = invoice.id  # capture before commit expires the object
     await db.commit()
 
-    fresh = await repo.get_by_id(db, invoice.id, garage_id)
+    fresh = await repo.get_by_id(db, invoice_id, garage_id)
     logger.info(
         "quotation_converted",
         quotation_id=quotation_id,
-        invoice_id=invoice.id,
+        invoice_id=invoice_id,
         garage_id=garage_id,
     )
     return InvoiceOut.model_validate(fresh)
