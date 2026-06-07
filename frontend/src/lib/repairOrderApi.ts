@@ -115,7 +115,7 @@ export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   in_repair: ['paused_parts', 'finished'],
   finished: ['delivered'],
   delivered: [],
-  paused_parts: ['in_repair'],
+  paused_parts: ['paused_approval'],
   paused_approval: ['in_repair'],
 }
 
