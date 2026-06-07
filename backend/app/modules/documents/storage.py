@@ -22,11 +22,17 @@ _CONNECT_TIMEOUT = 5   # seconds
 _READ_TIMEOUT = 30     # seconds
 
 
-def _make_client() -> Any:
+def _make_client(*, for_presign: bool = False) -> Any:
     cfg = get_settings()
+    # Presigned URLs are handed to the browser, so they must be signed against a
+    # host the browser can reach (s3_public_endpoint_url). All other operations
+    # connect from the server via the internal endpoint.
+    endpoint = cfg.s3_endpoint_url
+    if for_presign and cfg.s3_public_endpoint_url:
+        endpoint = cfg.s3_public_endpoint_url
     return boto3.client(
         "s3",
-        endpoint_url=cfg.s3_endpoint_url,
+        endpoint_url=endpoint,
         aws_access_key_id=cfg.s3_access_key_id,
         aws_secret_access_key=cfg.s3_secret_access_key,
         region_name=cfg.s3_region,
@@ -69,7 +75,7 @@ async def generate_presigned_url(
     expiry_seconds: int,
 ) -> str:
     """Return a pre-signed GET URL valid for *expiry_seconds*."""
-    client = _make_client()
+    client = _make_client(for_presign=True)
     loop = asyncio.get_running_loop()
     generate = functools.partial(
         client.generate_presigned_url,

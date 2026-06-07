@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # Object storage (S3-compatible / MinIO)
     # -------------------------------------------------------------------------
     s3_endpoint_url: str
+    # Browser-facing endpoint used when signing URLs returned to the client.
+    # Inside Docker the SDK connects via the internal service name (s3_endpoint_url,
+    # e.g. http://minio:9000) but the browser must use a reachable host. When empty
+    # it falls back to s3_endpoint_url (correct for host-run dev).
+    s3_public_endpoint_url: str = ""
     s3_access_key_id: str
     s3_secret_access_key: str
     s3_bucket_documents: str
@@ -114,6 +119,11 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # OCR pipeline (Issue #48)
     # -------------------------------------------------------------------------
+    # PaddleOCR engine selection. NOTE: PP-OCRv5 currently ships only `en`/`ch`
+    # recognition models — it has NO French/latin model, so it would misread
+    # accents. PP-OCRv3 has `latin_PP-OCRv3` which is correct for French.
+    cfg_ocr_engine_version: str = "PP-OCRv3"
+    cfg_ocr_lang: str = "fr"
     cfg_ocr_confidence_threshold_default: float = 0.75
     cfg_ocr_confidence_threshold_immatriculation: float = 0.75
     cfg_ocr_confidence_threshold_vin: float = 0.80
