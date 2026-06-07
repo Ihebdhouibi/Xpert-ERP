@@ -7,7 +7,9 @@ from typing import Optional
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from app.modules.customer.models import Customer
 from app.modules.vehicles.models import (
     Vehicle,
     VehicleOwnershipHistory,
@@ -75,16 +77,17 @@ async def list_vehicles(
     status: Optional[VehicleStatus] = None,
     offset: int = 0,
     limit: int = 20,
-) -> tuple[list[Vehicle], int]:
+) -> tuple[list[tuple[Vehicle, Optional[str]]], int]:
+    CustomerAlias = aliased(Customer)
     base_filter = [
         Vehicle.garage_id == garage_id,
         Vehicle.deleted_at.is_(None),
     ]
 
     if search:
-        q = f"%{search}%"
+        q_str = f"%{search}%"
         base_filter.append(
-            or_(Vehicle.registration.ilike(q), Vehicle.vin.ilike(q))
+            or_(Vehicle.registration.ilike(q_str), Vehicle.vin.ilike(q_str))
         )
 
     if customer_id is not None:
@@ -99,13 +102,14 @@ async def list_vehicles(
     total = count_result.scalar_one()
 
     result = await db.execute(
-        select(Vehicle)
+        select(Vehicle, CustomerAlias.full_name)
+        .outerjoin(CustomerAlias, Vehicle.customer_id == CustomerAlias.id)
         .where(*base_filter)
         .order_by(Vehicle.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
-    return list(result.scalars().all()), total
+    return list(result.all()), total
 
 
 async def soft_delete(

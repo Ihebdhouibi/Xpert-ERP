@@ -113,8 +113,13 @@ async def list_vehicles(
         offset=offset,
         limit=page_size,
     )
+    items = []
+    for vehicle, customer_name in vehicles:
+        out = VehicleOut.model_validate(vehicle)
+        out.customer_name = customer_name
+        items.append(out)
     return VehicleListResponse(
-        items=[VehicleOut.model_validate(v) for v in vehicles],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,

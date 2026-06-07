@@ -89,6 +89,7 @@ class VehicleOut(BaseModel):
     id: int
     garage_id: int
     customer_id: Optional[int]
+    customer_name: Optional[str] = None
     registration: Optional[str]
     vin: Optional[str]
     make: str

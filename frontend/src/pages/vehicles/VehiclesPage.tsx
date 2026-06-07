@@ -104,6 +104,19 @@ const columns: Column<VehicleOut>[] = [
     ),
   },
   {
+    id: 'owner',
+    label: 'Propriétaire',
+    width: 180,
+    render: row =>
+      row.customer_name ? (
+        <Typography variant="body2" fontWeight={500} color="primary.main">
+          {row.customer_name}
+        </Typography>
+      ) : (
+        <Typography variant="caption" color="text.disabled">—</Typography>
+      ),
+  },
+  {
     id: 'mileage',
     label: 'Kilométrage',
     align: 'right',

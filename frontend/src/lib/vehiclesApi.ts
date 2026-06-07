@@ -22,6 +22,7 @@ export interface VehicleOut {
   id: number
   garage_id: number
   customer_id: number | null
+  customer_name: string | null
   registration: string | null
   vin: string | null
   make: string
