@@ -95,8 +95,8 @@ class SISummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    supplier_id: int
-    purchase_order_id: int
+    supplier_id: Optional[int]
+    purchase_order_id: Optional[int]
     number: str
     status: str
     lines: list[dict[str, Any]]

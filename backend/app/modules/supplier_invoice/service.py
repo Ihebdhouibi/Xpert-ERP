@@ -185,6 +185,43 @@ async def create_supplier_invoice(
     return si
 
 
+async def create_supplier_invoice_from_ocr(
+    db: AsyncSession,
+    garage_id: int,
+    number: str,
+    total_ht: int,
+    total_ttc: int,
+    lines: Optional[list[dict]] = None,
+    received_at: Optional[datetime] = None,
+    due_date: Optional[date] = None,
+    notes: Optional[str] = None,
+    created_by: Optional[int] = None,
+) -> SupplierInvoice:
+    """Create a standalone draft supplier invoice from OCR data.
+
+    No purchase order / supplier is linked yet (so no 3-way match runs); the
+    operator attaches them and runs matching later. The record is immediately
+    visible in the supplier-invoices list.
+    """
+    logger.info("create_supplier_invoice_from_ocr_start", number=number, garage_id=garage_id)
+    si = await SupplierInvoiceRepository.create(
+        db,
+        garage_id=garage_id,
+        supplier_id=None,
+        purchase_order_id=None,
+        number=number or "(sans numéro)",
+        lines=lines or [],
+        total_ht=total_ht,
+        total_ttc=total_ttc,
+        received_at=received_at,
+        due_date=due_date,
+        notes=notes,
+        created_by=created_by,
+    )
+    logger.info("supplier_invoice_created_from_ocr", si_public_id=str(si.public_id), garage_id=garage_id)
+    return si
+
+
 async def update_supplier_invoice(
     db: AsyncSession,
     garage_id: int,

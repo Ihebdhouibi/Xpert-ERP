@@ -47,11 +47,12 @@ class SupplierInvoice(Base):
         Uuid(as_uuid=True), unique=True, nullable=False, default=uuid_lib.uuid4
     )
     garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    supplier_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("supplier.id", ondelete="RESTRICT"), nullable=False
+    # Nullable: standalone invoices captured via OCR may have no PO/supplier yet.
+    supplier_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("supplier.id", ondelete="RESTRICT"), nullable=True
     )
-    purchase_order_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("purchase_order.id", ondelete="RESTRICT"), nullable=False
+    purchase_order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("purchase_order.id", ondelete="RESTRICT"), nullable=True
     )
     number: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[SupplierInvoiceStatus] = mapped_column(

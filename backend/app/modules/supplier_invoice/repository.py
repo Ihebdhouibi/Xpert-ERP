@@ -70,8 +70,8 @@ class SupplierInvoiceRepository:
     async def create(
         db: AsyncSession,
         garage_id: int,
-        supplier_id: int,
-        purchase_order_id: int,
+        supplier_id: Optional[int],
+        purchase_order_id: Optional[int],
         number: str,
         lines: list[dict[str, Any]],
         total_ht: int,
