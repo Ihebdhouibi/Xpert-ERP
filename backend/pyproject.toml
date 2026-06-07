@@ -47,6 +47,8 @@ dependencies = [
     "paddlepaddle==3.0.0",
     "paddleocr==3.0.1",
     "opencv-python-headless==4.10.0.84",
+    # PDF rasterisation for OCR (pure wheels, no system poppler dependency)
+    "pymupdf==1.24.10",
 ]
 
 [project.optional-dependencies]
