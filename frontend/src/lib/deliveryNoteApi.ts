@@ -172,4 +172,11 @@ export const deliveryNoteApi = {
     )
     return data
   },
+
+  fromQuotation: async (quotationId: number): Promise<DeliveryNoteOut> => {
+    const { data } = await apiClient.post<DeliveryNoteOut>(
+      `/delivery-notes/from-quotation/${quotationId}`,
+    )
+    return data
+  },
 }

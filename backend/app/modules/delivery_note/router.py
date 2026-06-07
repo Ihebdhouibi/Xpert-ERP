@@ -327,3 +327,28 @@ async def convert_to_invoice(
         raise HTTPException(status.HTTP_404_NOT_FOUND, _NOT_FOUND)
     except DeliveryNoteStateError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Create from quotation
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/from-quotation/{quotation_id}",
+    response_model=DeliveryNoteOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("invoice.create")],
+    summary="Create a draft delivery note from a quotation",
+)
+async def create_from_quotation(
+    quotation_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryNoteOut:
+    uid = await _resolve_user_id(db, user.public_id)
+    try:
+        return await service.from_quotation(
+            db, quotation_id, user.garage_id, user_id=uid or 0
+        )
+    except service.DeliveryNoteNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))

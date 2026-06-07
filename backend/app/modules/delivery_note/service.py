@@ -129,6 +129,58 @@ async def create_delivery_note(
     return DeliveryNoteOut.model_validate(fresh)
 
 
+async def from_quotation(
+    db: AsyncSession,
+    quotation_id: int,
+    garage_id: int,
+    *,
+    user_id: int,
+) -> DeliveryNoteOut:
+    """Create a draft delivery note from an approved/sent quotation, copying all lines."""
+    from app.modules.quotation import repository as quot_repo
+
+    quotation = await quot_repo.get_by_id(db, quotation_id, garage_id)
+    if not quotation:
+        raise DeliveryNoteNotFoundError(f"Quotation {quotation_id} not found")
+
+    # Map quotation line kinds to delivery note line kinds
+    KIND_MAP = {"labor": "service", "part": "part", "service": "service", "other": "other"}
+
+    dn = DeliveryNote(
+        public_id=str(uuid.uuid4()),
+        garage_id=garage_id,
+        customer_id=quotation.customer_id,
+        vehicle_id=quotation.vehicle_id,
+        currency=quotation.currency,
+        notes=quotation.notes,
+        status=DeliveryNoteStatus.draft,
+        version=1,
+        created_by=user_id,
+        updated_by=user_id,
+    )
+    for ql in quotation.lines:
+        kind_str = KIND_MAP.get(ql.kind.value if hasattr(ql.kind, "value") else str(ql.kind), "other")
+        lt = _line_total(ql.unit_price_minor, ql.quantity)
+        dn.lines.append(DeliveryNoteLine(
+            delivery_note_id=0,
+            kind=DeliveryNoteLineKind(kind_str),
+            part_id=ql.part_id,
+            description=ql.description,
+            quantity=ql.quantity,
+            unit_price_minor=ql.unit_price_minor,
+            vat_rate=ql.vat_rate,
+            line_total_minor=lt,
+        ))
+
+    _recalculate_totals(dn)
+    await repo.create(db, dn)
+    await db.commit()
+
+    fresh = await repo.get_by_id(db, dn.id, garage_id)
+    logger.info("delivery_note_from_quotation", dn_id=dn.id, quotation_id=quotation_id, garage_id=garage_id)
+    return DeliveryNoteOut.model_validate(fresh)
+
+
 async def get_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int
 ) -> DeliveryNoteOut:
