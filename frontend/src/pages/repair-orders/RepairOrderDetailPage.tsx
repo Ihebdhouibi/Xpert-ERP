@@ -3,6 +3,7 @@ import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -48,6 +49,7 @@ import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
 import { quotationApi } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
+import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -669,9 +671,9 @@ export function RepairOrderDetailPage() {
 
   // Add-part inline form state
   const [showAddPart, setShowAddPart] = useState(false)
-  const [partName, setPartName] = useState('')
+  const [partSearch, setPartSearch] = useState('')
+  const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [partQty, setPartQty] = useState('')
-  const [partCost, setPartCost] = useState('')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -693,6 +695,13 @@ export function RepairOrderDetailPage() {
     queryFn: () => vehiclesApi.get(roForQueries!.vehicle_id!),
     enabled: !!roForQueries?.vehicle_id,
     staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: partsResults } = useQuery({
+    queryKey: ['parts-search', partSearch],
+    queryFn: () => partsApi.list({ search: partSearch || undefined, page_size: 30, status: 'active' }),
+    enabled: showAddPart,
+    staleTime: 30_000,
   })
 
   const createDevisMutation = useMutation({
@@ -730,14 +739,14 @@ export function RepairOrderDetailPage() {
 
   const addPartMutation = useMutation({
     mutationFn: () => repairOrderApi.addPartLine(publicId, {
-      part_name: partName,
+      part_name: selectedPart!.name,
       quantity: parseInt(partQty, 10),
-      unit_cost_minor: Math.round(parseFloat(partCost) * 1000),
+      unit_cost_minor: selectedPart!.selling_price_minor,
     }),
     onSuccess: () => {
       success('Pièce ajoutée.')
       setShowAddPart(false)
-      setPartName(''); setPartQty(''); setPartCost('')
+      setSelectedPart(null); setPartSearch(''); setPartQty('')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
@@ -1055,16 +1064,61 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddPart && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
-                    <TextField size="small" label="Désignation pièce" value={partName} onChange={e => setPartName(e.target.value)} sx={{ flex: 2 }} />
-                    <TextField size="small" label="Quantité" type="number" value={partQty} onChange={e => setPartQty(e.target.value)} sx={{ flex: 1 }} />
-                    <TextField size="small" label="Prix unit. (TND)" type="number" value={partCost} onChange={e => setPartCost(e.target.value)} sx={{ flex: 1 }} />
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="flex-start">
+                    <Autocomplete
+                      sx={{ flex: 2 }}
+                      size="small"
+                      options={partsResults?.items ?? []}
+                      getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
+                      filterOptions={(x) => x}
+                      inputValue={partSearch}
+                      onInputChange={(_, val) => { setPartSearch(val); setSelectedPart(null) }}
+                      value={selectedPart}
+                      onChange={(_, val) => { setSelectedPart(val); setPartQty('1') }}
+                      noOptionsText={partSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat'}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props} key={option.int_id}>
+                          <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
+                            <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
+                            <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
+                              Stock : {option.stock_on_hand}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Rechercher une pièce" placeholder="SKU ou nom…" />
+                      )}
+                    />
+                    <TextField
+                      size="small"
+                      label="Quantité"
+                      type="number"
+                      value={partQty}
+                      onChange={e => setPartQty(e.target.value)}
+                      inputProps={{ min: 1, max: selectedPart?.stock_on_hand ?? undefined, step: 1 }}
+                      sx={{ flex: 0, width: 110 }}
+                      helperText={selectedPart ? `Max : ${selectedPart.stock_on_hand}` : ''}
+                    />
+                    <TextField
+                      size="small"
+                      label="Prix unit. (€)"
+                      value={selectedPart ? (selectedPart.selling_price_minor / 100).toFixed(2) : ''}
+                      InputProps={{ readOnly: true }}
+                      sx={{ flex: 0, width: 120 }}
+                    />
                   </Stack>
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" onClick={() => setShowAddPart(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
+                    <Button size="small" onClick={() => { setShowAddPart(false); setSelectedPart(null); setPartSearch(''); setPartQty('') }} sx={{ textTransform: 'none' }}>Annuler</Button>
                     <Button
                       size="small" variant="contained"
-                      disabled={addPartMutation.isPending || !partName.trim() || !partQty || !partCost}
+                      disabled={
+                        addPartMutation.isPending ||
+                        !selectedPart ||
+                        !partQty ||
+                        parseInt(partQty, 10) < 1 ||
+                        parseInt(partQty, 10) > (selectedPart?.stock_on_hand ?? 0)
+                      }
                       onClick={() => addPartMutation.mutate()}
                       sx={{ textTransform: 'none', fontWeight: 700 }}
                     >

@@ -26,6 +26,7 @@ export interface PartSummary {
   reorder_threshold: number | null
   reorder_quantity: number | null
   status: PartStatus
+  stock_on_hand: number
   version: number
   created_at: string
   updated_at: string

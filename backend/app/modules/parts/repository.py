@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.parts.models import Part, PartCategory, PartEquivalent, PartStatus
+from app.modules.parts.stock_models import StockLevel
 
 
 class PartCategoryRepository:
@@ -102,8 +103,12 @@ class PartRepository:
         include_deleted: bool = False,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[list[Part], int]:
-        stmt = select(Part).where(Part.garage_id == garage_id)
+    ) -> tuple[list[tuple[Part, int]], int]:
+        stmt = (
+            select(Part, func.coalesce(StockLevel.on_hand, 0).label("on_hand"))
+            .outerjoin(StockLevel, (StockLevel.part_id == Part.id) & (StockLevel.garage_id == Part.garage_id))
+            .where(Part.garage_id == garage_id)
+        )
 
         if not include_deleted:
             stmt = stmt.where(Part.deleted_at.is_(None))
@@ -117,13 +122,18 @@ class PartRepository:
                 or_(Part.name.ilike(pattern), Part.sku_code.ilike(pattern))
             )
 
-        count_stmt = select(func.count()).select_from(stmt.subquery())
+        count_stmt = select(func.count()).select_from(
+            select(Part)
+            .where(Part.garage_id == garage_id)
+            .where(Part.deleted_at.is_(None) if not include_deleted else True)
+            .subquery()
+        )
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
         stmt = stmt.order_by(Part.name).offset((page - 1) * page_size).limit(page_size)
         result = await db.execute(stmt)
-        return list(result.scalars().all()), total
+        return [(row.Part, row.on_hand) for row in result.mappings()], total
 
     @staticmethod
     async def get_by_public_id(

@@ -92,6 +92,7 @@ class PartSummary(BaseModel):
     reorder_threshold: Optional[int]
     reorder_quantity: Optional[int]
     status: PartStatus
+    stock_on_hand: int = 0
     version: int
     created_at: datetime
     updated_at: datetime

@@ -180,8 +180,13 @@ async def list_parts(
         page=page,
         page_size=page_size,
     )
+    items = []
+    for part, on_hand in parts:
+        summary = PartSummary.model_validate(part)
+        summary.stock_on_hand = on_hand
+        items.append(summary)
     return PartListResponse(
-        items=[PartSummary.model_validate(p) for p in parts],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
