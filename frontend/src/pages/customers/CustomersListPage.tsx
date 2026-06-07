@@ -7,6 +7,8 @@ import {
   InputAdornment,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
@@ -110,6 +112,7 @@ const columns: Column<CustomerSummary>[] = [
 export function CustomersListPage() {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'blocked' | ''>('active')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [sortBy, setSortBy] = useState<string>('name')
@@ -126,10 +129,12 @@ export function CustomersListPage() {
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['customers', { q, page, pageSize, sortBy, sortOrder }],
+    queryKey: ['customers', { q, page, pageSize, sortBy, sortOrder, statusFilter }],
     queryFn: () =>
       customerApi.list({
         q: q || undefined,
+        status: statusFilter || undefined,
+        include_deleted: statusFilter === '' || statusFilter === 'inactive',
         page: page + 1,
         page_size: pageSize,
       }),
@@ -163,7 +168,7 @@ export function CustomersListPage() {
         }
       />
 
-      <Box mb={2}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} mb={2} alignItems="flex-start">
         <TextField
           placeholder="Rechercher par nom, téléphone, email ou identifiant fiscal…"
           fullWidth
@@ -178,7 +183,19 @@ export function CustomersListPage() {
             ),
           }}
         />
-      </Box>
+        <ToggleButtonGroup
+          value={statusFilter}
+          exclusive
+          onChange={(_e, v) => { if (v !== null) { setStatusFilter(v); setPage(0) } }}
+          size="small"
+          sx={{ flexShrink: 0 }}
+        >
+          <ToggleButton value="active" sx={{ textTransform: 'none', px: 2, fontSize: '0.8rem' }}>Actifs</ToggleButton>
+          <ToggleButton value="inactive" sx={{ textTransform: 'none', px: 2, fontSize: '0.8rem' }}>Archivés</ToggleButton>
+          <ToggleButton value="blocked" sx={{ textTransform: 'none', px: 2, fontSize: '0.8rem' }}>Bloqués</ToggleButton>
+          <ToggleButton value="" sx={{ textTransform: 'none', px: 2, fontSize: '0.8rem' }}>Tous</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
 
       <DataTable
         columns={columns}
