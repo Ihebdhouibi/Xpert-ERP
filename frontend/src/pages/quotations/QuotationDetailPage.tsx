@@ -31,6 +31,7 @@ import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
+import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
@@ -45,6 +46,7 @@ import {
   type LineKind,
 } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
+import { deliveryNoteApi } from '../../lib/deliveryNoteApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
@@ -231,7 +233,17 @@ export function QuotationDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
       navigate(`/invoices/${invoice.public_id}`, { replace: true })
     },
-    onError: () => toastError("Impossible de convertir le devis."),
+    onError: () => toastError("Impossible de convertir le devis en facture."),
+  })
+
+  const convertToBLMutation = useMutation({
+    mutationFn: () => deliveryNoteApi.fromQuotation(quotation!.id),
+    onSuccess: (dn) => {
+      success('Bon de livraison créé à partir du devis')
+      queryClient.invalidateQueries({ queryKey: ['delivery-notes'] })
+      navigate(`/delivery-notes/${dn.public_id}`, { replace: true })
+    },
+    onError: () => toastError("Impossible de créer le bon de livraison."),
   })
 
   const deleteMutation = useMutation({
@@ -319,7 +331,7 @@ export function QuotationDetailPage() {
   }
 
   const isExpired = quotation.valid_until ? new Date(quotation.valid_until) < new Date() : false
-  const anyMutating = sendMutation.isPending || approveMutation.isPending || rejectMutation.isPending || convertMutation.isPending
+  const anyMutating = sendMutation.isPending || approveMutation.isPending || rejectMutation.isPending || convertMutation.isPending || convertToBLMutation.isPending
   const canEditLines = quotation.status === 'draft'
 
   const customerLabel = customer
@@ -651,10 +663,16 @@ export function QuotationDetailPage() {
                   )}
 
                   {quotation.status === 'approved' && (
-                    <Button variant="contained" fullWidth startIcon={<ReceiptRoundedIcon />}
-                      onClick={() => convertMutation.mutate()} disabled={anyMutating}>
-                      Convertir en facture
-                    </Button>
+                    <>
+                      <Button variant="contained" fullWidth startIcon={<ReceiptRoundedIcon />}
+                        onClick={() => convertMutation.mutate()} disabled={anyMutating}>
+                        {convertMutation.isPending ? 'Conversion…' : 'Convertir en facture'}
+                      </Button>
+                      <Button variant="outlined" fullWidth startIcon={<LocalShippingRoundedIcon />}
+                        onClick={() => convertToBLMutation.mutate()} disabled={anyMutating}>
+                        {convertToBLMutation.isPending ? 'Création…' : 'Créer un bon de livraison'}
+                      </Button>
+                    </>
                   )}
 
                   {['rejected', 'expired', 'converted'].includes(quotation.status) && (
