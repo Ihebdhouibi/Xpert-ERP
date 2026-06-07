@@ -37,6 +37,7 @@ export interface DeliveryNoteOut {
   customer_id: number
   vehicle_id: number | null
   invoice_id: number | null
+  invoice_public_id: string | null
   doc_number: string | null
   status: DeliveryNoteStatus
   issued_at: string | null

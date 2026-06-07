@@ -137,7 +137,10 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
-    onError: () => toastError('Impossible d\'émettre la facture.'),
+    onError: (err: unknown) => {
+      const detail = (err as any)?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : 'Impossible d\'émettre la facture.')
+    },
   })
 
   const cancelMutation = useMutation({

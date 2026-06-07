@@ -28,6 +28,7 @@ from app.modules.invoice.service import (
     InvoiceVersionError,
     QuotationAlreadyConvertedError,
 )
+from app.modules.customer.credit_service import CreditLimitExceededError
 from app.core.logging import get_logger
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -339,6 +340,11 @@ async def issue_invoice(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except (InvoiceStateError, InvoiceVersionError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except CreditLimitExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Limite de crédit dépassée pour ce client. Solde actuel : {e.outstanding // 100} €, montant de la facture : {e.additional // 100} €, limite : {e.limit // 100} €.",
+        )
 
 
 @router.post(

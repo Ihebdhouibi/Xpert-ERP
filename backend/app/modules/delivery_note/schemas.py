@@ -85,6 +85,7 @@ class DeliveryNoteOut(BaseModel):
     customer_id: int
     vehicle_id: Optional[int]
     invoice_id: Optional[int]
+    invoice_public_id: Optional[str] = None
     doc_number: Optional[str]
     status: DeliveryNoteStatus
     issued_at: Optional[datetime]

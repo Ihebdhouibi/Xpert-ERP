@@ -72,8 +72,8 @@ export function DeliveryNoteDetailPage() {
       const updated = await deliveryNoteApi.convertToInvoice(publicId)
       await queryClient.invalidateQueries({ queryKey: ['delivery-note', publicId] })
       success('Facture créée depuis ce BL')
-      if (updated.invoice_id) {
-        navigate(`/invoices/${updated.invoice_id}`)
+      if (updated.invoice_public_id) {
+        navigate(`/invoices/${updated.invoice_public_id}`)
       }
     } catch { toastError('Erreur lors de la conversion.') }
     finally { setActionLoading(false) }
@@ -214,7 +214,7 @@ export function DeliveryNoteDetailPage() {
                     size="small"
                     variant="text"
                     sx={{ p: 0, minWidth: 0 }}
-                    onClick={() => navigate(`/invoices/${dn.invoice_id}`)}
+                    onClick={() => navigate(`/invoices/${dn.invoice_public_id ?? dn.invoice_id}`)}
                   >
                     Facture #{dn.invoice_id}
                   </Button>

@@ -187,7 +187,15 @@ async def get_delivery_note(
     dn = await repo.get_by_public_id(db, public_id, garage_id)
     if not dn:
         raise DeliveryNoteNotFoundError(public_id)
-    return DeliveryNoteOut.model_validate(dn)
+    out = DeliveryNoteOut.model_validate(dn)
+    if dn.invoice_id:
+        from sqlalchemy import select as sa_select
+        from app.modules.invoice.models import Invoice
+        row = await db.execute(sa_select(Invoice.public_id).where(Invoice.id == dn.invoice_id))
+        inv_pub = row.scalar_one_or_none()
+        if inv_pub:
+            out.invoice_public_id = str(inv_pub)
+    return out
 
 
 async def list_delivery_notes(
@@ -487,4 +495,6 @@ async def convert_to_invoice(
 
     fresh = await repo.get_by_id(db, dn.id, garage_id)
     logger.info("delivery_note_converted", dn_id=dn.id, invoice_id=invoice.id, garage_id=garage_id)
-    return DeliveryNoteOut.model_validate(fresh)
+    result = DeliveryNoteOut.model_validate(fresh)
+    result.invoice_public_id = str(invoice.public_id)
+    return result
