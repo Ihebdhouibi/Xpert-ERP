@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.modules.parts.models import Part
 from app.modules.parts.repository import PartRepository
 from app.modules.parts.stock_models import LowStockAlert, LowStockAlertStatus, StockLevel, StockMovement, StockMovementType
 from app.modules.parts.stock_repository import StockRepository
@@ -56,6 +57,9 @@ class ReleaseRequest(BaseModel):
 
 class StockLevelResponse(BaseModel):
     part_id: int
+    part_public_id: Optional[str] = None
+    part_name: Optional[str] = None
+    sku_code: Optional[str] = None
     garage_id: int
     on_hand: int
     reserved: int
@@ -64,9 +68,12 @@ class StockLevelResponse(BaseModel):
     updated_at: str
 
     @classmethod
-    def from_orm(cls, level: StockLevel) -> StockLevelResponse:
+    def from_orm(cls, level: StockLevel, part: Optional[Part] = None) -> StockLevelResponse:
         return cls(
             part_id=level.part_id,
+            part_public_id=str(part.public_id) if part else None,
+            part_name=part.name if part else None,
+            sku_code=part.sku_code if part else None,
             garage_id=level.garage_id,
             on_hand=level.on_hand,
             reserved=level.reserved,
@@ -167,20 +174,21 @@ async def get_stock_level(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> StockLevelResponse:
-    part_id = await _resolve_part_id(db, user.garage_id, public_id)
-    level = await StockRepository.get_level(db, user.garage_id, part_id)
+    part = await PartRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not part:
+        raise HTTPException(status_code=404, detail="Part not found")
+    level = await StockRepository.get_level(db, user.garage_id, part.id)
     if level is None:
-        # Return zeroed level for parts with no movements yet
         from datetime import datetime, timezone
         level = StockLevel(
             garage_id=user.garage_id,
-            part_id=part_id,
+            part_id=part.id,
             on_hand=0,
             reserved=0,
             avg_cost_minor=0,
             updated_at=datetime.now(timezone.utc),
         )
-    return StockLevelResponse.from_orm(level)
+    return StockLevelResponse.from_orm(level, part)
 
 
 @router.get(
@@ -330,8 +338,18 @@ async def list_stock_levels(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[StockLevelResponse]:
+    from sqlalchemy import select
     levels = await StockRepository.list_levels(db, user.garage_id)
-    return [StockLevelResponse.from_orm(l) for l in levels]
+    # Batch-fetch part info
+    part_ids = [l.part_id for l in levels]
+    parts_map: dict[int, Part] = {}
+    if part_ids:
+        result = await db.execute(
+            select(Part).where(Part.id.in_(part_ids), Part.garage_id == user.garage_id)
+        )
+        for p in result.scalars().all():
+            parts_map[p.id] = p
+    return [StockLevelResponse.from_orm(l, parts_map.get(l.part_id)) for l in levels]
 
 
 @router.get(

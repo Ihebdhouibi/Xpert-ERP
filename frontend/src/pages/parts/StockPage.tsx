@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -9,6 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -35,7 +37,7 @@ import {
   type LowStockAlertStatus,
   type StockMovementType,
 } from '../../lib/stockApi'
-import { type PartSummary } from '../../lib/partsApi'
+import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { TableLoadingSkeleton } from '../../components/ui/LoadingScreen'
@@ -43,6 +45,126 @@ import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
 function money(minor: number) {
   return formatMinor(minor, 'EUR')
+}
+
+// ---------------------------------------------------------------------------
+// Add stock dialog (pick part from catalogue → record "in" movement)
+// ---------------------------------------------------------------------------
+function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
+  const [quantity, setQuantity] = useState('')
+  const [unitCostEur, setUnitCostEur] = useState('')
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const partsQ = useQuery({
+    queryKey: ['parts', 'search', search],
+    queryFn: () => partsApi.list({ search, page_size: 30, status: 'active' }),
+    enabled: search.length >= 1,
+    staleTime: 10000,
+  })
+
+  const mut = useMutation({
+    mutationFn: () => {
+      if (!selectedPart) throw new Error('Aucune pièce sélectionnée')
+      const costEur = parseFloat(unitCostEur)
+      return stockApi.createMovement(selectedPart.id, {
+        type: 'in',
+        quantity: parseInt(quantity),
+        unit_cost_minor: unitCostEur ? Math.round(costEur * 100) : undefined,
+        reason: reason || 'Approvisionnement initial',
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      onClose()
+      setSelectedPart(null); setQuantity(''); setUnitCostEur(''); setReason(''); setSearch('')
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      if (typeof detail === 'object' && detail !== null && 'code' in detail) {
+        const d = detail as { code: string; available: number; requested: number }
+        setError(`Stock insuffisant : disponible=${d.available}, demandé=${d.requested}`)
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Erreur lors de l\'approvisionnement.')
+      }
+    },
+  })
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Approvisionner une pièce</DialogTitle>
+      <DialogContent>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Autocomplete
+            options={partsQ.data ?? []}
+            getOptionLabel={(p) => `${p.sku_code} — ${p.name}`}
+            filterOptions={(x) => x}
+            loading={partsQ.isFetching}
+            value={selectedPart}
+            onChange={(_, v) => {
+              setSelectedPart(v)
+              if (v) setUnitCostEur((v.selling_price_minor / 100).toFixed(2))
+            }}
+            inputValue={search}
+            onInputChange={(_, v) => setSearch(v)}
+            renderOption={(props, p) => (
+              <Box component="li" {...props} key={p.id}>
+                <Stack>
+                  <Typography variant="body2" fontWeight={600}>{p.sku_code} — {p.name}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Prix vente : {money(p.selling_price_minor)} · Stock actuel : {p.stock_on_hand}
+                  </Typography>
+                </Stack>
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField {...params} label="Rechercher une pièce" placeholder="Tapez le nom ou code..." />
+            )}
+            noOptionsText={search.length < 1 ? 'Tapez pour chercher' : 'Aucune pièce trouvée'}
+          />
+          <TextField
+            label="Quantité à ajouter"
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            inputProps={{ min: 1, step: 1 }}
+            fullWidth
+          />
+          <TextField
+            label="Coût unitaire (optionnel)"
+            type="number"
+            value={unitCostEur}
+            onChange={(e) => setUnitCostEur(e.target.value)}
+            InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
+            inputProps={{ min: 0, step: 0.01 }}
+            fullWidth
+            helperText="Pré-rempli avec le prix de vente si disponible"
+          />
+          <TextField
+            label="Raison"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Approvisionnement initial"
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Annuler</Button>
+        <Button
+          variant="contained"
+          disabled={!selectedPart || !quantity || parseInt(quantity) < 1 || mut.isPending}
+          onClick={() => mut.mutate()}
+        >
+          Approvisionner
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +267,7 @@ function MovementDialog({
 // ---------------------------------------------------------------------------
 function StockLevelsTab() {
   const [movDialog, setMovDialog] = useState<PartSummary | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
   const levelsQ = useQuery({
     queryKey: ['stock', 'levels'],
@@ -155,15 +278,23 @@ function StockLevelsTab() {
   const levels = levelsQ.data ?? []
 
   if (levelsQ.isLoading) {
-    return <Table size="small"><TableHead><TableRow>{['Part ID','En stock','Réservé','Disponible','Coût moyen','Mis à jour','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={6} /></TableBody></Table>
+    return <Table size="small"><TableHead><TableRow>{['Article','SKU','En stock','Réservé','Disponible','Coût moyen','Mis à jour','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={8} rows={6} /></TableBody></Table>
   }
 
   return (
     <Box>
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
+        <PermissionGate permission="part.update">
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+            Approvisionner une pièce
+          </Button>
+        </PermissionGate>
+      </Box>
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>Part ID</TableCell>
+            <TableCell>Article</TableCell>
+            <TableCell>SKU</TableCell>
             <TableCell align="right">En stock</TableCell>
             <TableCell align="right">Réservé</TableCell>
             <TableCell align="right">Disponible</TableCell>
@@ -175,14 +306,21 @@ function StockLevelsTab() {
         <TableBody>
           {levels.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                Aucun niveau de stock enregistré
+              <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                Aucun niveau de stock enregistré — cliquez sur « Approvisionner une pièce » pour commencer
               </TableCell>
             </TableRow>
           ) : (
             levels.map((l) => (
               <TableRow key={`${l.garage_id}-${l.part_id}`} hover>
-                <TableCell>#{l.part_id}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={500}>
+                    {l.part_name ?? `#${l.part_id}`}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="caption" color="text.secondary">{l.sku_code ?? '—'}</Typography>
+                </TableCell>
                 <TableCell align="right">{l.on_hand}</TableCell>
                 <TableCell align="right">{l.reserved}</TableCell>
                 <TableCell align="right">
@@ -206,7 +344,7 @@ function StockLevelsTab() {
                       size="small"
                       startIcon={<AddIcon />}
                       onClick={() => {
-                        const fakePart = { id: `internal-${l.part_id}`, sku_code: `#${l.part_id}`, name: '', description: null, category_id: null, unit_of_measure: 'pcs', purchase_price_minor: 0, selling_price_minor: 0, supplier_hint_id: null, reorder_threshold: null, reorder_quantity: null, status: 'active' as const, version: 1, created_at: '', updated_at: '' }
+                        const fakePart = { id: l.part_public_id ?? `internal-${l.part_id}`, sku_code: l.sku_code ?? `#${l.part_id}`, name: l.part_name ?? '', description: null, category_id: null, unit_of_measure: 'pcs', purchase_price_minor: 0, selling_price_minor: 0, supplier_hint_id: null, reorder_threshold: null, reorder_quantity: null, status: 'active' as const, stock_on_hand: l.on_hand, version: 1, created_at: '', updated_at: '' }
                         setMovDialog(fakePart as PartSummary)
                       }}
                     >
@@ -222,6 +360,7 @@ function StockLevelsTab() {
       {movDialog && (
         <MovementDialog open onClose={() => setMovDialog(null)} part={movDialog} />
       )}
+      <AddStockDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </Box>
   )
 }
