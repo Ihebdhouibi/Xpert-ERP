@@ -18,6 +18,8 @@ class ROPartLineCreateRequest(BaseModel):
     part_name: str = Field(..., min_length=1, max_length=255)
     quantity: int = Field(..., gt=0)
     unit_cost_minor: int = Field(..., gt=0)
+    remise_pct: float = Field(0, ge=0, le=100)
+    tva_pct: float = Field(0, ge=0, le=100)
     part_public_id: Optional[str] = Field(
         None, description="Catalog part public_id (UUID) — enables stock reservation"
     )
@@ -84,6 +86,8 @@ class ROPartLineSummary(BaseModel):
     part_name: str
     quantity: int
     unit_cost_minor: int
+    remise_pct: float = 0
+    tva_pct: float = 0
     amount_minor: int
     created_at: datetime
 

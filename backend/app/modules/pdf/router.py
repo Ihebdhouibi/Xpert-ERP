@@ -1,7 +1,8 @@
 """PDF download router.
 
-GET /pdf/quotations/{id}  — requires quotation.read
-GET /pdf/invoices/{id}    — requires invoice.read
+GET /pdf/quotations/{id}       — requires quotation.read
+GET /pdf/invoices/{id}         — requires invoice.read
+GET /pdf/delivery-notes/{id}   — requires invoice.read
 """
 from __future__ import annotations
 
@@ -73,6 +74,37 @@ async def download_invoice_pdf(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     filename = f"facture-{invoice_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/delivery-notes/{delivery_note_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF document"},
+        404: {"description": "Delivery note not found"},
+    },
+    dependencies=[require_permission("invoice.read")],
+)
+async def download_delivery_note_pdf(
+    delivery_note_id: int,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_delivery_note_pdf(
+            db, delivery_note_id=delivery_note_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Delivery note not found")
+
+    filename = f"bon-livraison-{delivery_note_id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import {
   Box,
   Button,
@@ -21,6 +22,7 @@ import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
+import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import { deliveryNoteApi, DELIVERY_NOTE_STATUS_LABELS, DELIVERY_NOTE_LINE_KIND_LABELS } from '../../lib/deliveryNoteApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -39,6 +41,7 @@ export function DeliveryNoteDetailPage() {
 
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data: dn, isLoading, isError } = useQuery({
     queryKey: ['delivery-note', publicId],
@@ -90,6 +93,28 @@ export function DeliveryNoteDetailPage() {
     finally { setActionLoading(false) }
   }
 
+  const handlePdfPreview = async () => {
+    if (!dn) return
+    setPdfLoading(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      const response = await axios.get(
+        `/api/v1/pdf/delivery-notes/${dn.id}`,
+        {
+          responseType: 'blob',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      )
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toastError('Impossible de générer le PDF.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   if (isLoading) return <LoadingScreen />
   if (isError || !dn) return <Typography color="error">Impossible de charger ce bon de livraison.</Typography>
 
@@ -111,6 +136,17 @@ export function DeliveryNoteDetailPage() {
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
             <StatusChip status={dn.status as StatusKey} />
+            {dn.status !== 'draft' && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<PictureAsPdfRoundedIcon />}
+                onClick={handlePdfPreview}
+                disabled={pdfLoading}
+              >
+                {pdfLoading ? 'Génération…' : 'Aperçu PDF'}
+              </Button>
+            )}
             <PermissionGate permission="invoice.issue">
               {isDraft && (
                 <Button

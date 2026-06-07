@@ -289,6 +289,8 @@ class RepairOrderService:
         part_name: str,
         quantity: int,
         unit_cost_minor: int,
+        remise_pct: float = 0,
+        tva_pct: float = 0,
         part_public_id: Optional[str] = None,
     ) -> RepairOrder:
         """Add a part line and recalculate total cost.
@@ -311,10 +313,12 @@ class RepairOrderService:
                 raise RepairOrderNotFoundError(f"Part {part_public_id} not found")
             resolved_part_id = part.id
 
-        amount_minor = quantity * unit_cost_minor
+        amount_minor = round(quantity * unit_cost_minor * (1 - remise_pct / 100) * (1 + tva_pct / 100))
         await RepairOrderRepository.add_part_line(
             db, ro.id, part_name, quantity, unit_cost_minor, amount_minor, user_id,
             part_id=resolved_part_id,
+            remise_pct=remise_pct,
+            tva_pct=tva_pct,
         )
 
         # Reserve stock for catalog-linked parts

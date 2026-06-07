@@ -363,6 +363,8 @@ async def add_part_line(
             part_name=body.part_name,
             quantity=body.quantity,
             unit_cost_minor=body.unit_cost_minor,
+            remise_pct=body.remise_pct,
+            tva_pct=body.tva_pct,
             part_public_id=body.part_public_id,
         )
         await db.commit()

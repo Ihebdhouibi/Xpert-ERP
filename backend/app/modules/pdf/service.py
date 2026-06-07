@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.modules.customer import repository as customer_repo
+from app.modules.delivery_note import repository as delivery_note_repo
 from app.modules.invoice import repository as invoice_repo
 from app.modules.quotation import repository as quotation_repo
 from app.modules.vehicles import repository as vehicle_repo
@@ -138,6 +139,47 @@ async def render_quotation_pdf(
         return pdf_bytes
     except Exception:
         logger.exception("render_quotation_pdf_error", quotation_id=quotation_id, garage_id=garage_id)
+        raise
+
+
+async def render_delivery_note_pdf(
+    db: AsyncSession, *, delivery_note_id: int, garage_id: int
+) -> bytes:
+    """Fetch the delivery note from DB, render HTML template, return PDF bytes."""
+    logger.info("render_delivery_note_pdf_start", delivery_note_id=delivery_note_id, garage_id=garage_id)
+    try:
+        dn = await delivery_note_repo.get_by_id(db, delivery_note_id, garage_id)
+        if dn is None:
+            raise ValueError(f"Delivery note {delivery_note_id} not found")
+
+        customer = await customer_repo.get_by_id(db, garage_id, dn.customer_id)
+        vehicle = None
+        if dn.vehicle_id:
+            vehicle = await vehicle_repo.get_by_id(
+                db, vehicle_id=dn.vehicle_id, garage_id=garage_id
+            )
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": dn,
+            "customer": customer,
+            "vehicle": vehicle,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("delivery_note.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
+        )
+        logger.info("render_delivery_note_pdf_success", delivery_note_id=delivery_note_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_delivery_note_pdf_error", delivery_note_id=delivery_note_id, garage_id=garage_id)
         raise
 
 

@@ -175,6 +175,8 @@ class RepairOrderRepository:
         amount_minor: int,
         created_by_user_id: int | None = None,
         part_id: int | None = None,
+        remise_pct: float = 0,
+        tva_pct: float = 0,
     ) -> ROPartLine:
         """Add a part line to a repair order."""
         line = ROPartLine(
@@ -183,6 +185,8 @@ class RepairOrderRepository:
             part_name=part_name,
             quantity=quantity,
             unit_cost_minor=unit_cost_minor,
+            remise_pct=remise_pct,
+            tva_pct=tva_pct,
             amount_minor=amount_minor,
             created_by_user_id=created_by_user_id,
         )

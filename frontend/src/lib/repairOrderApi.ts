@@ -23,6 +23,8 @@ export interface ROPartLine {
   part_name: string
   quantity: number
   unit_cost_minor: number
+  remise_pct: number
+  tva_pct: number
   amount_minor: number
   created_at: string
 }
@@ -97,6 +99,8 @@ export interface PartLineInput {
   part_name: string
   quantity: number
   unit_cost_minor: number
+  remise_pct?: number
+  tva_pct?: number
 }
 
 export const STATUS_LABELS: Record<ROStatus, string> = {
