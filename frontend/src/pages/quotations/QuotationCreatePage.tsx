@@ -26,9 +26,11 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import { quotationApi, LINE_KIND_LABELS, type LineKind, type QuotationLineCreateInput } from '../../lib/quotationApi'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
+import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -38,7 +40,81 @@ const CURRENCIES = ['TND', 'EUR', 'USD']
 
 interface DraftLine extends QuotationLineCreateInput {
   _key: number
+  _partSearch?: string        // debounced search string for part autocomplete
+  _selectedPart?: PartSummary | null
 }
+
+// ─── Part selector autocomplete ──────────────────────────────────────────────
+
+function PartAutocomplete({
+  value,
+  inputValue,
+  onInputChange,
+  onChange,
+}: {
+  value: PartSummary | null
+  inputValue: string
+  onInputChange: (v: string) => void
+  onChange: (part: PartSummary | null) => void
+}) {
+  const [debounced, setDebounced] = useState(inputValue)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleInput = (v: string) => {
+    onInputChange(v)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setDebounced(v), 300)
+  }
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['parts-search', debounced],
+    queryFn: () => partsApi.list({ search: debounced || undefined, page_size: 50 }),
+    placeholderData: (prev: typeof data) => prev,
+  })
+  const parts = data?.items ?? []
+
+  return (
+    <Autocomplete
+      options={parts}
+      loading={isFetching}
+      value={value}
+      onChange={(_e, v) => onChange(v)}
+      inputValue={inputValue}
+      onInputChange={(_e, v) => handleInput(v)}
+      filterOptions={x => x}
+      noOptionsText={debounced ? 'Aucune pièce trouvée' : 'Tapez un nom ou référence'}
+      getOptionLabel={p => `${p.sku_code} — ${p.name}`}
+      isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+      renderOption={(props, p) => (
+        <Box component="li" {...props} key={p.int_id}>
+          <Stack>
+            <Typography variant="body2" fontWeight={600}>{p.name}</Typography>
+            <Typography variant="caption" color="text.secondary" fontFamily="monospace">{p.sku_code}</Typography>
+          </Stack>
+        </Box>
+      )}
+      renderInput={params => (
+        <TextField
+          {...params}
+          label="Pièce"
+          size="small"
+          sx={{ flex: 1 }}
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {isFetching && <CircularProgress size={16} />}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+    />
+  )
+}
+
+// ─── Section card ─────────────────────────────────────────────────────────────
 
 function SectionCard({
   title,
@@ -70,7 +146,7 @@ function computeLineTotals(lines: DraftLine[], currency: string) {
 
   for (const line of lines) {
     const unitMinor = Math.round((parseFloat(String(line.unit_price_minor)) || 0))
-    const qty = parseFloat(String(line.quantity)) || 0
+    const qty = parseInt(String(line.quantity), 10) || 0
     const discPct = parseFloat(String(line.discount_percent ?? '0')) || 0
     const vatPct = parseFloat(String(line.vat_rate ?? '0')) || 0
     const lineSubtotal = unitMinor * qty
@@ -200,10 +276,10 @@ export function QuotationCreatePage() {
         currency,
         valid_until: validUntil || null,
         notes: notes.trim() || null,
-        lines: lines.map(({ _key, ...l }) => ({
+        lines: lines.map(({ _key, _partSearch, _selectedPart, ...l }) => ({
           ...l,
           unit_price_minor: Math.round((parseFloat(String(l.unit_price_minor)) || 0)),
-          quantity: parseFloat(String(l.quantity)) || 1,
+          quantity: parseInt(String(l.quantity), 10) || 1,
           discount_percent: parseFloat(String(l.discount_percent ?? '0')) || 0,
           vat_rate: parseFloat(String(l.vat_rate ?? '0')) || 0,
         })),
@@ -225,7 +301,7 @@ export function QuotationCreatePage() {
   const addLine = () => {
     setLines(prev => [
       ...prev,
-      { _key: ++_lineKey, kind: 'labor', description: '', quantity: 1, unit_price_minor: 0, discount_percent: 0, vat_rate: 0 },
+      { _key: ++_lineKey, kind: 'labor', description: '', quantity: 1, unit_price_minor: 0, discount_percent: 0, vat_rate: 0, _partSearch: '', _selectedPart: null },
     ])
   }
 
@@ -422,112 +498,139 @@ export function QuotationCreatePage() {
                 </Typography>
               ) : (
                 <Stack spacing={1.5} mb={2}>
-                  {lines.map((line, idx) => (
-                    <Box
-                      key={line._key}
-                      sx={{ p: 2, bgcolor: '#F8FAFC', borderRadius: 1.5, border: '1px solid #E2E8F0' }}
-                    >
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.25}>
-                        <Typography variant="caption" fontWeight={700} color="text.secondary">
-                          Ligne {idx + 1}
-                        </Typography>
-                        <Tooltip title="Supprimer la ligne">
-                          <IconButton size="small" color="error" onClick={() => removeLine(line._key)}>
-                            <DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
+                  {lines.map((line, idx) => {
+                    const isLabor = line.kind === 'labor'
+                    const isPart = line.kind === 'part'
+                    const lineUnitMinor = line.unit_price_minor
+                    const lineQty = parseInt(String(line.quantity), 10) || 0
+                    const lineDisc = parseFloat(String(line.discount_percent ?? 0)) || 0
+                    const lineVat = parseFloat(String(line.vat_rate ?? 0)) || 0
+                    const lineBase = lineUnitMinor * lineQty * (1 - lineDisc / 100)
+                    const lineTotal = lineBase * (1 + lineVat / 100)
 
-                      <Stack spacing={1.5}>
-                        {/* Row 1: type + description */}
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                          <TextField
-                            select
-                            size="small"
-                            label="Type"
-                            value={line.kind ?? 'labor'}
-                            onChange={e => updateLine(line._key, { kind: e.target.value as LineKind })}
-                            sx={{ minWidth: 130 }}
-                          >
-                            {LINE_KINDS.map(k => (
-                              <MenuItem key={k} value={k}>{LINE_KIND_LABELS[k]}</MenuItem>
-                            ))}
-                          </TextField>
-                          <TextField
-                            size="small"
-                            label="Description"
-                            value={line.description}
-                            onChange={e => updateLine(line._key, { description: e.target.value })}
-                            sx={{ flex: 1 }}
-                            required
-                          />
+                    return (
+                      <Box
+                        key={line._key}
+                        sx={{ p: 2, bgcolor: '#F8FAFC', borderRadius: 1.5, border: '1px solid #E2E8F0' }}
+                      >
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.25}>
+                          <Typography variant="caption" fontWeight={700} color="text.secondary">
+                            Ligne {idx + 1}
+                          </Typography>
+                          <Tooltip title="Supprimer la ligne">
+                            <IconButton size="small" color="error" onClick={() => removeLine(line._key)}>
+                              <DeleteOutlineRoundedIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
                         </Stack>
 
-                        {/* Row 2: qty + price + discount + vat */}
-                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="flex-start">
-                          <TextField
-                            size="small"
-                            label="Quantité"
-                            type="number"
-                            value={line.quantity}
-                            onChange={e => updateLine(line._key, { quantity: parseFloat(e.target.value) || 0 })}
-                            sx={{ width: 90 }}
-                            inputProps={{ min: 0, step: 0.01 }}
-                          />
-                          <TextField
-                            size="small"
-                            label="Prix unit. HT"
-                            type="number"
-                            value={line.unit_price_minor === 0 ? '' : String(line.unit_price_minor / 1000)}
-                            onChange={e => updateLine(line._key, { unit_price_minor: Math.round((parseFloat(e.target.value) || 0) * 1000) })}
-                            sx={{ flex: 1, minWidth: 120 }}
-                            inputProps={{ min: 0, step: 0.001 }}
-                            InputProps={{
-                              endAdornment: <Typography variant="caption" color="text.secondary">{currency}</Typography>,
-                            }}
-                            required
-                          />
-                          <TextField
-                            size="small"
-                            label="Remise %"
-                            type="number"
-                            value={line.discount_percent ?? 0}
-                            onChange={e => updateLine(line._key, { discount_percent: parseFloat(e.target.value) || 0 })}
-                            sx={{ width: 100 }}
-                            inputProps={{ min: 0, max: 100 }}
-                          />
-                          <TextField
-                            size="small"
-                            label="TVA %"
-                            type="number"
-                            value={line.vat_rate ?? 0}
-                            onChange={e => updateLine(line._key, { vat_rate: parseFloat(e.target.value) || 0 })}
-                            sx={{ width: 90 }}
-                            inputProps={{ min: 0 }}
-                          />
-                          {/* Line total preview */}
-                          {(() => {
-                            const unitMinor = line.unit_price_minor
-                            const qty = parseFloat(String(line.quantity)) || 0
-                            const disc = parseFloat(String(line.discount_percent ?? 0)) || 0
-                            const vat = parseFloat(String(line.vat_rate ?? 0)) || 0
-                            const base = unitMinor * qty * (1 - disc / 100)
-                            const total = base * (1 + vat / 100)
-                            return (
-                              <Box sx={{ minWidth: 90, pt: 0.75, textAlign: 'right' }}>
-                                <Typography variant="caption" color="text.secondary" display="block" fontSize="0.65rem">
-                                  Total HT
-                                </Typography>
-                                <Typography variant="body2" fontWeight={700} fontFamily="monospace">
-                                  {(total / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 3 })} {currency}
-                                </Typography>
-                              </Box>
-                            )
-                          })()}
+                        <Stack spacing={1.5}>
+                          {/* Row 1: type + description/part selector */}
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                            <TextField
+                              select
+                              size="small"
+                              label="Type"
+                              value={line.kind ?? 'labor'}
+                              onChange={e => updateLine(line._key, {
+                                kind: e.target.value as LineKind,
+                                description: '',
+                                _selectedPart: null,
+                                _partSearch: '',
+                              })}
+                              sx={{ minWidth: 130 }}
+                            >
+                              {LINE_KINDS.map(k => (
+                                <MenuItem key={k} value={k}>{LINE_KIND_LABELS[k]}</MenuItem>
+                              ))}
+                            </TextField>
+
+                            {isPart ? (
+                              <PartAutocomplete
+                                value={line._selectedPart ?? null}
+                                inputValue={line._partSearch ?? ''}
+                                onInputChange={v => updateLine(line._key, { _partSearch: v })}
+                                onChange={part => {
+                                  if (part) {
+                                    updateLine(line._key, {
+                                      _selectedPart: part,
+                                      description: part.name,
+                                      unit_price_minor: part.selling_price_minor,
+                                    })
+                                  } else {
+                                    updateLine(line._key, { _selectedPart: null, description: '', unit_price_minor: 0 })
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <TextField
+                                size="small"
+                                label="Description"
+                                value={line.description}
+                                onChange={e => updateLine(line._key, { description: e.target.value })}
+                                sx={{ flex: 1 }}
+                                required
+                              />
+                            )}
+                          </Stack>
+
+                          {/* Row 2: qty (not for labor) + price + discount + vat + total */}
+                          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="flex-start">
+                            {!isLabor && (
+                              <TextField
+                                size="small"
+                                label="Quantité"
+                                type="number"
+                                value={line.quantity}
+                                onChange={e => updateLine(line._key, { quantity: parseInt(e.target.value, 10) || 1 })}
+                                sx={{ width: 90 }}
+                                inputProps={{ min: 1, step: 1 }}
+                              />
+                            )}
+                            <TextField
+                              size="small"
+                              label="Prix"
+                              type="number"
+                              value={lineUnitMinor === 0 ? '' : String(lineUnitMinor / 1000)}
+                              onChange={e => updateLine(line._key, { unit_price_minor: Math.round((parseFloat(e.target.value) || 0) * 1000) })}
+                              sx={{ flex: 1, minWidth: 120 }}
+                              inputProps={{ min: 0, step: 0.001 }}
+                              InputProps={{
+                                endAdornment: <Typography variant="caption" color="text.secondary">{currency}</Typography>,
+                              }}
+                              required
+                            />
+                            <TextField
+                              size="small"
+                              label="Remise %"
+                              type="number"
+                              value={line.discount_percent ?? 0}
+                              onChange={e => updateLine(line._key, { discount_percent: parseFloat(e.target.value) || 0 })}
+                              sx={{ width: 100 }}
+                              inputProps={{ min: 0, max: 100 }}
+                            />
+                            <TextField
+                              size="small"
+                              label="TVA %"
+                              type="number"
+                              value={line.vat_rate ?? 0}
+                              onChange={e => updateLine(line._key, { vat_rate: parseFloat(e.target.value) || 0 })}
+                              sx={{ width: 90 }}
+                              inputProps={{ min: 0 }}
+                            />
+                            <Box sx={{ minWidth: 90, pt: 0.75, textAlign: 'right' }}>
+                              <Typography variant="caption" color="text.secondary" display="block" fontSize="0.65rem">
+                                Total HT
+                              </Typography>
+                              <Typography variant="body2" fontWeight={700} fontFamily="monospace">
+                                {(lineTotal / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 3 })} {currency}
+                              </Typography>
+                            </Box>
+                          </Stack>
                         </Stack>
-                      </Stack>
-                    </Box>
-                  ))}
+                      </Box>
+                    )
+                  })}
                 </Stack>
               )}
 
@@ -544,6 +647,14 @@ export function QuotationCreatePage() {
 
             {/* Options */}
             <SectionCard title="Options du devis" icon={<ReceiptLongRoundedIcon sx={{ fontSize: 20 }} />}>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2, p: 1.5, bgcolor: '#F0F9FF', borderRadius: 1.5, border: '1px solid #BAE6FD' }}>
+                <InfoOutlinedIcon sx={{ fontSize: 16, color: '#0369A1', mt: 0.25, flexShrink: 0 }} />
+                <Typography variant="caption" color="#0369A1">
+                  <strong>Devise</strong> — monnaie utilisée pour toutes les lignes du devis.<br />
+                  <strong>Valide jusqu'au</strong> — date limite au-delà de laquelle le devis expire automatiquement.<br />
+                  <strong>Notes internes</strong> — commentaires visibles uniquement en interne (non imprimés sur le PDF client).
+                </Typography>
+              </Box>
               <Stack spacing={2.5}>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField

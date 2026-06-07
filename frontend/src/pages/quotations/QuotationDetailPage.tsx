@@ -636,19 +636,32 @@ export function QuotationDetailPage() {
                 {/* Actions by status */}
                 <Stack spacing={1.25}>
                   {quotation.status === 'draft' && (
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      startIcon={<SendRoundedIcon />}
-                      onClick={() => sendMutation.mutate()}
-                      disabled={anyMutating || quotation.lines.length === 0}
-                    >
-                      Envoyer au client
-                    </Button>
+                    <>
+                      <Tooltip
+                        title="Marque le devis comme 'Envoyé' et lui attribue un numéro. Aucun email n'est envoyé automatiquement — transmettez le PDF manuellement au client."
+                        placement="left"
+                        arrow
+                      >
+                        <span>
+                          <Button
+                            variant="contained"
+                            fullWidth
+                            startIcon={<SendRoundedIcon />}
+                            onClick={() => sendMutation.mutate()}
+                            disabled={anyMutating || quotation.lines.length === 0}
+                          >
+                            Marquer comme envoyé
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                        ℹ️ Utilisez PDF / Imprimer pour envoyer au client.
+                      </Typography>
+                    </>
                   )}
                   {quotation.status === 'draft' && quotation.lines.length === 0 && (
                     <Typography variant="caption" color="text.secondary" textAlign="center">
-                      Ajoutez au moins une ligne pour envoyer.
+                      Ajoutez au moins une ligne pour continuer.
                     </Typography>
                   )}
 
