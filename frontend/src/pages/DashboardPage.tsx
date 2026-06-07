@@ -386,7 +386,7 @@ export function DashboardPage() {
               </Typography>
               <Stack spacing={1.5}>
                 <QuickActionCard
-                  label="Kanban atelier"
+                  label="Suivi Atelier"
                   description="Vue en temps réel des OTs en cours"
                   icon={<ViewKanbanRoundedIcon sx={{ fontSize: 22 }} />}
                   iconBg="#EFF6FF"
@@ -452,7 +452,7 @@ export function DashboardPage() {
                     { label: 'Clients', sub: 'Gestion clients', icon: <PeopleRoundedIcon sx={{ fontSize: 18 }} />, to: '/customers' },
                     { label: 'OTs', sub: 'Ordres de réparation', icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/repair-orders' },
                     { label: 'Inspections', sub: 'Contrôles véhicules', icon: <FindInPageRoundedIcon sx={{ fontSize: 18 }} />, to: '/inspections' },
-                    { label: 'Kanban', sub: 'Vue atelier', icon: <ViewKanbanRoundedIcon sx={{ fontSize: 18 }} />, to: '/workshop' },
+                    { label: 'Suivi Atelier', sub: 'Vue atelier', icon: <ViewKanbanRoundedIcon sx={{ fontSize: 18 }} />, to: '/workshop' },
                   ].map(m => (
                     <Grid item xs={6} sm={3} key={m.to}>
                       <ModuleTile {...m} />

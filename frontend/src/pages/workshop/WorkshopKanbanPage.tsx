@@ -379,7 +379,7 @@ export function WorkshopKanbanPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
       <PageHeader
-        title="Atelier — Kanban"
+        title="Suivi Atelier"
         subtitle={
           data
             ? `${totalActive} ordre${totalActive !== 1 ? 's' : ''} actif${totalActive !== 1 ? 's' : ''} · actualisation auto 30 s`

@@ -55,7 +55,7 @@ export const navSections: NavSection[] = [
         permission: 'repair_order.read',
       },
       {
-        label: 'Kanban atelier',
+        label: 'Suivi Atelier',
         path: '/workshop',
         icon: ViewKanbanRoundedIcon,
         permission: 'repair_order.transition',
