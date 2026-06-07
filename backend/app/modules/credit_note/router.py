@@ -146,7 +146,7 @@ refund_router = APIRouter(prefix="/refunds", tags=["Refunds"])
     "",
     response_model=RefundOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[require_permission("refund.create")],
+    dependencies=[require_permission("refund.execute")],
     summary="Record a refund against a payment",
 )
 async def record_refund(
@@ -170,7 +170,7 @@ async def record_refund(
     "/{refund_id}",
     response_model=RefundOut,
     status_code=status.HTTP_200_OK,
-    dependencies=[require_permission("refund.read")],
+    dependencies=[require_permission("payment.read")],
     summary="Get refund by ID",
 )
 async def get_refund(

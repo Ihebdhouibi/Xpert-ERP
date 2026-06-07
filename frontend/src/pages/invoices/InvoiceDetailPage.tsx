@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import {
   Box,
   Button,
@@ -25,6 +26,8 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
+import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
+import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -36,6 +39,8 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
+import { RecordPaymentDialog } from '../../components/invoice/RecordPaymentDialog'
+import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPanel'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -94,6 +99,30 @@ export function InvoiceDetailPage() {
   const { success, error: toastError } = useToast()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [paymentOpen, setPaymentOpen] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const handlePdfPreview = async () => {
+    if (!invoice) return
+    setPdfLoading(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      const response = await axios.get(
+        `/api/v1/pdf/invoices/${invoice.id}`,
+        {
+          responseType: 'blob',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      )
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toastError('Impossible de générer le PDF.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   const { data: invoice, isLoading, isError } = useQuery({
     queryKey: ['invoice', publicId],
@@ -108,7 +137,10 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
-    onError: () => toastError('Impossible d\'émettre la facture.'),
+    onError: (err: unknown) => {
+      const detail = (err as any)?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : 'Impossible d\'émettre la facture.')
+    },
   })
 
   const cancelMutation = useMutation({
@@ -159,23 +191,36 @@ export function InvoiceDetailPage() {
     <Box>
       <PageHeader
         title={invoice.doc_number ?? 'Facture brouillon'}
-        subtitle={`Client #${invoice.customer_id}`}
+        subtitle={invoice.customer_name ?? `Client #${invoice.customer_id}`}
         breadcrumbs={[
           { label: 'Factures', href: '/invoices' },
           { label: invoice.doc_number ?? 'Brouillon' },
         ]}
         actions={
-          invoice.status === 'draft' ? (
-            <Button
-              variant="outlined"
-              color="error"
-              startIcon={<DeleteRoundedIcon />}
-              onClick={() => setDeleteOpen(true)}
-              size="small"
-            >
-              Supprimer
-            </Button>
-          ) : undefined
+          <Stack direction="row" spacing={1}>
+            {invoice.status !== 'draft' && (
+              <Button
+                variant="outlined"
+                startIcon={<PictureAsPdfRoundedIcon />}
+                onClick={handlePdfPreview}
+                disabled={pdfLoading}
+                size="small"
+              >
+                {pdfLoading ? 'Génération…' : 'Aperçu PDF'}
+              </Button>
+            )}
+            {invoice.status === 'draft' && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteRoundedIcon />}
+                onClick={() => setDeleteOpen(true)}
+                size="small"
+              >
+                Supprimer
+              </Button>
+            )}
+          </Stack>
         }
       />
 
@@ -202,7 +247,7 @@ export function InvoiceDetailPage() {
                 } />
                 <Divider />
                 <InfoRow label="Client" value={
-                  <Typography variant="body2" fontWeight={500}>Client #{invoice.customer_id}</Typography>
+                  <Typography variant="body2" fontWeight={500}>{invoice.customer_name ?? `Client #${invoice.customer_id}`}</Typography>
                 } />
                 {invoice.vehicle_id && (
                   <>
@@ -290,6 +335,11 @@ export function InvoiceDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Payment history */}
+            {invoice.status !== 'draft' && (
+              <PaymentHistoryPanel invoiceId={invoice.id} currency={invoice.currency} />
+            )}
 
             {/* Lines card */}
             <Card>
@@ -488,6 +538,19 @@ export function InvoiceDetailPage() {
 
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (
                     <Button
+                      variant="contained"
+                      color="success"
+                      fullWidth
+                      startIcon={<PaymentsRoundedIcon />}
+                      onClick={() => setPaymentOpen(true)}
+                      disabled={anyMutating}
+                    >
+                      Enregistrer un paiement
+                    </Button>
+                  )}
+
+                  {(invoice.status === 'issued' || invoice.status === 'partial') && (
+                    <Button
                       variant="outlined"
                       color="error"
                       fullWidth
@@ -520,6 +583,14 @@ export function InvoiceDetailPage() {
           </Box>
         </Grid>
       </Grid>
+
+      {invoice && (
+        <RecordPaymentDialog
+          open={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          invoice={invoice}
+        />
+      )}
 
       <ConfirmDialog
         open={cancelOpen}

@@ -38,12 +38,12 @@ class ROStatus(str, enum.Enum):
 # State machine: allowed transitions from each status
 ALLOWED_TRANSITIONS: dict[ROStatus, set[ROStatus]] = {
     ROStatus.created: {ROStatus.diagnosis, ROStatus.paused_approval},
-    ROStatus.diagnosis: {ROStatus.in_repair, ROStatus.paused_parts, ROStatus.paused_approval},
-    ROStatus.in_repair: {ROStatus.finished, ROStatus.paused_parts, ROStatus.paused_approval},
-    ROStatus.finished: {ROStatus.delivered, ROStatus.paused_approval},
+    ROStatus.diagnosis: {ROStatus.in_repair, ROStatus.paused_parts, ROStatus.paused_approval, ROStatus.created},
+    ROStatus.in_repair: {ROStatus.finished, ROStatus.paused_parts, ROStatus.paused_approval, ROStatus.diagnosis},
+    ROStatus.finished: {ROStatus.delivered, ROStatus.paused_approval, ROStatus.in_repair},
     ROStatus.delivered: set(),
-    ROStatus.paused_parts: {ROStatus.in_repair, ROStatus.diagnosis},
-    ROStatus.paused_approval: {ROStatus.in_repair, ROStatus.diagnosis, ROStatus.created},
+    ROStatus.paused_parts: {ROStatus.in_repair, ROStatus.diagnosis, ROStatus.paused_approval},
+    ROStatus.paused_approval: {ROStatus.finished, ROStatus.in_repair},
 }
 
 

@@ -29,6 +29,7 @@ export interface InvoiceOut {
   public_id: string
   garage_id: number
   customer_id: number
+  customer_name: string | null
   vehicle_id: number | null
   repair_order_id: number | null
   quotation_id: number | null
@@ -158,5 +159,9 @@ export const invoiceApi = {
 
   remove(publicId: string): Promise<void> {
     return apiClient.delete(`/invoices/${publicId}`).then(() => undefined)
+  },
+
+  fromRepairOrder(roPublicId: string): Promise<InvoiceOut> {
+    return apiClient.post(`/invoices/from-repair-order/${roPublicId}`).then(r => r.data)
   },
 }

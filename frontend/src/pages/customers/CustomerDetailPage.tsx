@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Divider,
   Grid,
   Stack,
@@ -21,14 +22,18 @@ import EmailRoundedIcon from '@mui/icons-material/EmailRounded'
 import PhoneRoundedIcon from '@mui/icons-material/PhoneRounded'
 import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded'
 import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded'
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
+import BuildCircleRoundedIcon from '@mui/icons-material/BuildCircleRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
-import { customerApi } from '../../lib/customerApi'
+import { customerApi, customerSubApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
+import { CustomerVehiclesPanel } from '../../components/customer/CustomerVehiclesPanel'
+import { CustomerActivityPanel } from '../../components/customer/CustomerActivityPanel'
 
 const TYPE_LABELS = { individual: 'Particulier', company: 'Société' }
 const STATUS_LABELS = { active: 'Actif', inactive: 'Inactif', blocked: 'Bloqué' }
@@ -80,6 +85,12 @@ export function CustomerDetailPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', publicId],
     queryFn: () => customerApi.get(publicId),
+    enabled: !!publicId,
+  })
+
+  const { data: spending } = useQuery({
+    queryKey: ['customer-spending', publicId],
+    queryFn: () => customerSubApi.getSpendingSummary(publicId),
     enabled: !!publicId,
   })
 
@@ -338,6 +349,70 @@ export function CustomerDetailPage() {
                   <Typography variant="caption" color="text.secondary">pts</Typography>
                 </Stack>
               } />
+              {spending && (
+                <>
+                  <Divider />
+                  <InfoRow label="Total facturé" value={
+                    <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
+                      {formatMinor(spending.total_invoiced_minor, 'EUR')}
+                    </Typography>
+                  } />
+                  <Divider />
+                  <InfoRow label="Total encaissé" value={
+                    <Typography variant="body2" fontFamily="monospace" fontWeight={600} color="success.main">
+                      {formatMinor(spending.total_paid_minor, 'EUR')}
+                    </Typography>
+                  } />
+                  <Divider />
+                  <InfoRow label={`Facturé ${new Date().getFullYear()}`} value={
+                    <Typography variant="body2" fontFamily="monospace">
+                      {formatMinor(spending.current_year_invoiced_minor, 'EUR')}
+                    </Typography>
+                  } />
+                  {spending.advance_balance_minor > 0 && (
+                    <>
+                      <Divider />
+                      <InfoRow label="Acomptes disponibles" value={
+                        <Typography variant="body2" fontFamily="monospace" fontWeight={600} color="primary.main">
+                          {formatMinor(spending.advance_balance_minor, 'EUR')}
+                        </Typography>
+                      } />
+                    </>
+                  )}
+                </>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title="Activité"
+              icon={<BuildCircleRoundedIcon sx={{ fontSize: 20 }} />}
+            >
+              {spending ? (
+                <>
+                  <InfoRow label="Ordres de réparation" value={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" fontWeight={700}>{spending.total_repair_orders}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        ({spending.completed_repair_orders} livrés)
+                      </Typography>
+                    </Stack>
+                  } />
+                  <Divider />
+                  <InfoRow label="Dernière intervention" value={
+                    spending.last_order_at
+                      ? <Typography variant="body2" color="text.secondary">
+                          {new Date(spending.last_order_at).toLocaleDateString('fr-FR', {
+                            day: '2-digit', month: 'long', year: 'numeric',
+                          })}
+                        </Typography>
+                      : null
+                  } />
+                </>
+              ) : (
+                <Box display="flex" justifyContent="center" py={1}>
+                  <CircularProgress size={18} />
+                </Box>
+              )}
             </SectionCard>
 
             <SectionCard
@@ -377,6 +452,22 @@ export function CustomerDetailPage() {
           </Stack>
         </Grid>
       </Grid>
+
+      {/* Vehicles Panel */}
+      <Box mt={3}>
+        <CustomerVehiclesPanel
+          customerPublicId={c.id}
+          customerIntId={c.int_id}
+        />
+      </Box>
+
+      {/* Activity Panel */}
+      <Box mt={3}>
+        <CustomerActivityPanel
+          customerPublicId={c.id}
+          customerIntId={c.int_id}
+        />
+      </Box>
 
       <ConfirmDialog
         open={confirmDelete}

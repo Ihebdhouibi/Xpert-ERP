@@ -21,6 +21,7 @@ from app.modules.vehicles.schemas import (
     VehicleHistoryOut,
     VehicleListResponse,
     VehicleOut,
+    VehicleROSummary,
     VehicleUpdateRequest,
 )
 
@@ -112,8 +113,13 @@ async def list_vehicles(
         offset=offset,
         limit=page_size,
     )
+    items = []
+    for vehicle, customer_name in vehicles:
+        out = VehicleOut.model_validate(vehicle)
+        out.customer_name = customer_name
+        items.append(out)
     return VehicleListResponse(
-        items=[VehicleOut.model_validate(v) for v in vehicles],
+        items=items,
         total=total,
         page=page,
         page_size=page_size,
@@ -279,6 +285,22 @@ async def get_vehicle_history(
         db, vehicle_id=vehicle_id, garage_id=garage_id
     )
 
+    # Lazy import to avoid circular dependency with repair_order module
+    from sqlalchemy import select
+    from app.modules.repair_order.models import RepairOrder
+
+    ro_result = await db.execute(
+        select(RepairOrder)
+        .where(
+            RepairOrder.vehicle_id == vehicle_id,
+            RepairOrder.garage_id == garage_id,
+            RepairOrder.deleted_at.is_(None),
+        )
+        .order_by(RepairOrder.created_at.desc())
+        .limit(20)
+    )
+    ros = ro_result.scalars().all()
+
     return VehicleHistoryOut(
         vehicle=VehicleOut.model_validate(vehicle),
         ownership_history=[
@@ -287,7 +309,7 @@ async def get_vehicle_history(
         registration_aliases=[
             _alias_out(a) for a in registration_aliases
         ],
-        repair_orders=[],  # Populated by repair orders module (M3)
+        repair_orders=[VehicleROSummary.model_validate(ro) for ro in ros],
     )
 
 

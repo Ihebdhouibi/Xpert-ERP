@@ -19,6 +19,7 @@ from app.modules.invoice.schemas import (
     InvoiceUpdateRequest,
     InvoiceListResponse,
 )
+from app.modules.customer import repository as customer_repo
 from app.modules.sequence import service as seq_service
 
 logger = get_logger("invoice.service")
@@ -84,6 +85,19 @@ def _recalculate_totals(invoice: Invoice) -> None:
     invoice.outstanding_minor = invoice.total_minor - paid
 
 
+async def _to_out(db: AsyncSession, invoice: Invoice) -> InvoiceOut:
+    """Build InvoiceOut, enriching with the customer display name."""
+    out = InvoiceOut.model_validate(invoice)
+    customer = await customer_repo.get_by_id(db, invoice.garage_id, invoice.customer_id)
+    if customer:
+        out.customer_name = (
+            f"{customer.full_name} ({customer.company_name})"
+            if customer.company_name
+            else customer.full_name
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -126,7 +140,22 @@ async def get_invoice(db: AsyncSession, invoice_id: int, garage_id: int) -> Invo
     inv = await repo.get_by_id(db, invoice_id, garage_id)
     if not inv:
         raise InvoiceNotFoundError(invoice_id)
-    return InvoiceOut.model_validate(inv)
+    return await _to_out(db, inv)
+
+
+async def get_invoice_by_public_id(db: AsyncSession, public_id: str, garage_id: int) -> InvoiceOut:
+    inv = await repo.get_by_public_id(db, public_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(public_id)
+    return await _to_out(db, inv)
+
+
+async def _resolve(db: AsyncSession, public_id: str, garage_id: int) -> Invoice:
+    """Resolve a public_id to an Invoice ORM object, raising InvoiceNotFoundError if missing."""
+    inv = await repo.get_by_public_id(db, public_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(public_id)
+    return inv
 
 
 async def list_invoices(
@@ -558,13 +587,14 @@ async def convert_quotation(
     quotation.version += 1
     quotation.updated_by = user_id
     await db.flush()
+    invoice_id = invoice.id  # capture before commit expires the object
     await db.commit()
 
-    fresh = await repo.get_by_id(db, invoice.id, garage_id)
+    fresh = await repo.get_by_id(db, invoice_id, garage_id)
     logger.info(
         "quotation_converted",
         quotation_id=quotation_id,
-        invoice_id=invoice.id,
+        invoice_id=invoice_id,
         garage_id=garage_id,
     )
     return InvoiceOut.model_validate(fresh)

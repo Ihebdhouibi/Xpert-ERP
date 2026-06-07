@@ -225,3 +225,20 @@ class CustomerBalanceEventListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# ---------------------------------------------------------------------------
+# Customer spending summary (aggregated view for customer profile page)
+# ---------------------------------------------------------------------------
+
+class CustomerSpendingSummary(BaseModel):
+    """Aggregated financial and activity statistics for a customer."""
+    total_invoiced_minor: int
+    total_paid_minor: int
+    total_outstanding_minor: int
+    current_year_invoiced_minor: int
+    total_repair_orders: int
+    completed_repair_orders: int
+    last_order_at: Optional[datetime]
+    advance_balance_minor: int
+    loyalty_points: int

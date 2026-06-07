@@ -32,6 +32,7 @@ import { VehicleCreatePage } from './pages/vehicles/VehicleCreatePage'
 import { VehicleEditPage } from './pages/vehicles/VehicleEditPage'
 import { QuotationsPage } from './pages/quotations/QuotationsPage'
 import { QuotationDetailPage } from './pages/quotations/QuotationDetailPage'
+import { QuotationCreatePage } from './pages/quotations/QuotationCreatePage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
 import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
@@ -44,6 +45,9 @@ import { SettingsPage } from './pages/admin/SettingsPage'
 import { AuditLogsPage } from './pages/admin/AuditLogsPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
 import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
+import { DeliveryNoteCreatePage } from './pages/delivery-notes/DeliveryNoteCreatePage'
+import { DeliveryNoteDetailPage } from './pages/delivery-notes/DeliveryNoteDetailPage'
+import { DeliveryNotesListPage } from './pages/delivery-notes/DeliveryNotesListPage'
 
 export const router = createBrowserRouter(
   [
@@ -126,9 +130,15 @@ export const router = createBrowserRouter(
 
       // Billing — quotations & invoices
       { path: 'quotations', element: <QuotationsPage /> },
+      { path: 'quotations/new', element: <QuotationCreatePage /> },
       { path: 'quotations/:publicId', element: <QuotationDetailPage /> },
       { path: 'invoices', element: <InvoicesPage /> },
       { path: 'invoices/:publicId', element: <InvoiceDetailPage /> },
+
+      // Delivery notes
+      { path: 'delivery-notes', element: <DeliveryNotesListPage /> },
+      { path: 'delivery-notes/new', element: <DeliveryNoteCreatePage /> },
+      { path: 'delivery-notes/:publicId', element: <DeliveryNoteDetailPage /> },
 
       // Finance utilities
       { path: 'advance-payments', element: <AdvancePaymentsPage /> },

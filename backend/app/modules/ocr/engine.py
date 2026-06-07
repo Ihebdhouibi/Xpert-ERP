@@ -3,16 +3,16 @@
 PaddleOCR is CPU-bound. All calls to PaddleOCR are run in a thread executor
 so the event loop is not blocked.
 
-PaddleOCR (and its C++ backend) writes directly to OS file descriptors 1/2,
-bypassing Python's sys.stdout/sys.stderr.  We suppress those at the OS level
-(dup2 to /dev/null) during init and inference so the terminal stays clean.
-Meaningful diagnostics are emitted via the Python logger instead.
+During the one-time model initialisation PaddleOCR emits model-loading messages
+via Python print() calls and C++ writes to raw file descriptors 1/2.
+`_redirect_paddle_output()` captures all of these and appends them to system.log.
 """
 from __future__ import annotations
 
 import asyncio
 import io
 import logging
+import logging.handlers
 import os
 import sys
 from abc import ABC, abstractmethod
@@ -26,34 +26,71 @@ ENGINE_VERSION = "paddleocr-3"
 
 
 @contextmanager
-def _suppress_c_stdio():
-    """Redirect OS-level file descriptors 1 (stdout) and 2 (stderr) to /dev/null.
+def _redirect_paddle_output():
+    """Capture PaddleOCR init output (Python print + C-level fds) → system.log.
 
-    PaddleOCR's C++ backend writes directly to the raw fds, not through
-    Python's sys.stdout/sys.stderr, so only an fd-level redirect works.
-    The context manager restores the original fds on exit.
-
-    On Windows with uvicorn --reload the worker's stdout is a pipe whose
-    handle cannot be dup'd (WinError 1).  We catch that and fall through
-    without suppressing rather than crashing PaddleOCR initialisation.
+    Strategy:
+    - Replace sys.stdout / sys.stderr so Python print() calls go to the log file.
+    - os.dup2 fd 1 and fd 2 so C++ glog writes also go to the log file.
+    - Python logging handlers are NOT affected: StreamHandler stores the original
+      terminal stderr object at creation time, not via sys.stderr lookup.
+    - On any OS error (e.g. unavailable log path) we fall through silently.
     """
+    # Locate system.log from the running logger configuration
+    log_path: str | None = None
+    for _h in logging.getLogger("system").handlers:
+        if isinstance(_h, logging.handlers.RotatingFileHandler):
+            log_path = _h.baseFilename
+            break
+
+    if log_path is None:
+        yield
+        return
+
+    # Flush Python buffers before touching fds
     try:
-        devnull_fd = os.open(os.devnull, os.O_WRONLY)
-        saved_stdout = os.dup(1)
-        saved_stderr = os.dup(2)
+        sys.stdout.flush()
+    except Exception:
+        pass
+    try:
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+    try:
+        _log_fh = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
     except OSError:
         yield
         return
+
+    _saved_fd1 = os.dup(1)
+    _saved_fd2 = os.dup(2)
+    _saved_stdout = sys.stdout
+    _saved_stderr = sys.stderr
     try:
-        os.dup2(devnull_fd, 1)
-        os.dup2(devnull_fd, 2)
+        # Redirect C-level fds first
+        os.dup2(_log_fh.fileno(), 1)
+        os.dup2(_log_fh.fileno(), 2)
+        # Redirect Python-level streams (captures print() and warnings.warn())
+        sys.stdout = _log_fh
+        sys.stderr = _log_fh
         yield
     finally:
-        os.dup2(saved_stdout, 1)
-        os.dup2(saved_stderr, 2)
-        os.close(saved_stdout)
-        os.close(saved_stderr)
-        os.close(devnull_fd)
+        try:
+            _log_fh.flush()
+        except Exception:
+            pass
+        # Restore Python streams before restoring fds
+        sys.stdout = _saved_stdout
+        sys.stderr = _saved_stderr
+        os.dup2(_saved_fd1, 1)
+        os.dup2(_saved_fd2, 2)
+        os.close(_saved_fd1)
+        os.close(_saved_fd2)
+        try:
+            _log_fh.close()
+        except Exception:
+            pass
 
 
 def _bytes_to_numpy(image_bytes: bytes):
@@ -115,7 +152,7 @@ class PaddleOcrEngine(OcrEngine):
                 from paddleocr import PaddleOCR  # type: ignore[import]
 
                 logger.info("PaddleOCR: initialising (lang=fr, version=PP-OCRv3)")
-                with _suppress_c_stdio():
+                with _redirect_paddle_output():
                     self._paddle = PaddleOCR(lang="fr", ocr_version="PP-OCRv3")
                 logger.info("PaddleOCR: initialised successfully")
             except ImportError:
@@ -131,8 +168,7 @@ class PaddleOcrEngine(OcrEngine):
         try:
             img_array = _bytes_to_numpy(image_bytes)
             logger.debug("PaddleOCR: running predict on image shape=%s", img_array.shape)
-            with _suppress_c_stdio():
-                results = paddle.predict(img_array)
+            results = paddle.predict(img_array)
         except Exception as exc:
             logger.error("PaddleOCR execution error: %s", exc)
             return RawOcrResult(lines=[], full_text="")

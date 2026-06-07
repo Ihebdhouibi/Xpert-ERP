@@ -13,6 +13,7 @@ from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.invoice import service
 from app.modules.invoice.models import InvoiceStatus
 from app.modules.invoice.schemas import (
+    ConvertQuotationRequest,
     InvoiceCreateRequest,
     InvoiceLineCreateRequest,
     InvoiceLineUpdateRequest,
@@ -27,6 +28,7 @@ from app.modules.invoice.service import (
     InvoiceVersionError,
     QuotationAlreadyConvertedError,
 )
+from app.modules.customer.credit_service import CreditLimitExceededError
 from app.core.logging import get_logger
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
@@ -91,6 +93,68 @@ async def create_invoice(
 
 
 # ---------------------------------------------------------------------------
+# Create invoice directly from a repair order
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/from-repair-order/{ro_public_id}",
+    response_model=InvoiceOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("invoice.create")],
+    summary="Create a draft invoice pre-linked to a repair order",
+)
+async def create_invoice_from_repair_order(
+    user: AuthUser,
+    ro_public_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> InvoiceOut:
+    from app.modules.repair_order.repository import RepairOrderRepository
+    ro = await RepairOrderRepository.get_by_public_id(
+        db, garage_id=user.garage_id, public_id=ro_public_id, load_relationships=True
+    )
+    if not ro:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+
+    from decimal import Decimal
+    from app.modules.invoice.models import InvoiceLineKind
+
+    lines: list[InvoiceLineCreateRequest] = []
+
+    # Labor lines → kind=labor, quantity=1, unit_price=amount_minor
+    for ll in ro.labor_lines:
+        lines.append(InvoiceLineCreateRequest(
+            kind=InvoiceLineKind.labor,
+            description=ll.labor_type,
+            quantity=Decimal("1.000"),
+            unit_price_minor=ll.amount_minor,
+            discount_percent=Decimal("0"),
+            vat_rate=Decimal("0"),
+        ))
+
+    # Part lines → kind=part, quantity=qty, unit_price=unit_cost_minor
+    for pl in ro.part_lines:
+        lines.append(InvoiceLineCreateRequest(
+            kind=InvoiceLineKind.part,
+            description=pl.part_name,
+            quantity=Decimal(str(pl.quantity)),
+            unit_price_minor=pl.unit_cost_minor,
+            discount_percent=Decimal("0"),
+            vat_rate=Decimal("0"),
+        ))
+
+    request = InvoiceCreateRequest(
+        customer_id=ro.customer_id,
+        vehicle_id=ro.vehicle_id,
+        repair_order_id=ro.id,
+        notes=ro.notes,
+        lines=lines,
+    )
+    return await service.create_invoice(
+        db, request=request, garage_id=user.garage_id, user_id=user.user_id
+    )
+
+
+# ---------------------------------------------------------------------------
 # Convert quotation → invoice  (lives under /invoices for clarity)
 # ---------------------------------------------------------------------------
 
@@ -104,12 +168,12 @@ async def create_invoice(
 async def convert_quotation(
     user: AuthUser,
     quotation_id: int,
-    due_at: Optional[datetime] = Body(None),
+    body: ConvertQuotationRequest = Body(default_factory=ConvertQuotationRequest),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     try:
         return await service.convert_quotation(
-            db, quotation_id, user.garage_id, due_at=due_at, user_id=user.user_id
+            db, quotation_id, user.garage_id, due_at=body.due_at, user_id=user.user_id
         )
     except Exception as exc:
         # Import lazily to avoid circular import at module load
@@ -135,11 +199,11 @@ async def convert_quotation(
 )
 async def get_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     try:
-        return await service.get_invoice(db, invoice_id, user.garage_id)
+        return await service.get_invoice_by_public_id(db, invoice_id, user.garage_id)
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
 
@@ -152,15 +216,16 @@ async def get_invoice(
 )
 async def update_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     request: InvoiceUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.update_invoice(
-            db, invoice_id, user.garage_id,
+            db, inv.id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -180,11 +245,12 @@ async def update_invoice(
 )
 async def delete_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
-        await service.delete_invoice(db, invoice_id, user.garage_id, user_id=user.user_id)
+        inv = await service._resolve(db, invoice_id, user.garage_id)
+        await service.delete_invoice(db, inv.id, user.garage_id, user_id=user.user_id)
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except InvoiceStateError as e:
@@ -204,15 +270,16 @@ async def delete_invoice(
 )
 async def add_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     request: InvoiceLineCreateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.add_line(
-            db, invoice_id, user.garage_id,
+            db, inv.id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -229,7 +296,7 @@ async def add_line(
 )
 async def update_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     line_id: int,
     request: InvoiceLineUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
@@ -237,8 +304,9 @@ async def update_line(
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.update_line(
-            db, invoice_id, line_id, user.garage_id,
+            db, inv.id, line_id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -257,15 +325,16 @@ async def update_line(
 )
 async def remove_line(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     line_id: int,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.remove_line(
-            db, invoice_id, line_id, user.garage_id,
+            db, inv.id, line_id, user.garage_id,
             expected_version=version, user_id=user.user_id,
         )
     except InvoiceNotFoundError:
@@ -288,19 +357,25 @@ async def remove_line(
 )
 async def issue_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.issue_invoice(
-            db, invoice_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, inv.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except (InvoiceStateError, InvoiceVersionError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except CreditLimitExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Limite de crédit dépassée pour ce client. Solde actuel : {e.outstanding // 100} €, montant de la facture : {e.additional // 100} €, limite : {e.limit // 100} €.",
+        )
 
 
 @router.post(
@@ -311,14 +386,15 @@ async def issue_invoice(
 )
 async def cancel_invoice(
     user: AuthUser,
-    invoice_id: int,
+    invoice_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
     version = _parse_if_match(if_match)
     try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
         return await service.cancel_invoice(
-            db, invoice_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, inv.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except InvoiceNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)

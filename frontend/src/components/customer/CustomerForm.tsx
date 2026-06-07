@@ -51,17 +51,10 @@ export const customerFormSchema = z
     address_country: optionalString,
     segment: optionalString,
     status: z.enum(['active', 'inactive', 'blocked']).optional(),
-    credit_limit_minor: z
+    credit_limit_eur: z
       .union([z.number(), z.string()])
       .transform((v) => (v === '' || v === undefined ? 0 : Number(v)))
-      .refine((v) => Number.isInteger(v) && v >= 0, 'Doit être un entier positif'),
-    credit_currency: z
-      .string()
-      .trim()
-      .regex(/^[A-Z]{3}$/, '3 lettres majuscules (ISO 4217)')
-      .or(z.literal(''))
-      .transform((s) => (s === '' ? null : s))
-      .nullable(),
+      .refine((v) => Number.isFinite(v) && v >= 0, 'Doit être un nombre positif'),
     notes: optionalString,
   })
   .refine(
@@ -69,13 +62,6 @@ export const customerFormSchema = z
     {
       message: 'Le nom de société est requis pour un client société',
       path: ['company_name'],
-    },
-  )
-  .refine(
-    (data) => data.credit_limit_minor === 0 || !!data.credit_currency,
-    {
-      message: 'Devise requise dès qu’une limite de crédit est définie',
-      path: ['credit_currency'],
     },
   )
 
@@ -104,8 +90,7 @@ const defaults = (initial?: CustomerDetail): CustomerFormValues => ({
   address_country: initial?.address?.country ?? null,
   segment: initial?.segment ?? null,
   status: (initial?.status ?? 'active') as CustomerStatus,
-  credit_limit_minor: initial?.credit_limit_minor ?? 0,
-  credit_currency: initial?.credit_currency ?? null,
+  credit_limit_eur: initial?.credit_limit_minor ? initial.credit_limit_minor / 100 : 0,
   notes: initial?.notes ?? null,
 })
 
@@ -153,8 +138,8 @@ export function CustomerForm({
       address,
       segment: values.segment,
       status: mode === 'edit' ? values.status : undefined,
-      credit_limit_minor: values.credit_limit_minor,
-      credit_currency: values.credit_currency,
+      credit_limit_minor: Math.round(values.credit_limit_eur * 100),
+      credit_currency: 'EUR',
       notes: values.notes,
     })
   })
@@ -271,23 +256,13 @@ export function CustomerForm({
         </Grid>
         <Grid item xs={6} sm={4}>
           <TextField
-            label="Limite (centimes)"
+            label="Limite de crédit (€)"
             type="number"
             fullWidth
             inputProps={{ min: 0, step: 1 }}
-            {...register('credit_limit_minor', { valueAsNumber: true })}
-            error={!!errors.credit_limit_minor}
-            helperText={errors.credit_limit_minor?.message}
-          />
-        </Grid>
-        <Grid item xs={6} sm={4}>
-          <TextField
-            label="Devise"
-            fullWidth
-            placeholder="MAD"
-            {...register('credit_currency')}
-            error={!!errors.credit_currency}
-            helperText={errors.credit_currency?.message}
+            {...register('credit_limit_eur', { valueAsNumber: true })}
+            error={!!errors.credit_limit_eur}
+            helperText={errors.credit_limit_eur?.message}
           />
         </Grid>
 

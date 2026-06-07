@@ -86,6 +86,33 @@ async def create_quotation(
     )
 
 
+@router.post(
+    "/from-repair-order/{ro_public_id}",
+    response_model=QuotationOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("quotation.create")],
+    summary="Create a draft quotation pre-linked to a repair order",
+)
+async def create_quotation_from_repair_order(
+    user: AuthUser,
+    ro_public_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> QuotationOut:
+    from app.modules.repair_order.repository import RepairOrderRepository
+    ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
+    if not ro:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+    request = QuotationCreateRequest(
+        customer_id=ro.customer_id,
+        vehicle_id=ro.vehicle_id,
+        repair_order_id=ro.id,
+        notes=ro.notes,
+    )
+    return await service.create_quotation(
+        db, request=request, garage_id=user.garage_id, user_id=user.user_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # Single quotation
 # ---------------------------------------------------------------------------
@@ -98,11 +125,11 @@ async def create_quotation(
 )
 async def get_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     try:
-        return await service.get_quotation(db, quotation_id, user.garage_id)
+        return await service.get_quotation_by_public_id(db, quotation_id, user.garage_id)
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
 
@@ -115,15 +142,16 @@ async def get_quotation(
 )
 async def update_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     request: QuotationUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.update_quotation(
-            db, quotation_id, user.garage_id, request=request, expected_version=version, user_id=user.user_id
+            db, q.id, user.garage_id, request=request, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -142,11 +170,12 @@ async def update_quotation(
 )
 async def delete_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     try:
-        await service.delete_quotation(db, quotation_id, user.garage_id, user_id=user.user_id)
+        q = await service._resolve(db, quotation_id, user.garage_id)
+        await service.delete_quotation(db, q.id, user.garage_id, user_id=user.user_id)
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except QuotationStateError as e:
@@ -166,15 +195,16 @@ async def delete_quotation(
 )
 async def add_line(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     request: QuotationLineCreateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.add_line(
-            db, quotation_id, user.garage_id, request=request, expected_version=version, user_id=user.user_id
+            db, q.id, user.garage_id, request=request, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -190,7 +220,7 @@ async def add_line(
 )
 async def update_line(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     line_id: int,
     request: QuotationLineUpdateRequest,
     if_match: Optional[str] = Header(None, alias="If-Match"),
@@ -198,8 +228,9 @@ async def update_line(
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.update_line(
-            db, quotation_id, line_id, user.garage_id,
+            db, q.id, line_id, user.garage_id,
             request=request, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
@@ -218,15 +249,16 @@ async def update_line(
 )
 async def remove_line(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     line_id: int,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.remove_line(
-            db, quotation_id, line_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, q.id, line_id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -248,14 +280,15 @@ async def remove_line(
 )
 async def send_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.send_quotation(
-            db, quotation_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, q.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -271,14 +304,15 @@ async def send_quotation(
 )
 async def approve_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.approve_quotation(
-            db, quotation_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, q.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
@@ -294,14 +328,15 @@ async def approve_quotation(
 )
 async def reject_quotation(
     user: AuthUser,
-    quotation_id: int,
+    quotation_id: str,
     if_match: Optional[str] = Header(None, alias="If-Match"),
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     version = _parse_if_match(if_match)
     try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
         return await service.reject_quotation(
-            db, quotation_id, user.garage_id, expected_version=version, user_id=user.user_id
+            db, q.id, user.garage_id, expected_version=version, user_id=user.user_id
         )
     except QuotationNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)

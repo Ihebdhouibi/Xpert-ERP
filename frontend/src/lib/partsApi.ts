@@ -14,6 +14,7 @@ export interface PartCategory {
 
 export interface PartSummary {
   id: string
+  int_id: number
   sku_code: string
   name: string
   description: string | null
@@ -25,6 +26,7 @@ export interface PartSummary {
   reorder_threshold: number | null
   reorder_quantity: number | null
   status: PartStatus
+  stock_on_hand: number
   version: number
   created_at: string
   updated_at: string

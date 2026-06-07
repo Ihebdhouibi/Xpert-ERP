@@ -5,6 +5,9 @@ export type LowStockAlertStatus = 'open' | 'acknowledged' | 'resolved'
 
 export interface StockLevel {
   part_id: number
+  part_public_id: string | null
+  part_name: string | null
+  sku_code: string | null
   garage_id: number
   on_hand: number
   reserved: number

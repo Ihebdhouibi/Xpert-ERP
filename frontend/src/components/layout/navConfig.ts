@@ -96,6 +96,12 @@ export const navSections: NavSection[] = [
         permission: 'quotation.read',
       },
       {
+        label: 'Bons de livraison',
+        path: '/delivery-notes',
+        icon: LocalShippingRoundedIcon,
+        permission: 'invoice.read',
+      },
+      {
         label: 'Factures',
         path: '/invoices',
         icon: ReceiptRoundedIcon,

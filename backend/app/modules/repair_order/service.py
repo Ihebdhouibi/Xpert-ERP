@@ -252,7 +252,7 @@ class RepairOrderService:
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
 
-        amount_minor = duration_minutes * rate_minor
+        amount_minor = rate_minor
         await RepairOrderRepository.add_labor_line(
             db, ro.id, labor_type, duration_minutes, rate_minor, amount_minor, user_id
         )

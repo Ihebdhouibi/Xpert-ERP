@@ -21,7 +21,7 @@ logger = get_logger("payment.router")
     "",
     response_model=PaymentOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[require_permission("invoice.pay")],
+    dependencies=[require_permission("payment.record")],
 )
 async def record_payment(
     request: PaymentCreateRequest,
