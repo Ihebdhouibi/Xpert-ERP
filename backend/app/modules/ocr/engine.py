@@ -32,10 +32,18 @@ def _suppress_c_stdio():
     PaddleOCR's C++ backend writes directly to the raw fds, not through
     Python's sys.stdout/sys.stderr, so only an fd-level redirect works.
     The context manager restores the original fds on exit.
+
+    On Windows with uvicorn --reload the worker's stdout is a pipe whose
+    handle cannot be dup'd (WinError 1).  We catch that and fall through
+    without suppressing rather than crashing PaddleOCR initialisation.
     """
-    devnull_fd = os.open(os.devnull, os.O_WRONLY)
-    saved_stdout = os.dup(1)
-    saved_stderr = os.dup(2)
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        saved_stdout = os.dup(1)
+        saved_stderr = os.dup(2)
+    except OSError:
+        yield
+        return
     try:
         os.dup2(devnull_fd, 1)
         os.dup2(devnull_fd, 2)
