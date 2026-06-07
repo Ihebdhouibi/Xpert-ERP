@@ -373,6 +373,8 @@ async def ingest_extraction(
             notes="Importé depuis l'OCR",
             created_by=reviewer_id,
         )
+        # get_db does not auto-commit; persist the new invoice explicitly.
+        await db.commit()
         return IngestionResult(
             target="supplier_invoice",
             prefill=prefill,
