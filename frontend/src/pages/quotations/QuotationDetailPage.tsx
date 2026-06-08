@@ -336,7 +336,7 @@ export function QuotationDetailPage() {
 
   const customerLabel = customer
     ? customer.company_name ? `${customer.full_name} — ${customer.company_name}` : customer.full_name
-    : `Client #${quotation.customer_id}`
+    : quotation.customer_name ?? 'Sans client'
 
   const vehicleLabel = vehicle
     ? [vehicle.registration, `${vehicle.make} ${vehicle.model}`, vehicle.year].filter(Boolean).join(' — ')

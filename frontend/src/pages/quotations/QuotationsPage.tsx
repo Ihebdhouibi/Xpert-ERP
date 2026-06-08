@@ -5,15 +5,12 @@ import {
   Box,
   Button,
   Chip,
-  InputAdornment,
   Stack,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import {
   quotationApi,
@@ -69,7 +66,7 @@ const columns: Column<QuotationOut>[] = [
     label: 'Client',
     render: row => (
       <Typography variant="body2" fontWeight={500}>
-        Client #{row.customer_id}
+        {row.customer_name ?? 'Sans client'}
       </Typography>
     ),
   },

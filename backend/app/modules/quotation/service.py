@@ -25,8 +25,24 @@ from app.modules.quotation.schemas import (
     QuotationListResponse,
 )
 from app.modules.sequence import service as seq_service
+from app.modules.customer import repository as customer_repo
 
 logger = get_logger("quotation.service")
+
+
+async def _to_out(db: AsyncSession, quotation: Quotation) -> QuotationOut:
+    """Build QuotationOut, enriching with the customer display name."""
+    out = QuotationOut.model_validate(quotation)
+    if quotation.customer_id is None:
+        return out
+    customer = await customer_repo.get_by_id(db, quotation.garage_id, quotation.customer_id)
+    if customer:
+        out.customer_name = (
+            f"{customer.full_name} ({customer.company_name})"
+            if customer.company_name
+            else customer.full_name
+        )
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -143,14 +159,14 @@ async def get_quotation(db: AsyncSession, quotation_id: int, garage_id: int) -> 
     quotation = await repo.get_by_id(db, quotation_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(quotation_id)
-    return QuotationOut.model_validate(quotation)
+    return await _to_out(db, quotation)
 
 
 async def get_quotation_by_public_id(db: AsyncSession, public_id: str, garage_id: int) -> QuotationOut:
     quotation = await repo.get_by_public_id(db, public_id, garage_id)
     if not quotation:
         raise QuotationNotFoundError(public_id)
-    return QuotationOut.model_validate(quotation)
+    return await _to_out(db, quotation)
 
 
 async def _resolve(db: AsyncSession, public_id: str, garage_id: int) -> Quotation:
@@ -174,7 +190,7 @@ async def list_quotations(
         db, garage_id, customer_id=customer_id, status=status, page=page, page_size=page_size
     )
     return QuotationListResponse(
-        items=[QuotationOut.model_validate(q) for q in items],
+        items=[await _to_out(db, q) for q in items],
         total=total,
         page=page,
         page_size=page_size,

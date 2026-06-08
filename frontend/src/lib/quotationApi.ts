@@ -37,6 +37,7 @@ export interface QuotationOut {
   public_id: string
   garage_id: number
   customer_id: number
+  customer_name?: string | null
   vehicle_id: number | null
   repair_order_id: number | null
   doc_number: string | null
