@@ -146,6 +146,18 @@ async def list_advances(
     customer_id: int,
     garage_id: int,
 ) -> AdvancePaymentListResponse:
+    from app.modules.customer import repository as customer_repo
+
     advances = await repo.list_by_customer(db, customer_id, garage_id)
     items = [AdvancePaymentOut.model_validate(a) for a in advances]
+    # All advances belong to the same customer — resolve the display name once.
+    customer = await customer_repo.get_by_id(db, garage_id, customer_id)
+    if customer:
+        name = (
+            f"{customer.full_name} ({customer.company_name})"
+            if customer.company_name
+            else customer.full_name
+        )
+        for it in items:
+            it.customer_name = name
     return AdvancePaymentListResponse(items=items, total=len(items))

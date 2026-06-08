@@ -5,6 +5,7 @@ export interface AdvancePaymentOut {
   id: number
   garage_id: number
   customer_id: number
+  customer_name?: string | null
   repair_order_id: number | null
   amount_minor: number
   payment_method: PaymentMethod

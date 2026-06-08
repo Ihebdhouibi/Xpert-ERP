@@ -25,6 +25,7 @@ class AdvancePaymentOut(BaseModel):
     id: int
     garage_id: int
     customer_id: int
+    customer_name: Optional[str] = None
     repair_order_id: Optional[int]
     amount_minor: int
     payment_method: PaymentMethod

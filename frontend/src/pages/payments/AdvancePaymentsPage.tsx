@@ -62,7 +62,7 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
             </Box>
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>
-                Client #{ap.customer_id}
+                {ap.customer_name ?? `Client #${ap.customer_id}`}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {new Date(ap.paid_at).toLocaleDateString('fr-FR')} · {PAYMENT_METHOD_LABELS[ap.payment_method]}
