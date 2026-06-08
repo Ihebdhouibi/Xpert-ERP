@@ -103,29 +103,35 @@ const buildColumns = (
   {
     id: 'customer',
     label: 'Client',
-    render: row => (
-      <Stack direction="row" spacing={1} alignItems="center">
-        {row.customer_name ? (
-          <Typography variant="body2" fontWeight={500}>
-            {row.customer_name}
-          </Typography>
-        ) : row.status === 'draft' ? (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={(e) => {
-              e.stopPropagation()
-              onAssign(row)
-            }}
-          >
-            Assigner un client
-          </Button>
-        ) : (
-          <Typography variant="body2" color="text.disabled">
-            Sans client
-          </Typography>
-        )}
-        {row.status === 'draft' && (
+    render: row =>
+      row.customer_name ? (
+        <Typography variant="body2" fontWeight={500}>
+          {row.customer_name}
+        </Typography>
+      ) : (
+        <Typography variant="body2" color="text.disabled">
+          Sans client
+        </Typography>
+      ),
+  },
+  {
+    id: 'actions',
+    label: '',
+    render: row =>
+      row.status === 'draft' ? (
+        <Stack direction="row" spacing={1} alignItems="center">
+          {!row.customer_name && (
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={(e) => {
+                e.stopPropagation()
+                onAssign(row)
+              }}
+            >
+              Assigner un client
+            </Button>
+          )}
           <Tooltip title="Supprimer la facture">
             <IconButton
               size="small"
@@ -138,9 +144,8 @@ const buildColumns = (
               <DeleteRoundedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        )}
-      </Stack>
-    ),
+        </Stack>
+      ) : null,
   },
   {
     id: 'total',
