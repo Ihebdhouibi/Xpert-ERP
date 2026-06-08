@@ -1349,14 +1349,16 @@ export function RepairOrderDetailPage() {
               </Card>
             </PermissionGate>
 
-            {/* Mechanic assignment */}
-            <PermissionGate permission="repair_order.transition">
-              <Card>
-                <CardContent sx={{ p: 2.5 }}>
-                  <MechanicPanel ro={ro} onUpdated={() => refetch()} />
-                </CardContent>
-              </Card>
-            </PermissionGate>
+            {/* Mechanic assignment — only during the diagnosis step */}
+            {ro.status === 'diagnosis' && (
+              <PermissionGate permission="repair_order.transition">
+                <Card>
+                  <CardContent sx={{ p: 2.5 }}>
+                    <MechanicPanel ro={ro} onUpdated={() => refetch()} />
+                  </CardContent>
+                </Card>
+              </PermissionGate>
+            )}
 
             {/* Create Devis (diagnosis only) */}
             {ro.status === 'diagnosis' && (
