@@ -8,9 +8,15 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
+  CircularProgress,
   Divider,
+  FormControl,
   Grid,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -40,6 +46,7 @@ import {
   type RepairOrderDetail,
   type Comment,
   type ROPhotoSummary,
+  type MechanicSummary,
 } from '../../lib/repairOrderApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
@@ -226,6 +233,107 @@ function StatusTransitionPanel({
           )
         })}
       </Stack>
+    </Box>
+  )
+}
+
+// ─── Mechanic assignment ─────────────────────────────────────────────────────
+
+function MechanicPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: () => void }) {
+  const { success, error: toastError } = useToast()
+  const [selected, setSelected] = useState<number | ''>(ro.assigned_user_id ?? '')
+
+  const { data: mechanics } = useQuery<MechanicSummary[]>({
+    queryKey: ['mechanics'],
+    queryFn: () => repairOrderApi.listMechanics(),
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: () =>
+      repairOrderApi.assignMechanic(ro.id, selected === '' ? null : Number(selected)),
+    onSuccess: () => {
+      success('Mécanicien assigné. Notification envoyée.')
+      onUpdated()
+    },
+    onError: () => toastError("Impossible d'assigner le mécanicien."),
+  })
+
+  const acceptMutation = useMutation({
+    mutationFn: () => repairOrderApi.acceptAssignment(ro.id),
+    onSuccess: () => {
+      success('Affectation acceptée.')
+      onUpdated()
+    },
+    onError: () => toastError("Impossible d'accepter l'affectation."),
+  })
+
+  const changed = (selected === '' ? null : Number(selected)) !== ro.assigned_user_id
+
+  return (
+    <Box>
+      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
+        Mécanicien
+      </Typography>
+
+      <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+        <InputLabel>Affecter à</InputLabel>
+        <Select
+          label="Affecter à"
+          value={selected}
+          onChange={(e) => setSelected(e.target.value === '' ? '' : Number(e.target.value))}
+        >
+          <MenuItem value="">
+            <em>Non affecté</em>
+          </MenuItem>
+          {(mechanics ?? []).map((m) => (
+            <MenuItem key={m.id} value={m.id}>
+              {m.name}
+              {m.active_orders > 0
+                ? ` · ${m.active_orders} OR en cours`
+                : ' · disponible'}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {changed && (
+        <Button
+          variant="contained"
+          size="small"
+          fullWidth
+          disabled={assignMutation.isPending}
+          onClick={() => assignMutation.mutate()}
+          sx={{ textTransform: 'none', fontWeight: 700, mb: 1 }}
+        >
+          {assignMutation.isPending ? <CircularProgress size={18} /> : 'Assigner'}
+        </Button>
+      )}
+
+      {ro.assigned_user_id && (
+        <Box sx={{ mt: 0.5 }}>
+          {ro.assignment_accepted_at ? (
+            <Chip
+              size="small"
+              color="success"
+              label={`Accepté le ${new Date(ro.assignment_accepted_at).toLocaleString('fr-FR')}`}
+            />
+          ) : (
+            <Stack spacing={1}>
+              <Chip size="small" color="warning" label="En attente d'acceptation" />
+              <Button
+                variant="outlined"
+                size="small"
+                fullWidth
+                disabled={acceptMutation.isPending || changed}
+                onClick={() => acceptMutation.mutate()}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                Accepter l'affectation
+              </Button>
+            </Stack>
+          )}
+        </Box>
+      )}
     </Box>
   )
 }
@@ -1085,6 +1193,15 @@ export function RepairOrderDetailPage() {
               <Card>
                 <CardContent sx={{ p: 2.5 }}>
                   <StatusTransitionPanel ro={ro} onTransitioned={() => refetch()} />
+                </CardContent>
+              </Card>
+            </PermissionGate>
+
+            {/* Mechanic assignment */}
+            <PermissionGate permission="repair_order.transition">
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <MechanicPanel ro={ro} onUpdated={() => refetch()} />
                 </CardContent>
               </Card>
             </PermissionGate>

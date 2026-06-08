@@ -100,6 +100,10 @@ class RepairOrder(Base):
     assigned_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
     )
+    # Set when the assigned mechanic (or a secretary on their behalf) accepts the job.
+    assignment_accepted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     labor_lines: Mapped[list[ROLaborLine]] = relationship(

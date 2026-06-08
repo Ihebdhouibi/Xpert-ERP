@@ -145,6 +145,13 @@ class RepairOrderSummary(BaseModel):
         return data
 
 
+class MechanicSummary(BaseModel):
+    """An assignable mechanic with their current workload."""
+    id: int
+    name: str
+    active_orders: int  # repair orders currently assigned & not finished/delivered
+
+
 class RepairOrderDetail(BaseModel):
     """Repair order full detail with line items and status history."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -160,6 +167,8 @@ class RepairOrderDetail(BaseModel):
     estimated_cost_currency: Optional[str]
     actual_cost_minor: int
     assigned_user_id: Optional[int]
+    assigned_user_name: Optional[str] = None
+    assignment_accepted_at: Optional[datetime] = None
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -185,6 +194,7 @@ class RepairOrderDetail(BaseModel):
                 "estimated_cost_currency": data.estimated_cost_currency,
                 "actual_cost_minor": data.actual_cost_minor,
                 "assigned_user_id": data.assigned_user_id,
+                "assignment_accepted_at": data.assignment_accepted_at,
                 "notes": data.notes,
                 "created_at": data.created_at,
                 "updated_at": data.updated_at,

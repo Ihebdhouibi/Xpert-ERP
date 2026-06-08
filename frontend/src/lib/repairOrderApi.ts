@@ -54,9 +54,17 @@ export interface RepairOrderDetail extends RepairOrderSummary {
   updated_at: string
   version: number
   assigned_user_id: number | null
+  assigned_user_name: string | null
+  assignment_accepted_at: string | null
   labor_lines: ROLaborLine[]
   part_lines: ROPartLine[]
   status_events: ROStatusEvent[]
+}
+
+export interface MechanicSummary {
+  id: number
+  name: string
+  active_orders: number
 }
 
 export interface RepairOrderListResponse {
@@ -278,6 +286,16 @@ export const repairOrderApi = {
   assignMechanic(publicId: string, userId: number | null): Promise<RepairOrderDetail> {
     return apiClient
       .put(`/repair-orders/${publicId}/assign`, { user_id: userId })
+      .then((r) => r.data)
+  },
+
+  listMechanics(): Promise<MechanicSummary[]> {
+    return apiClient.get('/repair-orders/mechanics').then((r) => r.data)
+  },
+
+  acceptAssignment(publicId: string): Promise<RepairOrderDetail> {
+    return apiClient
+      .post(`/repair-orders/${publicId}/accept-assignment`)
       .then((r) => r.data)
   },
 

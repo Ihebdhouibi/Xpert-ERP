@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,6 +13,7 @@ from app.modules.repair_order.models import ROStatus
 from app.modules.repair_order.repository import RepairOrderRepository
 from app.modules.repair_order.schemas import (
     AssignMechanicRequest,
+    MechanicSummary,
     RepairOrderCreateRequest,
     RepairOrderDetail,
     RepairOrderSummary,
@@ -52,6 +53,14 @@ async def _customer_name(db: AsyncSession, garage_id: int, customer_id: Optional
     )
 
 
+async def _user_name(db: AsyncSession, user_id: Optional[int]) -> Optional[str]:
+    """Resolve an app_user id to a display name."""
+    if user_id is None:
+        return None
+    row = await db.execute(select(AppUser.full_name).where(AppUser.id == user_id))
+    return row.scalar_one_or_none()
+
+
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:
     """Resolve JWT subject (public_id) → internal app_user.id for audit."""
     import uuid as _uuid
@@ -73,6 +82,7 @@ async def _get_detail(db: AsyncSession, garage_id: int, public_id: str, include_
         raise HTTPException(status_code=404, detail="Repair order not found")
     detail = RepairOrderDetail.model_validate(ro)
     detail.customer_name = await _customer_name(db, garage_id, ro.customer_id)
+    detail.assigned_user_name = await _user_name(db, ro.assigned_user_id)
     return detail
 
 
@@ -115,6 +125,56 @@ async def list_repair_orders(
         "page": page,
         "page_size": page_size,
     }
+
+
+# NOTE: must be declared before "/{public_id}" so it isn't captured by it.
+@router.get(
+    "/mechanics",
+    response_model=list[MechanicSummary],
+    dependencies=[require_permission("repair_order.read")],
+)
+async def list_mechanics(
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> list[MechanicSummary]:
+    """List active mechanics with their current open workload (for assignment)."""
+    from app.modules.auth.models import Role, UserRole, UserStatus
+    from app.modules.repair_order.models import RepairOrder, ROStatus
+
+    rows = await db.execute(
+        select(AppUser.id, AppUser.full_name)
+        .join(UserRole, UserRole.user_id == AppUser.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(
+            AppUser.garage_id == user.garage_id,
+            AppUser.deleted_at.is_(None),
+            AppUser.status == UserStatus.active,
+            Role.code == "mechanic",
+        )
+        .order_by(AppUser.full_name)
+    )
+    mechanics = list(dict.fromkeys(rows.all()))  # de-dupe if multiple roles
+
+    open_statuses = [
+        ROStatus.created, ROStatus.diagnosis, ROStatus.in_repair,
+        ROStatus.paused_parts, ROStatus.paused_approval,
+    ]
+    result: list[MechanicSummary] = []
+    for uid, name in mechanics:
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(RepairOrder)
+                .where(
+                    RepairOrder.garage_id == user.garage_id,
+                    RepairOrder.assigned_user_id == uid,
+                    RepairOrder.deleted_at.is_(None),
+                    RepairOrder.status.in_(open_statuses),
+                )
+            )
+        ).scalar_one()
+        result.append(MechanicSummary(id=uid, name=name, active_orders=int(count)))
+    return result
 
 
 @router.get(
@@ -415,14 +475,74 @@ async def add_part_line(
 async def assign_mechanic(
     public_id: str,
     body: AssignMechanicRequest,
+    background_tasks: BackgroundTasks,
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> RepairOrderDetail:
-    """Assign (or unassign) a mechanic to a repair order."""
+    """Assign (or unassign) a mechanic and notify them (acceptance reset)."""
     ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
     if not ro:
         raise HTTPException(status_code=404, detail="Repair order not found")
     ro.assigned_user_id = body.user_id
+    # A new assignment must be (re)accepted by the mechanic or a secretary.
+    ro.assignment_accepted_at = None
+    await db.commit()
+
+    # Best-effort notification to the newly assigned mechanic.
+    if body.user_id is not None:
+        mech = (await db.execute(select(AppUser).where(AppUser.id == body.user_id))).scalar_one_or_none()
+        if mech and mech.email:
+            background_tasks.add_task(
+                _notify_assignment, user.garage_id, mech.id, mech.email, ro.public_id, ro.description
+            )
+    return await _get_detail(db, user.garage_id, public_id)
+
+
+async def _notify_assignment(
+    garage_id: int, mechanic_id: int, email: str, ro_public_id, description: str
+) -> None:
+    """Send an 'assigned to a repair order' notification (best-effort)."""
+    from app.core.database import AsyncSessionFactory
+    from app.modules.notification import service as notif_service
+
+    try:
+        async with AsyncSessionFactory() as db:
+            await notif_service.dispatch(
+                db,
+                garage_id=garage_id,
+                recipient_id=mechanic_id,
+                recipient=email,
+                channel="email",
+                template_code="repair_order_assigned",
+                context={
+                    "subject": "Nouvel ordre de réparation assigné",
+                    "ro_id": str(ro_public_id),
+                    "description": description,
+                },
+            )
+    except Exception as exc:  # notification must never break assignment
+        logger.warning("ro_assignment_notify_failed", error=str(exc))
+
+
+@router.post(
+    "/{public_id}/accept-assignment",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def accept_assignment(
+    public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Accept the assignment — by the assigned mechanic, or a secretary on their behalf."""
+    from datetime import datetime, timezone
+
+    ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    if ro.assigned_user_id is None:
+        raise HTTPException(status_code=409, detail="No mechanic assigned to accept")
+    ro.assignment_accepted_at = datetime.now(tz=timezone.utc)
     await db.commit()
     return await _get_detail(db, user.garage_id, public_id)
 
