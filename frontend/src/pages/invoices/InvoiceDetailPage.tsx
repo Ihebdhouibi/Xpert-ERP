@@ -153,7 +153,7 @@ export function InvoiceDetailPage() {
   const needsCustomer = invoice?.status === 'draft' && invoice?.customer_id == null
   const { data: customersData } = useQuery({
     queryKey: ['customers', 'for-invoice-assign'],
-    queryFn: () => customerApi.list({ page_size: 200 }),
+    queryFn: () => customerApi.list({ page_size: 100 }),
     enabled: !!needsCustomer,
   })
   const assignCustomerMutation = useMutation({

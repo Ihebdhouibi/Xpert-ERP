@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -21,11 +22,13 @@ import {
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
 import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -59,6 +62,7 @@ const STATUS_FILTERS: { value: InvoiceStatus | 'all'; label: string }[] = [
 
 const buildColumns = (
   onAssign: (inv: InvoiceOut) => void,
+  onDelete: (inv: InvoiceOut) => void,
 ): Column<InvoiceOut>[] => [
   {
     id: 'number',
@@ -99,27 +103,44 @@ const buildColumns = (
   {
     id: 'customer',
     label: 'Client',
-    render: row =>
-      row.customer_name ? (
-        <Typography variant="body2" fontWeight={500}>
-          {row.customer_name}
-        </Typography>
-      ) : row.status === 'draft' ? (
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={(e) => {
-            e.stopPropagation()
-            onAssign(row)
-          }}
-        >
-          Assigner un client
-        </Button>
-      ) : (
-        <Typography variant="body2" color="text.disabled">
-          Sans client
-        </Typography>
-      ),
+    render: row => (
+      <Stack direction="row" spacing={1} alignItems="center">
+        {row.customer_name ? (
+          <Typography variant="body2" fontWeight={500}>
+            {row.customer_name}
+          </Typography>
+        ) : row.status === 'draft' ? (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAssign(row)
+            }}
+          >
+            Assigner un client
+          </Button>
+        ) : (
+          <Typography variant="body2" color="text.disabled">
+            Sans client
+          </Typography>
+        )}
+        {row.status === 'draft' && (
+          <Tooltip title="Supprimer la facture">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(row)
+              }}
+            >
+              <DeleteRoundedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Stack>
+    ),
   },
   {
     id: 'total',
@@ -211,7 +232,7 @@ export function InvoicesPage() {
 
   const { data: customersData } = useQuery({
     queryKey: ['customers', 'for-invoice-assign'],
-    queryFn: () => customerApi.list({ page_size: 200 }),
+    queryFn: () => customerApi.list({ page_size: 100 }),
     enabled: assignTarget !== null,
   })
 
@@ -227,6 +248,20 @@ export function InvoicesPage() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
     onError: () => toastError("Impossible d'assigner le client."),
+  })
+
+  const [deleteTarget, setDeleteTarget] = useState<InvoiceOut | null>(null)
+  const deleteMutation = useMutation({
+    mutationFn: () => invoiceApi.remove(deleteTarget!.public_id),
+    onSuccess: () => {
+      success('Facture supprimée')
+      setDeleteTarget(null)
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: () => {
+      toastError('Impossible de supprimer la facture.')
+      setDeleteTarget(null)
+    },
   })
 
   return (
@@ -269,7 +304,7 @@ export function InvoicesPage() {
       </Stack>
 
       <DataTable
-        columns={buildColumns(setAssignTarget)}
+        columns={buildColumns(setAssignTarget, setDeleteTarget)}
         rows={data?.items ?? []}
         getRowKey={r => r.public_id}
         onRowClick={r => navigate(`/invoices/${r.public_id}`)}
@@ -327,6 +362,17 @@ export function InvoicesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Supprimer la facture"
+        message={`Supprimer la facture ${deleteTarget?.doc_number ?? 'brouillon'} ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        dangerous
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </Box>
   )
 }
