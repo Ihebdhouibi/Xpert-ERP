@@ -184,25 +184,28 @@ function DocumentPreview({
             sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
           />
           {layout &&
-            highlight.map((b, i) => (
-              <Box
-                key={i}
-                sx={{
-                  position: 'absolute',
-                  // Explicit px strings — numeric sx values for top/left get the
-                  // 8px spacing multiplier applied, which would throw boxes off-screen.
-                  left: `${b[0] * scale}px`,
-                  top: `${b[1] * scale}px`,
-                  width: `${(b[2] - b[0]) * scale}px`,
-                  height: `${(b[3] - b[1]) * scale}px`,
-                  border: '2px solid',
-                  borderColor: 'warning.main',
-                  bgcolor: 'rgba(255,193,7,0.25)',
-                  borderRadius: 0.5,
-                  pointerEvents: 'none',
-                }}
-              />
-            ))}
+            highlight.map((b, i) => {
+              const pad = 3 // px of breathing room around the recognised box
+              return (
+                <Box
+                  key={i}
+                  sx={{
+                    position: 'absolute',
+                    // Explicit px strings — numeric sx values for top/left get the
+                    // 8px spacing multiplier applied, which would throw boxes off-screen.
+                    left: `${b[0] * scale - pad}px`,
+                    top: `${b[1] * scale - pad}px`,
+                    width: `${(b[2] - b[0]) * scale + pad * 2}px`,
+                    height: `${(b[3] - b[1]) * scale + pad * 2}px`,
+                    border: '2px solid',
+                    borderColor: 'warning.main',
+                    bgcolor: 'rgba(255,193,7,0.25)',
+                    borderRadius: 0.5,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )
+            })}
         </Box>
       )}
       <Box sx={{ mt: 1, textAlign: 'right' }}>
@@ -296,15 +299,17 @@ export function OcrReviewPage() {
     return b ? [b] : []
   }
 
-  // Boxes for a field value: match it (normalised) against recognised lines
+  // Boxes for a field value: match it (normalised) against recognised lines.
+  // Only lines that CONTAIN the value count — never the reverse, otherwise short
+  // values (a single digit) would match every line that includes that digit.
   const boxesForValue = (value: string): number[][] => {
-    if (!layout || !value || value.length < 2) return []
+    if (!layout || !value) return []
     const nv = norm(value)
-    if (!nv) return []
+    if (nv.length < 3) return []
     const out: number[][] = []
     for (const [k, text] of rawLines) {
       const nt = norm(text as string)
-      if (nt && (nt.includes(nv) || nv.includes(nt)) && layout.boxes?.[k]) {
+      if (nt.includes(nv) && layout.boxes?.[k]) {
         out.push(layout.boxes[k])
       }
     }
