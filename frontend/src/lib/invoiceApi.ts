@@ -31,6 +31,7 @@ export interface InvoiceOut {
   customer_id: number
   customer_name: string | null
   vehicle_id: number | null
+  vehicle_label: string | null
   repair_order_id: number | null
   quotation_id: number | null
   doc_number: string | null

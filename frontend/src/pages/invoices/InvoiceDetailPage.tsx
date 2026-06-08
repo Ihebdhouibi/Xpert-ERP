@@ -313,22 +313,7 @@ export function InvoiceDetailPage() {
                         onClick={() => navigate(`/vehicles/${invoice.vehicle_id}`)}
                         sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.8125rem' }}
                       >
-                        Véhicule #{invoice.vehicle_id}
-                      </Button>
-                    } />
-                  </>
-                )}
-                {invoice.repair_order_id && (
-                  <>
-                    <Divider />
-                    <InfoRow label="Ordre de réparation" value={
-                      <Button
-                        size="small"
-                        variant="text"
-                        onClick={() => navigate(`/repair-orders/${invoice.repair_order_id}`)}
-                        sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.8125rem' }}
-                      >
-                        OT #{invoice.repair_order_id}
+                        {invoice.vehicle_label ?? `Véhicule #${invoice.vehicle_id}`}
                       </Button>
                     } />
                   </>

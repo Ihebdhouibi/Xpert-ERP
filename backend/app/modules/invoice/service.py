@@ -86,17 +86,29 @@ def _recalculate_totals(invoice: Invoice) -> None:
 
 
 async def _to_out(db: AsyncSession, invoice: Invoice) -> InvoiceOut:
-    """Build InvoiceOut, enriching with the customer display name."""
+    """Build InvoiceOut, enriching with the customer + vehicle display names."""
     out = InvoiceOut.model_validate(invoice)
-    if invoice.customer_id is None:
-        return out
-    customer = await customer_repo.get_by_id(db, invoice.garage_id, invoice.customer_id)
-    if customer:
-        out.customer_name = (
-            f"{customer.full_name} ({customer.company_name})"
-            if customer.company_name
-            else customer.full_name
+    if invoice.customer_id is not None:
+        customer = await customer_repo.get_by_id(db, invoice.garage_id, invoice.customer_id)
+        if customer:
+            out.customer_name = (
+                f"{customer.full_name} ({customer.company_name})"
+                if customer.company_name
+                else customer.full_name
+            )
+    if invoice.vehicle_id is not None:
+        from app.modules.vehicles import repository as vehicle_repo
+
+        vehicle = await vehicle_repo.get_by_id(
+            db, vehicle_id=invoice.vehicle_id, garage_id=invoice.garage_id
         )
+        if vehicle:
+            make_model = f"{vehicle.make} {vehicle.model}".strip()
+            out.vehicle_label = (
+                f"{vehicle.registration} — {make_model}"
+                if vehicle.registration
+                else make_model
+            )
     return out
 
 

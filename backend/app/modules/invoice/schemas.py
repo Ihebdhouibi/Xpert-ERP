@@ -83,6 +83,7 @@ class InvoiceOut(BaseModel):
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
+    vehicle_label: Optional[str] = None
     repair_order_id: Optional[int]
     quotation_id: Optional[int]
     doc_number: Optional[str]
