@@ -166,11 +166,6 @@ def extract_national_id(result: RawOcrResult) -> FieldMap:
 
 # A monetary amount in French format: 1 234,56 / 1.234,56 / 1234.56 / 99,00
 _RE_AMOUNT = re.compile(r"\b(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})\b")
-# Invoice number: "Facture N° INV-2024-001", "N° 2024/123", "FAC123"
-_RE_INVOICE_NO = re.compile(
-    r"(?:facture|invoice)\s+(?:n[°ºo.]*\s*)?[:#]?\s*([A-Z0-9][A-Z0-9\-/]{2,})",
-    re.IGNORECASE,
-)
 # Day/month may be single- or double-digit (e.g. 2.6.2021 or 02/06/2021)
 _RE_DATE_ANY = re.compile(r"\b(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})\b")
 # A line that looks like a description followed by qty / unit price / total
@@ -179,12 +174,6 @@ _RE_LINE_ITEM = re.compile(
     r"(?:\s+(?P<total>\d{1,3}(?:[ .]\d{3})*[.,]\d{2}))?\s*$"
 )
 
-# Deliberately stricter than a bare "Facture" title so the fallback doesn't grab
-# the document heading instead of the actual number.
-_KW_INVOICE_NO = re.compile(
-    r"num[ée]ro\s*(de)?\s*facture|n[°ºo]\s*facture|facture\s*n[°ºo]|invoice\s*(number|no)",
-    re.IGNORECASE,
-)
 _KW_DATE_FACTURE = re.compile(r"date\s*(de)?\s*facture|date\s*d.[ée]mission|invoice\s*date", re.IGNORECASE)
 _KW_DATE_ECHEANCE = re.compile(r"[ée]ch[ée]ance|date\s*limite|due\s*date|paiement\s*avant", re.IGNORECASE)
 _KW_TOTAL_HT = re.compile(r"total\s*h\.?t\.?|montant\s*h\.?t\.?|sous[- ]?total", re.IGNORECASE)
@@ -192,6 +181,41 @@ _KW_TOTAL_TTC = re.compile(r"total\s*t\.?t\.?c\.?|net\s*[àa]\s*payer|montant\s*
 _KW_TVA = re.compile(r"\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
 _KW_FOURNISSEUR = re.compile(r"fournisseur|[ée]metteur|vendeur|raison\s*sociale", re.IGNORECASE)
 _KW_CLIENT = re.compile(r"\bclient\b|destinataire|factur[ée]\s*[àa]|adress[ée]\s*[àa]", re.IGNORECASE)
+
+# Invoice-number heuristics — robust to table/collapsed layouts where the label
+# and value share a line (e.g. "facture en € n° : 10003567").
+_RE_NUM_TOKEN = re.compile(r"\b([A-Z0-9][A-Z0-9\-/]{2,})\b", re.IGNORECASE)
+_RE_IS_DATE = re.compile(r"\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}")
+_KW_INV_LINE = re.compile(r"facture|invoice", re.IGNORECASE)
+_KW_NUM_LINE = re.compile(r"num[ée]ro|n[°ºo]", re.IGNORECASE)
+# Lines whose numbers are NOT the invoice number (amounts, taxes, ids).
+_KW_EXCLUDE_NUM = re.compile(
+    r"total|tva|acompte|ttc|\bht\b|net\s*[àa]\s*payer|base|siret|iban", re.IGNORECASE
+)
+
+
+def _first_code_with_digit(text: str) -> Optional[str]:
+    """Return the first token that contains a digit and isn't a date."""
+    for m in _RE_NUM_TOKEN.finditer(text):
+        tok = m.group(1)
+        if not any(c.isdigit() for c in tok):
+            continue
+        if _RE_IS_DATE.fullmatch(tok):
+            continue
+        return tok.upper()
+    return None
+
+
+def _extract_invoice_number(lines) -> Optional[tuple[str, float]]:
+    """Find the invoice number: a code on a 'facture'/'n°' line (not an amount)."""
+    for keyword in (_KW_INV_LINE, _KW_NUM_LINE):
+        for line in lines:
+            text = line.text
+            if keyword.search(text) and not _KW_EXCLUDE_NUM.search(text):
+                tok = _first_code_with_digit(text)
+                if tok:
+                    return tok, line.confidence
+    return None
 
 
 def _amount_on_keyword_line(lines, keyword_re: re.Pattern) -> Optional[tuple[str, float]]:
@@ -253,22 +277,20 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
     fields: FieldMap = {}
     lines = result.lines
 
-    # Invoice number — inline regex first, then keyword-followed line
-    for line in lines:
-        m = _RE_INVOICE_NO.search(line.text)
-        if m:
-            fields["numero_facture"] = (m.group(1).upper(), line.confidence)
-            break
-    if "numero_facture" not in fields:
-        after_no = _best_line_after_keyword(lines, _KW_INVOICE_NO)
-        # Only trust the after-keyword candidate if it looks like a number — in
-        # column/table layouts the next OCR line is often an adjacent header.
-        if after_no and any(ch.isdigit() for ch in after_no[0]):
-            fields["numero_facture"] = after_no
+    # Invoice number
+    numero = _extract_invoice_number(lines)
+    if numero:
+        fields["numero_facture"] = numero
 
-    # Dates
+    # Dates — labelled first, then fall back to the first date in the document
     for line in lines:
         if _KW_DATE_FACTURE.search(line.text):
+            m = _RE_DATE_ANY.search(line.text)
+            if m:
+                fields["date_facture"] = (m.group(1), line.confidence)
+                break
+    if "date_facture" not in fields:
+        for line in lines:
             m = _RE_DATE_ANY.search(line.text)
             if m:
                 fields["date_facture"] = (m.group(1), line.confidence)
