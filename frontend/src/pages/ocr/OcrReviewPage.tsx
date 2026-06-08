@@ -32,6 +32,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
 import { documentsApi } from '../../lib/documentsApi'
@@ -127,18 +128,31 @@ interface Layout {
 // ---------------------------------------------------------------------------
 // Document preview (image with highlight overlay, or PDF iframe)
 // ---------------------------------------------------------------------------
+interface DrawRect {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
 function DocumentPreview({
   url,
   layout,
   highlight,
+  drawMode,
+  onRegionDrawn,
 }: {
   url: string | null
   layout: Layout | null
   highlight: number[][]
+  drawMode: boolean
+  onRegionDrawn: (rect: DrawRect) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [renderW, setRenderW] = useState(0)
   const [imgError, setImgError] = useState(false)
+  const startRef = useRef<{ x: number; y: number } | null>(null)
+  const [draw, setDraw] = useState<DrawRect | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -161,6 +175,38 @@ function DocumentPreview({
   const isPdf = /\.pdf(\?|$)/i.test(url)
   const scale = layout && layout.width ? renderW / layout.width : 1
 
+  const localPoint = (e: ReactMouseEvent) => {
+    const r = wrapRef.current!.getBoundingClientRect()
+    return { x: e.clientX - r.left, y: e.clientY - r.top }
+  }
+  const handleDown = (e: ReactMouseEvent) => {
+    if (!drawMode) return
+    e.preventDefault()
+    const p = localPoint(e)
+    startRef.current = p
+    setDraw({ x1: p.x, y1: p.y, x2: p.x, y2: p.y })
+  }
+  const handleMove = (e: ReactMouseEvent) => {
+    if (!startRef.current) return
+    const p = localPoint(e)
+    const s = startRef.current
+    setDraw({ x1: s.x, y1: s.y, x2: p.x, y2: p.y })
+  }
+  const handleUp = (e: ReactMouseEvent) => {
+    const s = startRef.current
+    if (!s) return
+    startRef.current = null
+    const p = localPoint(e)
+    setDraw(null)
+    const rect: DrawRect = {
+      x1: Math.min(s.x, p.x) / scale,
+      y1: Math.min(s.y, p.y) / scale,
+      x2: Math.max(s.x, p.x) / scale,
+      y2: Math.max(s.y, p.y) / scale,
+    }
+    if (rect.x2 - rect.x1 > 2 && rect.y2 - rect.y1 > 2) onRegionDrawn(rect)
+  }
+
   return (
     <Box>
       {isPdf ? (
@@ -175,14 +221,46 @@ function DocumentPreview({
           Aperçu indisponible. Utilisez le lien ci-dessous pour ouvrir le document.
         </Alert>
       ) : (
-        <Box ref={wrapRef} sx={{ position: 'relative', width: '100%', lineHeight: 0 }}>
+        <Box
+          ref={wrapRef}
+          onMouseDown={handleDown}
+          onMouseMove={handleMove}
+          onMouseUp={handleUp}
+          onMouseLeave={() => {
+            startRef.current = null
+            setDraw(null)
+          }}
+          sx={{
+            position: 'relative',
+            width: '100%',
+            lineHeight: 0,
+            cursor: drawMode ? 'crosshair' : 'default',
+            userSelect: 'none',
+          }}
+        >
           <Box
             component="img"
             src={url}
             alt="Aperçu du document"
+            draggable={false}
             onError={() => setImgError(true)}
             sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
           />
+          {draw && (
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${Math.min(draw.x1, draw.x2)}px`,
+                top: `${Math.min(draw.y1, draw.y2)}px`,
+                width: `${Math.abs(draw.x2 - draw.x1)}px`,
+                height: `${Math.abs(draw.y2 - draw.y1)}px`,
+                border: '2px dashed',
+                borderColor: 'primary.main',
+                bgcolor: 'rgba(25,118,210,0.12)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
           {layout &&
             highlight.map((b, i) => {
               const pad = 3 // px of breathing room around the recognised box
@@ -229,6 +307,7 @@ export function OcrReviewPage() {
   const [edited, setEdited] = useState<Record<string, string>>({})
   const [showRaw, setShowRaw] = useState(false)
   const [highlight, setHighlight] = useState<number[][]>([])
+  const [activeField, setActiveField] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -314,6 +393,29 @@ export function OcrReviewPage() {
       }
     }
     return out
+  }
+
+  // Manual assignment: text of the recognised lines whose centre falls inside a
+  // drawn region, joined in reading order, written into the active field.
+  const assignRegion = (rect: DrawRect) => {
+    if (!layout || !activeField) return
+    const picked: { key: string; box: number[] }[] = []
+    for (const [k, b] of Object.entries(layout.boxes ?? {})) {
+      const cx = (b[0] + b[2]) / 2
+      const cy = (b[1] + b[3]) / 2
+      if (cx >= rect.x1 && cx <= rect.x2 && cy >= rect.y1 && cy <= rect.y2) {
+        picked.push({ key: k, box: b })
+      }
+    }
+    picked.sort((a, b) => a.box[1] - b.box[1] || a.box[0] - b.box[0])
+    const text = picked
+      .map((p) => (fields[p.key] as string) ?? '')
+      .join(' ')
+      .trim()
+    if (text) {
+      setEdited((prev) => ({ ...prev, [activeField]: text }))
+      setHighlight(picked.map((p) => p.box))
+    }
   }
 
   async function handleIngest() {
@@ -422,7 +524,13 @@ export function OcrReviewPage() {
               </Link>
             )}
           </Stack>
-          <DocumentPreview url={previewUrl} layout={layout} highlight={highlight} />
+          <DocumentPreview
+            url={previewUrl}
+            layout={layout}
+            highlight={highlight}
+            drawMode={canHighlight && activeField !== null}
+            onRegionDrawn={assignRegion}
+          />
         </Paper>
 
         {/* ---- Right: full text + schema matches ---- */}
@@ -495,7 +603,8 @@ export function OcrReviewPage() {
           </Typography>
           {canHighlight && (
             <Typography variant="caption" color="text.secondary">
-              Sélectionnez un champ pour le localiser sur le document.
+              Sélectionnez un champ pour le localiser. Champ non détecté : cliquez
+              dedans puis dessinez une zone sur le document pour le remplir.
             </Typography>
           )}
 
@@ -518,9 +627,10 @@ export function OcrReviewPage() {
                       value={edited[key] ?? ''}
                       multiline={key === 'lignes'}
                       placeholder="Non détecté — saisir manuellement"
-                      onFocus={() =>
-                        canHighlight && setHighlight(boxesForValue(edited[key] ?? ''))
-                      }
+                      onFocus={() => {
+                        setActiveField(key)
+                        if (canHighlight) setHighlight(boxesForValue(edited[key] ?? ''))
+                      }}
                       onChange={(e) =>
                         setEdited((prev) => ({ ...prev, [key]: e.target.value }))
                       }
