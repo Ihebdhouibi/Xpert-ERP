@@ -53,6 +53,7 @@ import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
 import type { InvoicePrefill } from '../../lib/ocrApi'
 import { apiClient } from '../../lib/apiClient'
+import { MoneyField } from '../../components/ui/MoneyField'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { DataTable } from '../../components/ui/DataTable'
@@ -326,7 +327,7 @@ function CreateDialog({ open, onClose, onCreated, prefill }: CreateDialogProps) 
                     <TableCell>Description</TableCell>
                     <TableCell align="right">Qté reçue (BC)</TableCell>
                     <TableCell align="right">Qté facturée</TableCell>
-                    <TableCell align="right">PU HT (cts)</TableCell>
+                    <TableCell align="right">PU HT</TableCell>
                     <TableCell align="right">TVA %</TableCell>
                     <TableCell align="right">Total HT</TableCell>
                   </TableRow>
@@ -356,12 +357,11 @@ function CreateDialog({ open, onClose, onCreated, prefill }: CreateDialogProps) 
                           />
                         </TableCell>
                         <TableCell align="right">
-                          <TextField
+                          <MoneyField
                             size="small"
-                            type="number"
-                            value={ln.unit_price_ht}
-                            onChange={(e) => updateLine(i, 'unit_price_ht', parseInt(e.target.value) || 0)}
-                            inputProps={{ min: 0, style: { width: 90 } }}
+                            valueMinor={ln.unit_price_ht}
+                            onChangeMinor={(m) => updateLine(i, 'unit_price_ht', m)}
+                            inputProps={{ style: { width: 90 } }}
                           />
                         </TableCell>
                         <TableCell align="right">

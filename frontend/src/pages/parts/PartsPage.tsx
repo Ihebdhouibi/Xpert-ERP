@@ -46,6 +46,7 @@ import {
   type PartCreatePayload,
 } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { MoneyField } from '../../components/ui/MoneyField'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { useToast } from '../../contexts/ToastContext'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
@@ -236,21 +237,17 @@ function PartDialog({
             fullWidth
           />
           <Stack direction="row" spacing={2}>
-            <TextField
-              label="Prix d'achat (centimes)"
-              type="number"
-              value={form.purchase_price_minor}
-              onChange={(e) => field('purchase_price_minor', parseInt(e.target.value) || 0)}
+            <MoneyField
+              label="Prix d'achat"
+              valueMinor={form.purchase_price_minor}
+              onChangeMinor={(m) => field('purchase_price_minor', m)}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
             />
-            <TextField
-              label="Prix de vente (centimes)"
-              type="number"
-              value={form.selling_price_minor}
-              onChange={(e) => field('selling_price_minor', parseInt(e.target.value) || 0)}
+            <MoneyField
+              label="Prix de vente"
+              valueMinor={form.selling_price_minor}
+              onChangeMinor={(m) => field('selling_price_minor', m)}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
             />
           </Stack>
           <Stack direction="row" spacing={2}>

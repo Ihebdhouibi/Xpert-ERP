@@ -38,6 +38,7 @@ import {
 } from '../../lib/stockApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { MoneyField } from '../../components/ui/MoneyField'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { TableLoadingSkeleton } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
@@ -260,13 +261,11 @@ function MovementDialog({
             helperText={type === 'adjustment' ? 'Positif = ajout, négatif = retrait' : undefined}
           />
           {type === 'in' && (
-            <TextField
-              label="Coût unitaire (centimes)"
-              type="number"
-              value={unitCost}
-              onChange={(e) => setUnitCost(e.target.value)}
+            <MoneyField
+              label="Coût unitaire"
+              valueMinor={Number(unitCost) || 0}
+              onChangeMinor={(m) => setUnitCost(m ? String(m) : '')}
               fullWidth
-              inputProps={{ min: 0, step: 1 }}
             />
           )}
           <TextField

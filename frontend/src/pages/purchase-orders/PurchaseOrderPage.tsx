@@ -46,6 +46,7 @@ import {
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { partsApi } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { MoneyField } from '../../components/ui/MoneyField'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { DataTable } from '../../components/ui/DataTable'
@@ -191,7 +192,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
               <TableRow>
                 <TableCell>Pièce</TableCell>
                 <TableCell width={100}>Qté</TableCell>
-                <TableCell width={130}>Prix HT (centimes)</TableCell>
+                <TableCell width={140}>Prix HT</TableCell>
                 <TableCell width={40} />
               </TableRow>
             </TableHead>
@@ -222,12 +223,10 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                     />
                   </TableCell>
                   <TableCell>
-                    <TextField
+                    <MoneyField
                       size="small"
-                      type="number"
-                      value={ln.unit_price_ht}
-                      onChange={(e) => updateLine(i, 'unit_price_ht', parseInt(e.target.value) || 0)}
-                      inputProps={{ min: 0 }}
+                      valueMinor={ln.unit_price_ht}
+                      onChangeMinor={(m) => updateLine(i, 'unit_price_ht', m)}
                     />
                   </TableCell>
                   <TableCell>

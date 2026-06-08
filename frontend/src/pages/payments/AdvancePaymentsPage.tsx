@@ -26,6 +26,7 @@ import { z } from 'zod'
 import { advancePaymentApi, type AdvancePaymentOut, type AdvancePaymentListResponse } from '../../lib/advancePaymentApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { MoneyField } from '../../components/ui/MoneyField'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -207,14 +208,13 @@ export function AdvancePaymentsPage() {
               name="amount_minor"
               control={control}
               render={({ field, fieldState }) => (
-                <TextField
-                  {...field}
-                  label="Montant (en centimes)"
-                  type="number"
+                <MoneyField
+                  label="Montant"
                   fullWidth
+                  valueMinor={Number(field.value) || 0}
+                  onChangeMinor={field.onChange}
                   error={!!fieldState.error}
-                  helperText={fieldState.error?.message ?? 'Ex: 5000 = 50,00 €'}
-                  onChange={e => field.onChange(Number(e.target.value))}
+                  helperText={fieldState.error?.message}
                 />
               )}
             />

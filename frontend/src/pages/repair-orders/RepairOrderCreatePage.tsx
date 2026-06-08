@@ -12,7 +12,6 @@ import {
   CircularProgress,
   Divider,
   Grid,
-  InputAdornment,
   MenuItem,
   Stack,
   TextField,
@@ -26,6 +25,7 @@ import { repairOrderApi } from '../../lib/repairOrderApi'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { MoneyField } from '../../components/ui/MoneyField'
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 const PRIORITY_LABELS: Record<string, string> = {
@@ -165,15 +165,6 @@ export function RepairOrderCreatePage() {
     placeholderData: (prev: typeof vehiclesData) => prev,
   })
   const vehicles = vehiclesData?.items ?? []
-
-  const estimatedDisplay =
-    estimatedMinor && Number(estimatedMinor) > 0
-      ? (Number(estimatedMinor) / 100).toLocaleString('fr-FR', {
-          style: 'currency',
-          currency: estimatedCurrency || 'EUR',
-          minimumFractionDigits: 2,
-        })
-      : null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -411,21 +402,11 @@ export function RepairOrderCreatePage() {
                 </TextField>
 
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <TextField
+                  <MoneyField
                     label="Coût estimé"
-                    type="number"
-                    value={estimatedMinor}
-                    onChange={e => setEstimatedMinor(e.target.value)}
-                    helperText={estimatedDisplay ? `≈ ${estimatedDisplay}` : 'Valeur en centimes (ex: 15000 = 150,00)'}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <Typography variant="caption" color="text.secondary">cts</Typography>
-                        </InputAdornment>
-                      ),
-                    }}
+                    valueMinor={Number(estimatedMinor) || 0}
+                    onChangeMinor={(m) => setEstimatedMinor(m ? String(m) : '')}
                     fullWidth
-                    inputProps={{ min: 0 }}
                   />
                   <TextField
                     label="Devise"
