@@ -565,6 +565,17 @@ async def save_diagnosis(
     ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
     if not ro:
         raise HTTPException(status_code=404, detail="Repair order not found")
+
+    if body.completed:
+        from app.modules.repair_order.schemas import DIAGNOSIS_QUESTIONS
+
+        missing = [code for code, _ in DIAGNOSIS_QUESTIONS if code not in body.answers]
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Diagnostic incomplet : répondez à toutes les questions ({', '.join(missing)}).",
+            )
+
     ro.diagnosis = {"answers": body.answers, "notes": body.notes}
     if body.completed:
         ro.diagnosis_completed_at = datetime.now(tz=timezone.utc)

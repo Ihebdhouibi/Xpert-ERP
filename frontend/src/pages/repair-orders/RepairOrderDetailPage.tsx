@@ -256,6 +256,7 @@ function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: (
   )
   const [notes, setNotes] = useState(ro.diagnosis?.notes ?? '')
   const completed = ro.diagnosis_completed_at !== null
+  const allAnswered = DIAGNOSIS_QUESTIONS.every((q) => answers[q.code] !== undefined)
 
   const save = useMutation({
     mutationFn: (finish: boolean) =>
@@ -335,15 +336,19 @@ function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: (
         >
           Enregistrer
         </Button>
-        <Button
-          variant="contained"
-          size="small"
-          disabled={save.isPending}
-          onClick={() => save.mutate(true)}
-          sx={{ textTransform: 'none', fontWeight: 700 }}
-        >
-          Terminer le diagnostic
-        </Button>
+        <Tooltip title={allAnswered ? '' : 'Répondez à toutes les questions (D1 à D5).'}>
+          <span>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={save.isPending || !allAnswered}
+              onClick={() => save.mutate(true)}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              Terminer le diagnostic
+            </Button>
+          </span>
+        </Tooltip>
       </Stack>
     </Box>
   )
