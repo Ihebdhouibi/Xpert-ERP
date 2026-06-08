@@ -356,26 +356,28 @@ export function DashboardPage() {
             />
           </Grid>
         )}
-        <Grid item xs={6} md={3}>
-          <MetricCard
-            label="Alertes stock"
-            value={
-              k?.low_stock_alerts_count?.value != null
-                ? String(Math.round(k.low_stock_alerts_count.value))
-                : '—'
-            }
-            sub="Pièces en rupture ou seuil bas"
-            icon={<WarningAmberRoundedIcon sx={{ fontSize: 22 }} />}
-            iconBg={
-              (k?.low_stock_alerts_count?.value ?? 0) > 0 ? '#FEE2E2' : '#F0FDF4'
-            }
-            iconColor={
-              (k?.low_stock_alerts_count?.value ?? 0) > 0 ? '#DC2626' : '#059669'
-            }
-            loading={isLoading}
-            onClick={() => navigate('/stock')}
-          />
-        </Grid>
+        {!isMechanic && (
+          <Grid item xs={6} md={3}>
+            <MetricCard
+              label="Alertes stock"
+              value={
+                k?.low_stock_alerts_count?.value != null
+                  ? String(Math.round(k.low_stock_alerts_count.value))
+                  : '—'
+              }
+              sub="Pièces en rupture ou seuil bas"
+              icon={<WarningAmberRoundedIcon sx={{ fontSize: 22 }} />}
+              iconBg={
+                (k?.low_stock_alerts_count?.value ?? 0) > 0 ? '#FEE2E2' : '#F0FDF4'
+              }
+              iconColor={
+                (k?.low_stock_alerts_count?.value ?? 0) > 0 ? '#DC2626' : '#059669'
+              }
+              loading={isLoading}
+              onClick={() => navigate('/stock')}
+            />
+          </Grid>
+        )}
       </Grid>
 
       <Grid container spacing={3}>
@@ -406,14 +408,16 @@ export function DashboardPage() {
                   iconColor="#059669"
                   to="/inspections"
                 />
-                <QuickActionCard
-                  label="Stock & pièces"
-                  description="Niveaux de stock et alertes"
-                  icon={<InventoryRoundedIcon sx={{ fontSize: 22 }} />}
-                  iconBg="#FFF7ED"
-                  iconColor="#EA580C"
-                  to="/stock"
-                />
+                {!isMechanic && (
+                  <QuickActionCard
+                    label="Stock & pièces"
+                    description="Niveaux de stock et alertes"
+                    icon={<InventoryRoundedIcon sx={{ fontSize: 22 }} />}
+                    iconBg="#FFF7ED"
+                    iconColor="#EA580C"
+                    to="/stock"
+                  />
+                )}
                 {hasPermission('reporting.dashboard.read') && !isMechanic && (
                   <QuickActionCard
                     label="Tableau de bord KPI"
@@ -458,7 +462,7 @@ export function DashboardPage() {
                     { label: 'OTs', sub: 'Ordres de réparation', icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/repair-orders' },
                     { label: 'Inspections', sub: 'Contrôles véhicules', icon: <FindInPageRoundedIcon sx={{ fontSize: 18 }} />, to: '/inspections' },
                     { label: 'Kanban', sub: 'Vue atelier', icon: <ViewKanbanRoundedIcon sx={{ fontSize: 18 }} />, to: '/workshop' },
-                  ].map(m => (
+                  ].filter(m => !isMechanic || m.to !== '/customers').map(m => (
                     <Grid item xs={6} sm={3} key={m.to}>
                       <ModuleTile {...m} />
                     </Grid>
@@ -468,7 +472,7 @@ export function DashboardPage() {
 
               <Divider sx={{ my: 1.5 }} />
 
-              {(hasPermission('supplier.read') || hasPermission('part.read')) && (
+              {!isMechanic && (hasPermission('supplier.read') || hasPermission('part.read')) && (
               <Box mb={1.5}>
                 <Typography
                   variant="caption"
