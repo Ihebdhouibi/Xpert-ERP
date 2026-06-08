@@ -30,6 +30,7 @@ from app.modules.repair_order.service import (
     OptimisticLockError,
     RepairOrderNotFoundError,
     RepairOrderService,
+    StepIncompleteError,
 )
 from app.modules.rbac.dependencies import AuthUser, require_permission, require_role
 from app.core.logging import get_logger
@@ -375,6 +376,8 @@ async def transition_status(
         return await _get_detail(db, user.garage_id, public_id)
     except RepairOrderNotFoundError:
         raise HTTPException(status_code=404, detail="Repair order not found")
+    except StepIncompleteError as e:
+        raise HTTPException(status_code=422, detail=e.message)
     except InvalidStatusTransitionError as e:
         raise HTTPException(
             status_code=409,

@@ -133,8 +133,21 @@ function StatusTransitionPanel({
       setReason('')
       onTransitioned()
     },
-    onError: () => toastError('Transition invalide ou accès refusé.'),
+    onError: (e) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : 'Transition invalide ou accès refusé.')
+    },
   })
+
+  // Step preconditions that must be met before moving forward.
+  const blockReason = (target: ROStatus): string | null => {
+    if (ro.status === 'diagnosis' && target === 'in_repair') {
+      if (!ro.assigned_user_id) return "Affectez d'abord un mécanicien."
+      if (!ro.assignment_accepted_at) return "L'affectation doit être acceptée."
+      if (!ro.diagnosis_completed_at) return 'Terminez le diagnostic.'
+    }
+    return null
+  }
 
   if (allowed.length === 0) return null
 
@@ -215,11 +228,16 @@ function StatusTransitionPanel({
                     onChange={e => setReason(e.target.value)}
                     sx={{ mb: 1 }}
                   />
+                  {blockReason(s) && (
+                    <Typography variant="caption" color="error" display="block" mb={1}>
+                      {blockReason(s)}
+                    </Typography>
+                  )}
                   <Button
                     variant="contained"
                     fullWidth
                     size="small"
-                    disabled={mutation.isPending}
+                    disabled={mutation.isPending || blockReason(s) !== null}
                     onClick={() => mutation.mutate()}
                     sx={{
                       background: accent,

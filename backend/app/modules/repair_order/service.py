@@ -39,6 +39,13 @@ class InvalidStatusTransitionError(Exception):
         )
 
 
+class StepIncompleteError(Exception):
+    """Raised when a status transition is blocked by unmet step preconditions."""
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+
 class RepairOrderNotFoundError(Exception):
     """Raised when repair order is not found."""
 
@@ -188,6 +195,21 @@ class RepairOrderService:
         # Validate transition
         if not can_transition(ro.status, new_status):
             raise InvalidStatusTransitionError(ro.status, new_status)
+
+        # Step preconditions: a repair can only start once a mechanic has accepted
+        # the job and the diagnosis is complete.
+        if ro.status == ROStatus.diagnosis and new_status == ROStatus.in_repair:
+            missing: list[str] = []
+            if ro.assigned_user_id is None:
+                missing.append("affecter un mécanicien")
+            elif ro.assignment_accepted_at is None:
+                missing.append("faire accepter l'affectation")
+            if ro.diagnosis_completed_at is None:
+                missing.append("terminer le diagnostic")
+            if missing:
+                raise StepIncompleteError(
+                    "Étape diagnostic incomplète : " + ", ".join(missing) + "."
+                )
 
         old_status = ro.status
         ro.status = new_status
