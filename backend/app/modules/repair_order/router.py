@@ -103,7 +103,14 @@ async def list_repair_orders(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> dict:
-    """List repair orders with optional filters and pagination."""
+    """List repair orders with optional filters and pagination.
+
+    Mechanics only see the repair orders assigned to them; reception/admin see all.
+    """
+    _PRIVILEGED = {"admin", "super_admin", "secretary"}
+    if "mechanic" in user.roles and not (_PRIVILEGED & set(user.roles)):
+        assigned_user_id = user.user_id
+
     rows, total = await RepairOrderRepository.list(
         db,
         garage_id=user.garage_id,
