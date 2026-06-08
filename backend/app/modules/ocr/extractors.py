@@ -176,7 +176,10 @@ _RE_LINE_ITEM = re.compile(
 
 _KW_DATE_FACTURE = re.compile(r"date\s*(de)?\s*facture|date\s*d.[ée]mission|invoice\s*date", re.IGNORECASE)
 _KW_DATE_ECHEANCE = re.compile(r"[ée]ch[ée]ance|date\s*limite|due\s*date|paiement\s*avant", re.IGNORECASE)
-_KW_TOTAL_HT = re.compile(r"total\s*h\.?t\.?|montant\s*h\.?t\.?|sous[- ]?total", re.IGNORECASE)
+_KW_TOTAL_HT = re.compile(
+    r"total\s*h\.?\s*t\.?|montant\s*h\.?\s*t\.?|sous[- ]?total|bases?\s*h\.?\s*t\.?|^\s*h\.?\s*t\.?\s*[:.]",
+    re.IGNORECASE,
+)
 _KW_TOTAL_TTC = re.compile(r"total\s*t\.?t\.?c\.?|net\s*[àa]\s*payer|montant\s*[àa]\s*payer", re.IGNORECASE)
 _KW_TVA = re.compile(r"\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
 _KW_FOURNISSEUR = re.compile(r"fournisseur|[ée]metteur|vendeur|raison\s*sociale", re.IGNORECASE)
@@ -218,19 +221,40 @@ def _extract_invoice_number(lines) -> Optional[tuple[str, float]]:
     return None
 
 
+# Lines that mention a total in prose (a discount note, a rate) — their amounts
+# are NOT the total. e.g. "Le Total HT tient compte d'une remise … soit 3.51%".
+_KW_AMOUNT_SKIP = re.compile(r"remise|tient\s+compte|\bsoit\b", re.IGNORECASE)
+
+
+def _amount_not_percent(text: str) -> Optional[str]:
+    """First monetary amount in *text* that isn't immediately followed by '%'."""
+    for m in _RE_AMOUNT.finditer(text):
+        trailing = text[m.end():m.end() + 1]
+        if trailing == "%":
+            continue
+        return m.group(1)
+    return None
+
+
 def _amount_on_keyword_line(lines, keyword_re: re.Pattern) -> Optional[tuple[str, float]]:
-    """Find an amount on the first line matching ``keyword_re`` (or the next line)."""
+    """Find an amount on the first line matching ``keyword_re`` (or the next line).
+
+    Skips prose lines (discount notes) and percentage values so a label like
+    "Total HT" in a sentence doesn't capture a rate instead of the amount.
+    """
     for idx, line in enumerate(lines):
         if keyword_re.search(line.text):
-            m = _RE_AMOUNT.search(line.text)
-            if m:
-                return _normalise_amount(m.group(1)), line.confidence
+            if _KW_AMOUNT_SKIP.search(line.text):
+                continue
+            amt = _amount_not_percent(line.text)
+            if amt:
+                return _normalise_amount(amt), line.confidence
             # Amount may be on the following line
             if idx + 1 < len(lines):
                 nxt = lines[idx + 1]
-                m2 = _RE_AMOUNT.search(nxt.text)
-                if m2:
-                    return _normalise_amount(m2.group(1)), nxt.confidence
+                amt2 = _amount_not_percent(nxt.text)
+                if amt2:
+                    return _normalise_amount(amt2), nxt.confidence
     return None
 
 
