@@ -68,6 +68,7 @@ class ConvertQuotationRequest(BaseModel):
 
 
 class InvoiceUpdateRequest(BaseModel):
+    customer_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     repair_order_id: Optional[int] = None
     currency: Optional[str] = Field(None, min_length=3, max_length=3)

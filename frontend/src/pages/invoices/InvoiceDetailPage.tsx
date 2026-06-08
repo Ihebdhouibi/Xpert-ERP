@@ -9,8 +9,12 @@ import {
   CardContent,
   Chip,
   Divider,
+  FormControl,
   Grid,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -33,6 +37,7 @@ import {
   INVOICE_STATUS_LABELS,
   type InvoiceLineKind,
 } from '../../lib/invoiceApi'
+import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -138,9 +143,29 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
     onError: (err: unknown) => {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toastError(typeof detail === 'string' ? detail : 'Impossible d\'émettre la facture.')
     },
+  })
+
+  // Customer assignment for OCR-captured drafts that have no customer yet
+  const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
+  const needsCustomer = invoice?.status === 'draft' && invoice?.customer_id == null
+  const { data: customersData } = useQuery({
+    queryKey: ['customers', 'for-invoice-assign'],
+    queryFn: () => customerApi.list({ page_size: 200 }),
+    enabled: !!needsCustomer,
+  })
+  const assignCustomerMutation = useMutation({
+    mutationFn: () =>
+      invoiceApi.update(publicId!, invoice!.version, {
+        customer_id: assignCustomerId as number,
+      }),
+    onSuccess: () => {
+      success('Client assigné')
+      queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
+    },
+    onError: () => toastError("Impossible d'assigner le client."),
   })
 
   const cancelMutation = useMutation({
@@ -191,7 +216,7 @@ export function InvoiceDetailPage() {
     <Box>
       <PageHeader
         title={invoice.doc_number ?? 'Facture brouillon'}
-        subtitle={invoice.customer_name ?? `Client #${invoice.customer_id}`}
+        subtitle={invoice.customer_name ?? (invoice.customer_id == null ? 'Sans client' : `Client #${invoice.customer_id}`)}
         breadcrumbs={[
           { label: 'Factures', href: '/invoices' },
           { label: invoice.doc_number ?? 'Brouillon' },
@@ -247,7 +272,36 @@ export function InvoiceDetailPage() {
                 } />
                 <Divider />
                 <InfoRow label="Client" value={
-                  <Typography variant="body2" fontWeight={500}>{invoice.customer_name ?? `Client #${invoice.customer_id}`}</Typography>
+                  needsCustomer ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <FormControl size="small" sx={{ minWidth: 200 }}>
+                        <InputLabel>Choisir un client</InputLabel>
+                        <Select
+                          label="Choisir un client"
+                          value={assignCustomerId}
+                          onChange={(e) => setAssignCustomerId(e.target.value as number)}
+                        >
+                          {(customersData?.items ?? []).map((c) => (
+                            <MenuItem key={c.int_id} value={c.int_id}>
+                              {c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={assignCustomerId === '' || assignCustomerMutation.isPending}
+                        onClick={() => assignCustomerMutation.mutate()}
+                      >
+                        Assigner
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" fontWeight={500}>
+                      {invoice.customer_name ?? (invoice.customer_id == null ? 'Sans client' : `Client #${invoice.customer_id}`)}
+                    </Typography>
+                  )
                 } />
                 {invoice.vehicle_id && (
                   <>
@@ -525,15 +579,19 @@ export function InvoiceDetailPage() {
                 {/* Actions by status */}
                 <Stack spacing={1.25}>
                   {invoice.status === 'draft' && (
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      startIcon={<PublishRoundedIcon />}
-                      onClick={() => issueMutation.mutate()}
-                      disabled={anyMutating}
-                    >
-                      Émettre la facture
-                    </Button>
+                    <Tooltip title={needsCustomer ? 'Assignez un client avant d\'émettre' : ''}>
+                      <span>
+                        <Button
+                          variant="contained"
+                          fullWidth
+                          startIcon={<PublishRoundedIcon />}
+                          onClick={() => issueMutation.mutate()}
+                          disabled={anyMutating || needsCustomer}
+                        >
+                          Émettre la facture
+                        </Button>
+                      </span>
+                    </Tooltip>
                   )}
 
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (

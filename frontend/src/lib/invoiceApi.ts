@@ -80,6 +80,7 @@ export interface InvoiceCreateInput {
 }
 
 export interface InvoiceUpdateInput {
+  customer_id?: number | null
   vehicle_id?: number | null
   repair_order_id?: number | null
   currency?: string

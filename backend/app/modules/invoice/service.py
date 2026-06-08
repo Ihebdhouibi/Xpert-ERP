@@ -236,6 +236,11 @@ async def update_invoice(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
+    if request.customer_id is not None:
+        customer = await customer_repo.get_by_id(db, garage_id, request.customer_id)
+        if customer is None:
+            raise InvoiceStateError("Client introuvable.")
+        inv.customer_id = request.customer_id
     if request.vehicle_id is not None:
         inv.vehicle_id = request.vehicle_id
     if request.repair_order_id is not None:
@@ -431,6 +436,8 @@ async def issue_invoice(
         raise InvoiceNotFoundError(invoice_id)
     if inv.status != InvoiceStatus.draft:
         raise InvoiceStateError(f"Cannot issue an invoice in status '{inv.status.value}'.")
+    if inv.customer_id is None:
+        raise InvoiceStateError("Un client est requis pour émettre la facture.")
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
