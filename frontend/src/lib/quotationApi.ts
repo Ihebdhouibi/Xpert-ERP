@@ -40,6 +40,7 @@ export interface QuotationOut {
   customer_name?: string | null
   vehicle_id: number | null
   repair_order_id: number | null
+  repair_order_public_id?: string | null
   doc_number: string | null
   status: QuotationStatus
   valid_until: string | null

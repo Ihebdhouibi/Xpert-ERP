@@ -79,6 +79,7 @@ class QuotationOut(BaseModel):
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
     repair_order_id: Optional[int]
+    repair_order_public_id: Optional[str] = None
     doc_number: Optional[str]
     status: QuotationStatus
     valid_until: Optional[datetime]

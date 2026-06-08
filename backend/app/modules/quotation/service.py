@@ -31,17 +31,27 @@ logger = get_logger("quotation.service")
 
 
 async def _to_out(db: AsyncSession, quotation: Quotation) -> QuotationOut:
-    """Build QuotationOut, enriching with the customer display name."""
+    """Build QuotationOut, enriching with customer name + repair-order public id."""
     out = QuotationOut.model_validate(quotation)
-    if quotation.customer_id is None:
-        return out
-    customer = await customer_repo.get_by_id(db, quotation.garage_id, quotation.customer_id)
-    if customer:
-        out.customer_name = (
-            f"{customer.full_name} ({customer.company_name})"
-            if customer.company_name
-            else customer.full_name
-        )
+    if quotation.customer_id is not None:
+        customer = await customer_repo.get_by_id(db, quotation.garage_id, quotation.customer_id)
+        if customer:
+            out.customer_name = (
+                f"{customer.full_name} ({customer.company_name})"
+                if customer.company_name
+                else customer.full_name
+            )
+    if quotation.repair_order_id is not None:
+        from sqlalchemy import select as _select
+        from app.modules.repair_order.models import RepairOrder
+
+        pub = (
+            await db.execute(
+                _select(RepairOrder.public_id).where(RepairOrder.id == quotation.repair_order_id)
+            )
+        ).scalar_one_or_none()
+        if pub is not None:
+            out.repair_order_public_id = str(pub)
     return out
 
 

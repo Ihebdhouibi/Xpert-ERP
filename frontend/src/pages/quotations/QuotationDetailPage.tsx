@@ -421,14 +421,14 @@ export function QuotationDetailPage() {
                     } />
                   </>
                 )}
-                {quotation.repair_order_id && (
+                {quotation.repair_order_public_id && (
                   <>
                     <Divider />
                     <InfoRow label="Ordre de réparation" value={
                       <Typography variant="body2" fontWeight={600}
                         sx={{ color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-                        onClick={() => navigate(`/repair-orders/${quotation.repair_order_id}`)}>
-                        OT #{quotation.repair_order_id}
+                        onClick={() => navigate(`/repair-orders/${quotation.repair_order_public_id}`)}>
+                        Revenir à l'ordre de réparation
                       </Typography>
                     } />
                   </>
