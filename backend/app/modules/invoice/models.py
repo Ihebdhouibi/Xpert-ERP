@@ -50,8 +50,9 @@ class Invoice(Base):
         String(36), unique=True, nullable=False, default=lambda: str(uuid_lib.uuid4())
     )
     garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    customer_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("customer.id", ondelete="RESTRICT"), nullable=False
+    # Nullable: draft invoices captured from OCR may have no customer linked yet.
+    customer_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("customer.id", ondelete="RESTRICT"), nullable=True
     )
     vehicle_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("vehicle.id", ondelete="RESTRICT"), nullable=True

@@ -381,8 +381,23 @@ async def ingest_extraction(
             created_id=str(si.public_id),
         )
     if category == DocumentCategory.invoice:
+        from app.modules.invoice.service import create_invoice_from_ocr
+
+        prefill = _build_invoice_prefill(merged, "client")
+        ttc = prefill.total_ttc_cents or 0
+        ht = prefill.total_ht_cents or 0
+        invoice = await create_invoice_from_ocr(
+            db,
+            garage_id=document.garage_id,
+            user_id=reviewer_id,
+            doc_number=prefill.number,
+            subtotal_minor=ht,
+            vat_minor=max(ttc - ht, 0),
+            total_minor=ttc,
+            notes="Importé depuis l'OCR",
+        )
         return IngestionResult(
-            target="invoice", prefill=_build_invoice_prefill(merged, "client")
+            target="invoice", prefill=prefill, created_id=invoice.public_id
         )
     if category == DocumentCategory.registration_card:
         return IngestionResult(target="vehicle")

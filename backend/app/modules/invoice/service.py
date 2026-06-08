@@ -102,6 +102,45 @@ async def _to_out(db: AsyncSession, invoice: Invoice) -> InvoiceOut:
 # CRUD
 # ---------------------------------------------------------------------------
 
+async def create_invoice_from_ocr(
+    db: AsyncSession,
+    *,
+    garage_id: int,
+    user_id: int,
+    doc_number: Optional[str],
+    subtotal_minor: int,
+    vat_minor: int,
+    total_minor: int,
+    due_at: Optional[datetime] = None,
+    notes: Optional[str] = None,
+) -> Invoice:
+    """Create a standalone draft invoice from OCR data (no customer linked yet)."""
+    logger.info("create_invoice_from_ocr_start", garage_id=garage_id, doc_number=doc_number)
+    invoice = Invoice(
+        public_id=str(uuid.uuid4()),
+        garage_id=garage_id,
+        customer_id=None,
+        currency="EUR",
+        due_at=due_at,
+        notes=notes,
+        doc_number=doc_number,
+        status=InvoiceStatus.draft,
+        subtotal_minor=subtotal_minor,
+        discount_minor=0,
+        vat_minor=vat_minor,
+        total_minor=total_minor,
+        paid_amount_minor=0,
+        outstanding_minor=total_minor,
+        version=1,
+        created_by=user_id,
+        updated_by=user_id,
+    )
+    await repo.create(db, invoice)
+    await db.commit()
+    logger.info("invoice_created_from_ocr", invoice_public_id=invoice.public_id, garage_id=garage_id)
+    return invoice
+
+
 async def create_invoice(
     db: AsyncSession,
     *,

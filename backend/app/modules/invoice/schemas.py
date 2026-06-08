@@ -79,7 +79,7 @@ class InvoiceOut(BaseModel):
     id: int
     public_id: str
     garage_id: int
-    customer_id: int
+    customer_id: Optional[int] = None
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
     repair_order_id: Optional[int]

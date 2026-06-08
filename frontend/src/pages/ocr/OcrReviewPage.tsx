@@ -328,7 +328,8 @@ export function OcrReviewPage() {
           navigate('/supplier-invoices')
           return
         case 'invoice':
-          navigate('/invoices/new', { state: { ocrPrefill: result.prefill } })
+          // The draft invoice was created server-side — go to the list.
+          navigate('/invoices')
           return
         case 'vehicle':
           setSuccess('Champs validés — véhicule mis à jour.')
