@@ -1,10 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
@@ -14,10 +22,12 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
+import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { useToast } from '../../contexts/ToastContext'
 
 function PaymentProgress({ total, paid, currency }: { total: number; paid: number; currency: string }) {
   const pct = total > 0 ? Math.min((paid / total) * 100, 100) : 0
@@ -47,7 +57,9 @@ const STATUS_FILTERS: { value: InvoiceStatus | 'all'; label: string }[] = [
   { value: 'cancelled', label: 'Annulées' },
 ]
 
-const columns: Column<InvoiceOut>[] = [
+const buildColumns = (
+  onAssign: (inv: InvoiceOut) => void,
+): Column<InvoiceOut>[] => [
   {
     id: 'number',
     label: 'Numéro',
@@ -87,11 +99,27 @@ const columns: Column<InvoiceOut>[] = [
   {
     id: 'customer',
     label: 'Client',
-    render: row => (
-      <Typography variant="body2" fontWeight={500}>
-        Client #{row.customer_id}
-      </Typography>
-    ),
+    render: row =>
+      row.customer_name ? (
+        <Typography variant="body2" fontWeight={500}>
+          {row.customer_name}
+        </Typography>
+      ) : row.status === 'draft' ? (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAssign(row)
+          }}
+        >
+          Assigner un client
+        </Button>
+      ) : (
+        <Typography variant="body2" color="text.disabled">
+          Sans client
+        </Typography>
+      ),
   },
   {
     id: 'total',
@@ -162,9 +190,13 @@ const columns: Column<InvoiceOut>[] = [
 
 export function InvoicesPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [page, setPage] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
+  const [assignTarget, setAssignTarget] = useState<InvoiceOut | null>(null)
+  const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['invoices', { page, pageSize, statusFilter }],
@@ -175,6 +207,26 @@ export function InvoicesPage() {
         page_size: pageSize,
       }),
     placeholderData: keepPreviousData,
+  })
+
+  const { data: customersData } = useQuery({
+    queryKey: ['customers', 'for-invoice-assign'],
+    queryFn: () => customerApi.list({ page_size: 200 }),
+    enabled: assignTarget !== null,
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: () =>
+      invoiceApi.update(assignTarget!.public_id, assignTarget!.version, {
+        customer_id: assignCustomerId as number,
+      }),
+    onSuccess: () => {
+      success('Client assigné')
+      setAssignTarget(null)
+      setAssignCustomerId('')
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: () => toastError("Impossible d'assigner le client."),
   })
 
   return (
@@ -217,7 +269,7 @@ export function InvoicesPage() {
       </Stack>
 
       <DataTable
-        columns={columns}
+        columns={buildColumns(setAssignTarget)}
         rows={data?.items ?? []}
         getRowKey={r => r.public_id}
         onRowClick={r => navigate(`/invoices/${r.public_id}`)}
@@ -240,6 +292,41 @@ export function InvoicesPage() {
           </Button>
         }
       />
+
+      <Dialog
+        open={assignTarget !== null}
+        onClose={() => setAssignTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Assigner un client</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+            <InputLabel>Client</InputLabel>
+            <Select
+              label="Client"
+              value={assignCustomerId}
+              onChange={(e) => setAssignCustomerId(e.target.value as number)}
+            >
+              {(customersData?.items ?? []).map((c) => (
+                <MenuItem key={c.int_id} value={c.int_id}>
+                  {c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignTarget(null)}>Annuler</Button>
+          <Button
+            variant="contained"
+            disabled={assignCustomerId === '' || assignMutation.isPending}
+            onClick={() => assignMutation.mutate()}
+          >
+            Assigner
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

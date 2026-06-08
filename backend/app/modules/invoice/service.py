@@ -88,6 +88,8 @@ def _recalculate_totals(invoice: Invoice) -> None:
 async def _to_out(db: AsyncSession, invoice: Invoice) -> InvoiceOut:
     """Build InvoiceOut, enriching with the customer display name."""
     out = InvoiceOut.model_validate(invoice)
+    if invoice.customer_id is None:
+        return out
     customer = await customer_repo.get_by_id(db, invoice.garage_id, invoice.customer_id)
     if customer:
         out.customer_name = (
@@ -213,7 +215,7 @@ async def list_invoices(
         page=page, page_size=page_size,
     )
     return InvoiceListResponse(
-        items=[InvoiceOut.model_validate(i) for i in items],
+        items=[await _to_out(db, i) for i in items],
         total=total, page=page, page_size=page_size,
     )
 
