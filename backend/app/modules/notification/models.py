@@ -11,6 +11,28 @@ from app.core.database import Base
 from app.core.types import BigIntPK
 
 
+class AppNotification(Base):
+    """In-app notification shown in the user's bell/inbox."""
+
+    __tablename__ = "app_notification"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    recipient_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Frontend route to open when clicked, e.g. /repair-orders/<uuid>
+    link: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_app_notification_recipient", "recipient_id", "read_at"),
+    )
+
+
 class NotificationChannel(str, enum.Enum):
     email = "email"
     sms = "sms"

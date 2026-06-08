@@ -499,8 +499,20 @@ async def assign_mechanic(
     ro.assignment_accepted_at = None
     await db.commit()
 
-    # Best-effort notification to the newly assigned mechanic.
+    # Notify the newly assigned mechanic: in-app (always) + email (best-effort).
     if body.user_id is not None:
+        from app.modules.notification.inbox_router import create_app_notification
+
+        await create_app_notification(
+            db,
+            garage_id=user.garage_id,
+            recipient_id=body.user_id,
+            title="Nouvel ordre de réparation assigné",
+            body=ro.description,
+            link=f"/repair-orders/{ro.public_id}",
+        )
+        await db.commit()
+
         mech = (await db.execute(select(AppUser).where(AppUser.id == body.user_id))).scalar_one_or_none()
         if mech and mech.email:
             background_tasks.add_task(

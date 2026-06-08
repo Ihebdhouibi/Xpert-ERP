@@ -1,20 +1,25 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AppBar,
   Avatar,
   Badge,
   Box,
+  Button,
   Divider,
   IconButton,
   InputBase,
   ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
+  Stack,
   Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material'
+import { inboxApi } from '../../lib/notificationApi'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
@@ -50,7 +55,32 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
+  const [notifAnchor, setNotifAnchor] = useState<HTMLElement | null>(null)
+
+  const { data: inbox } = useQuery({
+    queryKey: ['notifications', 'inbox'],
+    queryFn: () => inboxApi.list(),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  })
+
+  const openNotification = async (n: { id: number; link: string | null }) => {
+    setNotifAnchor(null)
+    try {
+      await inboxApi.markRead(n.id)
+    } catch {
+      /* non-blocking */
+    }
+    queryClient.invalidateQueries({ queryKey: ['notifications', 'inbox'] })
+    if (n.link) navigate(n.link)
+  }
+
+  const markAll = async () => {
+    await inboxApi.markAllRead()
+    queryClient.invalidateQueries({ queryKey: ['notifications', 'inbox'] })
+  }
 
   const pageTitle = getPageTitle(location.pathname)
 
@@ -214,12 +244,61 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
 
         {/* Notifications */}
         <Tooltip title="Notifications" placement="bottom">
-          <IconButton size="small" sx={{ color: 'text.secondary' }}>
-            <Badge badgeContent={0} color="error" max={9}>
+          <IconButton
+            size="small"
+            sx={{ color: 'text.secondary' }}
+            onClick={(e) => setNotifAnchor(e.currentTarget)}
+          >
+            <Badge badgeContent={inbox?.unread_count ?? 0} color="error" max={9}>
               <NotificationsNoneRoundedIcon sx={{ fontSize: 20 }} />
             </Badge>
           </IconButton>
         </Tooltip>
+        <Menu
+          anchorEl={notifAnchor}
+          open={Boolean(notifAnchor)}
+          onClose={() => setNotifAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          PaperProps={{ sx: { width: 360, maxHeight: 460 } }}
+        >
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2, py: 1 }}>
+            <Typography variant="subtitle2" fontWeight={700}>Notifications</Typography>
+            {(inbox?.unread_count ?? 0) > 0 && (
+              <Button size="small" onClick={markAll} sx={{ textTransform: 'none' }}>
+                Tout marquer comme lu
+              </Button>
+            )}
+          </Stack>
+          <Divider />
+          {(inbox?.items ?? []).length === 0 ? (
+            <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">Aucune notification.</Typography>
+            </Box>
+          ) : (
+            (inbox?.items ?? []).map((n) => (
+              <MenuItem
+                key={n.id}
+                onClick={() => openNotification(n)}
+                sx={{ alignItems: 'flex-start', py: 1, whiteSpace: 'normal', bgcolor: n.read_at ? 'transparent' : 'action.hover' }}
+              >
+                <ListItemText
+                  primary={n.title}
+                  secondary={
+                    <>
+                      {n.body}
+                      <Typography component="span" variant="caption" color="text.disabled" display="block">
+                        {new Date(n.created_at).toLocaleString('fr-FR')}
+                      </Typography>
+                    </>
+                  }
+                  primaryTypographyProps={{ fontWeight: n.read_at ? 500 : 700, variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+              </MenuItem>
+            ))
+          )}
+        </Menu>
 
         {/* User avatar */}
         <Tooltip title="Mon compte" placement="bottom">

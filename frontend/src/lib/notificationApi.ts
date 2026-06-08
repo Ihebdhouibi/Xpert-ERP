@@ -36,6 +36,26 @@ export interface PreviewResponse {
   body: string
 }
 
+export interface AppNotification {
+  id: number
+  title: string
+  body: string | null
+  link: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface InboxResponse {
+  items: AppNotification[]
+  unread_count: number
+}
+
+export const inboxApi = {
+  list: () => apiClient.get<InboxResponse>('/notifications').then(r => r.data),
+  markRead: (id: number) => apiClient.post(`/notifications/${id}/read`).then(r => r.data),
+  markAllRead: () => apiClient.post('/notifications/read-all').then(r => r.data),
+}
+
 export const notificationApi = {
   triggers: () =>
     apiClient.get<TriggerEntry[]>('/notification-templates/triggers').then(r => r.data),
