@@ -23,6 +23,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
+import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
 import { customerApi } from '../../lib/customerApi'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -117,20 +118,24 @@ const buildColumns = (
   {
     id: 'actions',
     label: '',
+    align: 'right',
+    width: 96,
     render: row =>
       row.status === 'draft' ? (
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
           {!row.customer_name && (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={(e) => {
-                e.stopPropagation()
-                onAssign(row)
-              }}
-            >
-              Assigner un client
-            </Button>
+            <Tooltip title="Assigner un client">
+              <IconButton
+                size="small"
+                color="primary"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAssign(row)
+                }}
+              >
+                <PersonAddRoundedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           )}
           <Tooltip title="Supprimer la facture">
             <IconButton
