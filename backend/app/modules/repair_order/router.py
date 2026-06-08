@@ -13,6 +13,7 @@ from app.modules.repair_order.models import ROStatus
 from app.modules.repair_order.repository import RepairOrderRepository
 from app.modules.repair_order.schemas import (
     AssignMechanicRequest,
+    DiagnosisRequest,
     MechanicSummary,
     RepairOrderCreateRequest,
     RepairOrderDetail,
@@ -543,6 +544,30 @@ async def accept_assignment(
     if ro.assigned_user_id is None:
         raise HTTPException(status_code=409, detail="No mechanic assigned to accept")
     ro.assignment_accepted_at = datetime.now(tz=timezone.utc)
+    await db.commit()
+    return await _get_detail(db, user.garage_id, public_id)
+
+
+@router.put(
+    "/{public_id}/diagnosis",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def save_diagnosis(
+    public_id: str,
+    body: DiagnosisRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Save diagnosis answers (D1..D5 + notes). Marking completed stamps the date."""
+    from datetime import datetime, timezone
+
+    ro = await RepairOrderRepository.get_by_public_id(db, user.garage_id, public_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    ro.diagnosis = {"answers": body.answers, "notes": body.notes}
+    if body.completed:
+        ro.diagnosis_completed_at = datetime.now(tz=timezone.utc)
     await db.commit()
     return await _get_detail(db, user.garage_id, public_id)
 

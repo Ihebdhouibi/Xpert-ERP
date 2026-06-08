@@ -152,6 +152,13 @@ class MechanicSummary(BaseModel):
     active_orders: int  # repair orders currently assigned & not finished/delivered
 
 
+class DiagnosisRequest(BaseModel):
+    """Diagnosis answers entered during the diagnosis step (D1..D5 Oui/Non + notes)."""
+    answers: dict[str, bool] = Field(default_factory=dict)
+    notes: Optional[str] = None
+    completed: bool = False
+
+
 class RepairOrderDetail(BaseModel):
     """Repair order full detail with line items and status history."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -169,6 +176,8 @@ class RepairOrderDetail(BaseModel):
     assigned_user_id: Optional[int]
     assigned_user_name: Optional[str] = None
     assignment_accepted_at: Optional[datetime] = None
+    diagnosis: Optional[dict] = None
+    diagnosis_completed_at: Optional[datetime] = None
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -195,6 +204,8 @@ class RepairOrderDetail(BaseModel):
                 "actual_cost_minor": data.actual_cost_minor,
                 "assigned_user_id": data.assigned_user_id,
                 "assignment_accepted_at": data.assignment_accepted_at,
+                "diagnosis": data.diagnosis,
+                "diagnosis_completed_at": data.diagnosis_completed_at,
                 "notes": data.notes,
                 "created_at": data.created_at,
                 "updated_at": data.updated_at,

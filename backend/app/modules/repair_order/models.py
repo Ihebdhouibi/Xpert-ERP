@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.core.types import BigIntPK
+from app.core.types import BigIntPK, JsonB
 
 
 class ROStatus(str, enum.Enum):
@@ -102,6 +102,11 @@ class RepairOrder(Base):
     )
     # Set when the assigned mechanic (or a secretary on their behalf) accepts the job.
     assignment_accepted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Diagnosis answers (D1..D5 + notes), filled during the diagnosis step.
+    diagnosis: Mapped[Optional[dict]] = mapped_column(JsonB, nullable=True)
+    diagnosis_completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

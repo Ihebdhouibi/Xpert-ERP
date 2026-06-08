@@ -56,6 +56,8 @@ export interface RepairOrderDetail extends RepairOrderSummary {
   assigned_user_id: number | null
   assigned_user_name: string | null
   assignment_accepted_at: string | null
+  diagnosis: { answers: Record<string, boolean>; notes: string | null } | null
+  diagnosis_completed_at: string | null
   labor_lines: ROLaborLine[]
   part_lines: ROPartLine[]
   status_events: ROStatusEvent[]
@@ -296,6 +298,15 @@ export const repairOrderApi = {
   acceptAssignment(publicId: string): Promise<RepairOrderDetail> {
     return apiClient
       .post(`/repair-orders/${publicId}/accept-assignment`)
+      .then((r) => r.data)
+  },
+
+  saveDiagnosis(
+    publicId: string,
+    body: { answers: Record<string, boolean>; notes: string | null; completed: boolean },
+  ): Promise<RepairOrderDetail> {
+    return apiClient
+      .put(`/repair-orders/${publicId}/diagnosis`, body)
       .then((r) => r.data)
   },
 

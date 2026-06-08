@@ -18,6 +18,8 @@ import {
   MenuItem,
   Select,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Table,
   TableBody,
   TableCell,
@@ -232,6 +234,116 @@ function StatusTransitionPanel({
             </Box>
           )
         })}
+      </Stack>
+    </Box>
+  )
+}
+
+// ─── Diagnosis ───────────────────────────────────────────────────────────────
+
+const DIAGNOSIS_QUESTIONS: { code: string; label: string }[] = [
+  { code: 'D1', label: 'Problème au niveau de la motorisation (moteur)' },
+  { code: 'D2', label: 'Problème au niveau du freinage' },
+  { code: 'D3', label: "Problème de transmission / embrayage" },
+  { code: 'D4', label: 'Problème électrique ou électronique' },
+  { code: 'D5', label: 'Problème de suspension / direction' },
+]
+
+function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: () => void }) {
+  const { success, error: toastError } = useToast()
+  const [answers, setAnswers] = useState<Record<string, boolean>>(
+    () => ro.diagnosis?.answers ?? {},
+  )
+  const [notes, setNotes] = useState(ro.diagnosis?.notes ?? '')
+  const completed = ro.diagnosis_completed_at !== null
+
+  const save = useMutation({
+    mutationFn: (finish: boolean) =>
+      repairOrderApi.saveDiagnosis(ro.id, { answers, notes: notes || null, completed: finish }),
+    onSuccess: (_d, finish) => {
+      success(finish ? 'Diagnostic terminé.' : 'Diagnostic enregistré.')
+      onUpdated()
+    },
+    onError: () => toastError("Impossible d'enregistrer le diagnostic."),
+  })
+
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          Diagnostic
+        </Typography>
+        {completed && (
+          <Chip
+            size="small"
+            color="success"
+            label={`Terminé le ${new Date(ro.diagnosis_completed_at!).toLocaleDateString('fr-FR')}`}
+          />
+        )}
+      </Stack>
+
+      <Stack spacing={1.5}>
+        {DIAGNOSIS_QUESTIONS.map((q) => (
+          <Stack
+            key={q.code}
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={2}
+          >
+            <Typography variant="body2">
+              <strong>{q.code}</strong> — {q.label}
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={answers[q.code] === undefined ? null : answers[q.code]}
+              onChange={(_e, v) => {
+                if (v === null) return
+                setAnswers((prev) => ({ ...prev, [q.code]: v }))
+              }}
+            >
+              <ToggleButton value={true} color="error" sx={{ textTransform: 'none', px: 2 }}>
+                Oui
+              </ToggleButton>
+              <ToggleButton value={false} color="success" sx={{ textTransform: 'none', px: 2 }}>
+                Non
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
+        ))}
+      </Stack>
+
+      <TextField
+        label="Observations (optionnel)"
+        multiline
+        minRows={2}
+        fullWidth
+        size="small"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        sx={{ mt: 2 }}
+      />
+
+      <Stack direction="row" spacing={1.5} justifyContent="flex-end" mt={2}>
+        <Button
+          variant="outlined"
+          size="small"
+          disabled={save.isPending}
+          onClick={() => save.mutate(false)}
+          sx={{ textTransform: 'none', fontWeight: 600 }}
+        >
+          Enregistrer
+        </Button>
+        <Button
+          variant="contained"
+          size="small"
+          disabled={save.isPending}
+          onClick={() => save.mutate(true)}
+          sx={{ textTransform: 'none', fontWeight: 700 }}
+        >
+          Terminer le diagnostic
+        </Button>
       </Stack>
     </Box>
   )
@@ -919,6 +1031,17 @@ export function RepairOrderDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Diagnosis (during the diagnosis step) */}
+          {ro.status === 'diagnosis' && (
+            <PermissionGate permission="repair_order.transition">
+              <Card sx={{ mb: 3 }}>
+                <CardContent sx={{ p: 3 }}>
+                  <DiagnosisPanel ro={ro} onUpdated={() => refetch()} />
+                </CardContent>
+              </Card>
+            </PermissionGate>
+          )}
 
           {/* Labor lines */}
           <Card sx={{ mb: 3 }}>
