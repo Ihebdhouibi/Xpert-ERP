@@ -915,6 +915,9 @@ export function RepairOrderDetailPage() {
         ]}
         actions={
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              Étape actuelle :
+            </Typography>
             <StatusChip status={ro.status} label={STATUS_LABELS[ro.status]} size="medium" />
             <PermissionGate permission="repair_order.read">
               <Button
