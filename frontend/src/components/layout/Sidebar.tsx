@@ -1,4 +1,3 @@
-import { type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   Box,
@@ -102,6 +101,7 @@ function NavItemWithPermission({
 }) {
   const { user } = useAuth()
   if (item.permission && !user?.permissions.includes(item.permission)) return null
+  if (item.hideForRoles && user?.roles.some((r) => item.hideForRoles!.includes(r))) return null
   return <NavItemRow item={item} collapsed={collapsed} />
 }
 
@@ -241,7 +241,9 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
       >
         {navSections.map((section, si) => {
           const hasVisible = section.items.some(
-            item => !item.permission || user?.permissions.includes(item.permission)
+            item =>
+              (!item.permission || user?.permissions.includes(item.permission)) &&
+              !(item.hideForRoles && user?.roles.some(r => item.hideForRoles!.includes(r)))
           )
           if (!hasVisible) return null
           return (

@@ -253,6 +253,7 @@ export function DashboardPage() {
   const k = live?.kpis
 
   const hasPermission = (p: string) => user?.permissions.includes(p) ?? false
+  const isMechanic = user?.roles.includes('mechanic') ?? false
 
   return (
     <Box>
@@ -319,38 +320,42 @@ export function DashboardPage() {
             onClick={() => navigate('/repair-orders')}
           />
         </Grid>
-        <Grid item xs={6} md={3}>
-          <MetricCard
-            label="CA du mois"
-            value={
-              k?.revenue_mtd?.value != null
-                ? formatMinor(k.revenue_mtd.value)
-                : '—'
-            }
-            sub="Chiffre d'affaires mois en cours"
-            icon={<TrendingUpRoundedIcon sx={{ fontSize: 22 }} />}
-            iconBg="#DCFCE7"
-            iconColor="#059669"
-            loading={isLoading}
-            onClick={() => navigate('/kpi')}
-          />
-        </Grid>
-        <Grid item xs={6} md={3}>
-          <MetricCard
-            label="Encours clients"
-            value={
-              k?.outstanding_amount_minor?.value != null
-                ? formatMinor(k.outstanding_amount_minor.value)
-                : '—'
-            }
-            sub="Créances clients en attente"
-            icon={<AccountBalanceWalletRoundedIcon sx={{ fontSize: 22 }} />}
-            iconBg="#FEE2E2"
-            iconColor="#DC2626"
-            loading={isLoading}
-            onClick={() => navigate('/kpi')}
-          />
-        </Grid>
+        {!isMechanic && (
+          <Grid item xs={6} md={3}>
+            <MetricCard
+              label="CA du mois"
+              value={
+                k?.revenue_mtd?.value != null
+                  ? formatMinor(k.revenue_mtd.value)
+                  : '—'
+              }
+              sub="Chiffre d'affaires mois en cours"
+              icon={<TrendingUpRoundedIcon sx={{ fontSize: 22 }} />}
+              iconBg="#DCFCE7"
+              iconColor="#059669"
+              loading={isLoading}
+              onClick={() => navigate('/kpi')}
+            />
+          </Grid>
+        )}
+        {!isMechanic && (
+          <Grid item xs={6} md={3}>
+            <MetricCard
+              label="Encours clients"
+              value={
+                k?.outstanding_amount_minor?.value != null
+                  ? formatMinor(k.outstanding_amount_minor.value)
+                  : '—'
+              }
+              sub="Créances clients en attente"
+              icon={<AccountBalanceWalletRoundedIcon sx={{ fontSize: 22 }} />}
+              iconBg="#FEE2E2"
+              iconColor="#DC2626"
+              loading={isLoading}
+              onClick={() => navigate('/kpi')}
+            />
+          </Grid>
+        )}
         <Grid item xs={6} md={3}>
           <MetricCard
             label="Alertes stock"
@@ -409,7 +414,7 @@ export function DashboardPage() {
                   iconColor="#EA580C"
                   to="/stock"
                 />
-                {hasPermission('reporting.dashboard.read') && (
+                {hasPermission('reporting.dashboard.read') && !isMechanic && (
                   <QuickActionCard
                     label="Tableau de bord KPI"
                     description="Indicateurs de performance de l'atelier"
@@ -482,7 +487,7 @@ export function DashboardPage() {
                     hasPermission('purchase_order.read') && { label: 'Bons de cmd.', sub: "Ordres d'achat", icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/purchase-orders' },
                     hasPermission('part.read') && { label: 'Catalogue', sub: 'Pièces & SKU', icon: <InventoryRoundedIcon sx={{ fontSize: 18 }} />, to: '/parts' },
                     hasPermission('part.read') && { label: 'Stock', sub: 'Niveaux & alertes', icon: <WarningAmberRoundedIcon sx={{ fontSize: 18 }} />, to: '/stock' },
-                  ].filter(Boolean).map((m: any) => (
+                  ].filter((m): m is { label: string; sub: string; icon: React.ReactNode; to: string } => Boolean(m)).map((m) => (
                     <Grid item xs={6} sm={3} key={m.to}>
                       <ModuleTile {...m} />
                     </Grid>
@@ -491,7 +496,7 @@ export function DashboardPage() {
               </Box>
               )}
 
-              {hasPermission('reporting.dashboard.read') && (
+              {hasPermission('reporting.dashboard.read') && !isMechanic && (
                 <>
                   <Divider sx={{ my: 1.5 }} />
                   <Box>

@@ -30,6 +30,8 @@ export interface NavItem {
   path: string
   icon: SvgIconComponent
   permission?: string
+  /** Hide this item for users holding any of these roles (e.g. mechanic). */
+  hideForRoles?: string[]
   exact?: boolean
 }
 
@@ -186,6 +188,7 @@ export const navSections: NavSection[] = [
         path: '/kpi',
         icon: BarChartRoundedIcon,
         permission: 'reporting.dashboard.read',
+        hideForRoles: ['mechanic'],
       },
     ],
   },

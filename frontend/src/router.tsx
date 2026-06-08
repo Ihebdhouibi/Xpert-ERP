@@ -147,7 +147,14 @@ export const router = createBrowserRouter(
       { path: 'accounting-export', element: <AccountingExportPage /> },
 
       // Analytics
-      { path: 'kpi', element: <KpiDashboardPage /> },
+      {
+        path: 'kpi',
+        element: (
+          <ProtectedRoute requiredPermission="reporting.dashboard.read" deniedRoles={['mechanic']}>
+            <KpiDashboardPage />
+          </ProtectedRoute>
+        ),
+      },
 
       // Administration
       { path: 'users', element: <UsersPage /> },
