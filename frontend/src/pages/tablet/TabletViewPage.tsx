@@ -154,7 +154,7 @@ function ROCard({ ro }: { ro: RepairOrderSummary }) {
                 </Typography>
                 <Typography variant="caption" color="text.disabled">·</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Client #{ro.customer_id}
+                  {ro.customer_name ?? `Client #${ro.customer_id}`}
                 </Typography>
                 {ro.vehicle_id && (
                   <>
@@ -443,6 +443,8 @@ function getInternalUserId(): number | undefined {
 
 export function TabletViewPage() {
   const { user } = useAuth()
+  // Recompute when the authenticated user changes (getInternalUserId reads auth state).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const internalUserId = useMemo(() => getInternalUserId(), [user])
 
   const { data, isLoading, isError, refetch } = useQuery({

@@ -871,7 +871,7 @@ export function RepairOrderDetailPage() {
                         >
                           {customer.full_name}
                         </Typography>
-                      ) : `#${ro.customer_id}`
+                      ) : (ro.customer_name ?? `#${ro.customer_id}`)
                     }
                   />
                 </Grid>

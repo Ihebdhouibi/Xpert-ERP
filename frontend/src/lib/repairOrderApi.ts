@@ -37,6 +37,7 @@ export interface ROStatusEvent {
 export interface RepairOrderSummary {
   id: string
   customer_id: number
+  customer_name?: string | null
   vehicle_id: number | null
   description: string
   status: ROStatus

@@ -36,6 +36,22 @@ router = APIRouter(prefix="/repair-orders", tags=["repair-orders"])
 logger = get_logger("repair_order.router")
 
 
+async def _customer_name(db: AsyncSession, garage_id: int, customer_id: Optional[int]) -> Optional[str]:
+    """Resolve a customer's display name (full name, optionally with company)."""
+    if customer_id is None:
+        return None
+    from app.modules.customer import repository as customer_repo
+
+    customer = await customer_repo.get_by_id(db, garage_id, customer_id)
+    if not customer:
+        return None
+    return (
+        f"{customer.full_name} ({customer.company_name})"
+        if customer.company_name
+        else customer.full_name
+    )
+
+
 async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:
     """Resolve JWT subject (public_id) → internal app_user.id for audit."""
     import uuid as _uuid
@@ -55,7 +71,9 @@ async def _get_detail(db: AsyncSession, garage_id: int, public_id: str, include_
     )
     if not ro:
         raise HTTPException(status_code=404, detail="Repair order not found")
-    return RepairOrderDetail.model_validate(ro)
+    detail = RepairOrderDetail.model_validate(ro)
+    detail.customer_name = await _customer_name(db, garage_id, ro.customer_id)
+    return detail
 
 
 @router.get(
@@ -86,8 +104,13 @@ async def list_repair_orders(
         page=page,
         page_size=page_size,
     )
+    items = []
+    for ro in rows:
+        summary = RepairOrderSummary.model_validate(ro)
+        summary.customer_name = await _customer_name(db, user.garage_id, ro.customer_id)
+        items.append(summary)
     return {
-        "items": [RepairOrderSummary.model_validate(ro) for ro in rows],
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,

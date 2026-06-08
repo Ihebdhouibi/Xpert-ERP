@@ -113,6 +113,7 @@ class RepairOrderSummary(BaseModel):
 
     id: str  # public_id
     customer_id: int
+    customer_name: Optional[str] = None
     vehicle_id: Optional[int]
     description: str
     status: ROStatus
@@ -150,6 +151,7 @@ class RepairOrderDetail(BaseModel):
 
     id: str  # public_id
     customer_id: int
+    customer_name: Optional[str] = None
     vehicle_id: Optional[int]
     description: str
     status: ROStatus

@@ -120,7 +120,7 @@ function KanbanCard({
           )}
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          Client #{ro.customer_id}
+          {ro.customer_name ?? `Client #${ro.customer_id}`}
           {ro.assigned_user_id ? ` · Méc. #${ro.assigned_user_id}` : ''}
         </Typography>
       </Stack>
@@ -269,7 +269,7 @@ function MobileGroupedList({ grouped }: { grouped: Record<ROStatus, RepairOrderS
                   <Box flex={1} minWidth={0} mr={1}>
                     <Typography variant="body2" fontWeight={600} noWrap>{ro.description}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Client #{ro.customer_id} · #{ro.id.slice(-6).toUpperCase()}
+                      {ro.customer_name ?? `Client #${ro.customer_id}`} · #{ro.id.slice(-6).toUpperCase()}
                     </Typography>
                   </Box>
                   <StatusChip status={ro.status} label={STATUS_LABELS[s]} />
