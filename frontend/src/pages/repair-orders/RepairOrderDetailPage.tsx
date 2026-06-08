@@ -786,6 +786,9 @@ export function RepairOrderDetailPage() {
     queryKey: ['repair-order', publicId],
     queryFn: () => repairOrderApi.get(publicId),
     enabled: !!publicId,
+    // Poll so changes from other users (e.g. a mechanic accepting) appear live.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const roForQueries = data
