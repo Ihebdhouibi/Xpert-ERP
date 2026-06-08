@@ -24,8 +24,6 @@ import {
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
-import StopRoundedIcon from '@mui/icons-material/StopRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateRounded'
@@ -33,8 +31,6 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
-import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded'
-import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -230,138 +226,6 @@ function StatusTransitionPanel({
           )
         })}
       </Stack>
-    </Box>
-  )
-}
-
-// ─── Timer ──────────────────────────────────────────────────────────────────
-
-function TimerPanel({ publicId }: { publicId: string }) {
-  const queryClient = useQueryClient()
-  const { success, error: toastError } = useToast()
-  const [stopNotes, setStopNotes] = useState('')
-
-  const { data } = useQuery({
-    queryKey: ['time-entries', publicId],
-    queryFn: () => repairOrderApi.listTimeEntries(publicId),
-  })
-
-  const openEntry = data?.items.find(e => e.ended_at === null)
-
-  const startMutation = useMutation({
-    mutationFn: () => repairOrderApi.startTimeEntry(publicId),
-    onSuccess: () => {
-      success('Pointage démarré.')
-      queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
-    },
-    onError: () => toastError('Une session de pointage est déjà ouverte.'),
-  })
-
-  const stopMutation = useMutation({
-    mutationFn: () => repairOrderApi.stopTimeEntry(publicId, stopNotes || undefined),
-    onSuccess: () => {
-      success('Pointage arrêté.')
-      setStopNotes('')
-      queryClient.invalidateQueries({ queryKey: ['time-entries', publicId] })
-    },
-    onError: () => toastError('Aucune session ouverte à arrêter.'),
-  })
-
-  const totalMinutes =
-    data?.items
-      .filter(e => e.duration_minutes !== null)
-      .reduce((sum, e) => sum + (e.duration_minutes ?? 0), 0) ?? 0
-
-  return (
-    <Box>
-      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={SECTION_LABEL_SX}>
-        Pointage du temps
-      </Typography>
-
-      {openEntry ? (
-        <Box>
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={1}
-            mb={1.5}
-            sx={{ p: 1.25, bgcolor: '#F0FDF4', borderRadius: 1.5, border: '1px solid #BBF7D0' }}
-          >
-            <RadioButtonCheckedRoundedIcon sx={{ color: '#16A34A', fontSize: 15 }} />
-            <Typography variant="caption" fontWeight={700} color="success.main">
-              En cours depuis {new Date(openEntry.started_at).toLocaleTimeString('fr-FR')}
-            </Typography>
-          </Stack>
-          <TextField
-            size="small"
-            fullWidth
-            placeholder="Note de fin (optionnel)"
-            value={stopNotes}
-            onChange={e => setStopNotes(e.target.value)}
-            sx={{ mb: 1 }}
-          />
-          <Button
-            variant="contained"
-            color="error"
-            fullWidth
-            size="small"
-            startIcon={<StopRoundedIcon />}
-            disabled={stopMutation.isPending}
-            onClick={() => stopMutation.mutate()}
-            sx={{ textTransform: 'none', fontWeight: 700 }}
-          >
-            Arrêter le pointage
-          </Button>
-        </Box>
-      ) : (
-        <Button
-          variant="outlined"
-          fullWidth
-          size="small"
-          startIcon={<PlayArrowRoundedIcon />}
-          disabled={startMutation.isPending}
-          onClick={() => startMutation.mutate()}
-          sx={{ textTransform: 'none', fontWeight: 600 }}
-        >
-          Démarrer une session
-        </Button>
-      )}
-
-      {totalMinutes > 0 && (
-        <Stack direction="row" alignItems="center" spacing={0.75} mt={1.5}>
-          <AccessTimeRoundedIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-          <Typography variant="caption" color="text.secondary" fontWeight={600}>
-            Total : {Math.floor(totalMinutes / 60)}h{String(totalMinutes % 60).padStart(2, '0')}
-          </Typography>
-        </Stack>
-      )}
-
-      {data && data.items.length > 0 && (
-        <Box mt={2}>
-          <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" mb={0.75}>
-            Historique des sessions
-          </Typography>
-          <Stack spacing={0.5}>
-            {data.items.map(e => (
-              <Stack
-                key={e.id}
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                sx={{ px: 1.25, py: 0.75, bgcolor: '#F8FAFC', borderRadius: 1, border: '1px solid #F1F5F9' }}
-              >
-                <Typography variant="caption" color="text.secondary">
-                  {new Date(e.started_at).toLocaleTimeString('fr-FR')}
-                  {e.ended_at && ` → ${new Date(e.ended_at).toLocaleTimeString('fr-FR')}`}
-                </Typography>
-                <Typography variant="caption" fontWeight={700} color={e.ended_at ? 'text.primary' : 'success.main'}>
-                  {e.duration_minutes != null ? `${e.duration_minutes} min` : '●'}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-        </Box>
-      )}
     </Box>
   )
 }
@@ -1271,15 +1135,6 @@ export function RepairOrderDetailPage() {
                 </Card>
               </PermissionGate>
             )}
-
-            {/* Timer */}
-            <PermissionGate permission="repair_order.update">
-              <Card>
-                <CardContent sx={{ p: 2.5 }}>
-                  <TimerPanel publicId={publicId} />
-                </CardContent>
-              </Card>
-            </PermissionGate>
 
             {/* Status timeline */}
             <Card>
