@@ -45,6 +45,19 @@ async def get_by_id(
     return result.scalar_one_or_none()
 
 
+async def get_latest_by_document(
+    db: AsyncSession, *, document_id: int
+) -> Optional[OcrExtraction]:
+    """Most recent extraction for a document (for reusing cached results)."""
+    result = await db.execute(
+        select(OcrExtraction)
+        .where(OcrExtraction.document_id == document_id)
+        .order_by(OcrExtraction.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_pending(db: AsyncSession) -> list[OcrExtraction]:
     result = await db.execute(
         select(OcrExtraction).where(OcrExtraction.status == OcrStatus.pending)

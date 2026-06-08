@@ -71,6 +71,16 @@ export const ocrApi = {
       .get<OcrExtractionOut>(`/ocr/${extractionId}`)
       .then((r) => r.data),
 
+  // Latest cached extraction for a document, or null if none exists yet.
+  getByDocument: (documentPublicId: string) =>
+    apiClient
+      .get<OcrExtractionOut>(`/ocr/by-document/${documentPublicId}`)
+      .then((r) => r.data)
+      .catch((e) => {
+        if (e?.response?.status === 404) return null
+        throw e
+      }),
+
   confirm: (extractionId: string, body: ConfirmFieldsRequest) =>
     apiClient
       .post<OcrExtractionOut>(`/ocr/${extractionId}/confirm`, body)

@@ -48,6 +48,33 @@ async def enqueue_ocr(
 
 
 @router.get(
+    "/by-document/{document_public_id}",
+    response_model=OcrExtractionOut,
+    dependencies=[require_permission("document.read")],
+    summary="Get the latest cached extraction for a document",
+)
+async def get_latest_for_document(
+    document_public_id: uuid.UUID,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> OcrExtractionOut:
+    """Return the most recent extraction for a document without re-running OCR."""
+    from app.modules.ocr import repository as repo
+
+    document = await doc_repo.get_by_public_id(
+        db, public_id=document_public_id, garage_id=user.garage_id
+    )
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    extraction = await repo.get_latest_by_document(db, document_id=document.id)
+    if extraction is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No extraction for this document"
+        )
+    return OcrExtractionOut.from_model(extraction, document)
+
+
+@router.get(
     "/{extraction_id}",
     response_model=OcrExtractionOut,
     dependencies=[require_permission("document.read")],

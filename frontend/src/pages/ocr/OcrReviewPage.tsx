@@ -31,6 +31,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import RefreshIcon from '@mui/icons-material/Refresh'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -451,6 +452,19 @@ export function OcrReviewPage() {
     }
   }
 
+  async function handleReanalyze() {
+    if (!extraction?.document_public_id) return
+    setSaving(true)
+    try {
+      const fresh = await ocrApi.enqueue(extraction.document_public_id)
+      navigate(`/ocr/${fresh.id}`)
+    } catch {
+      setError("Impossible de relancer l'analyse.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleReject() {
     if (!extractionId) return
     setSaving(true)
@@ -498,6 +512,15 @@ export function OcrReviewPage() {
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
         <Typography variant="h5">Vérification OCR</Typography>
         {category && <Chip size="small" label={categoryLabel} variant="outlined" />}
+        <Box flexGrow={1} />
+        <Button
+          size="small"
+          startIcon={<RefreshIcon />}
+          onClick={handleReanalyze}
+          disabled={saving || isPending}
+        >
+          Ré-analyser
+        </Button>
       </Stack>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

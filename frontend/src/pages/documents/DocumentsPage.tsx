@@ -9,7 +9,6 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControl,
   IconButton,
   InputAdornment,
@@ -205,7 +204,9 @@ export function DocumentsPage() {
   const handleLaunchOcr = async (doc: DocumentOut) => {
     setEnqueuingId(doc.id)
     try {
-      const extraction = await ocrApi.enqueue(doc.id)
+      // Reuse the cached extraction if the document was already analysed.
+      const existing = await ocrApi.getByDocument(doc.id)
+      const extraction = existing ?? (await ocrApi.enqueue(doc.id))
       navigate(`/ocr/${extraction.id}`)
     } catch {
       alert('Impossible de lancer l\'analyse OCR.')
