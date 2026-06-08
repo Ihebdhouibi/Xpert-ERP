@@ -99,14 +99,43 @@ async def create_quotation_from_repair_order(
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
     from app.modules.repair_order.repository import RepairOrderRepository
+    from app.modules.repair_order.schemas import DIAGNOSIS_QUESTIONS
+
     ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
     if not ro:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
+
+    # Build quotation notes including the responsible mechanic and the diagnosis.
+    sections: list[str] = []
+    if ro.notes:
+        sections.append(ro.notes)
+
+    if ro.assigned_user_id is not None:
+        from app.modules.auth.models import AppUser
+        from sqlalchemy import select as _select
+
+        name = (
+            await db.execute(_select(AppUser.full_name).where(AppUser.id == ro.assigned_user_id))
+        ).scalar_one_or_none()
+        if name:
+            sections.append(f"Mécanicien responsable : {name}")
+
+    if ro.diagnosis:
+        answers = (ro.diagnosis or {}).get("answers", {})
+        diag_lines = [
+            f"- {code} {label} : {'Oui' if answers.get(code) else 'Non'}"
+            for code, label in DIAGNOSIS_QUESTIONS
+        ]
+        sections.append("Diagnostic :\n" + "\n".join(diag_lines))
+        diag_notes = (ro.diagnosis or {}).get("notes")
+        if diag_notes:
+            sections.append(f"Observations : {diag_notes}")
+
     request = QuotationCreateRequest(
         customer_id=ro.customer_id,
         vehicle_id=ro.vehicle_id,
         repair_order_id=ro.id,
-        notes=ro.notes,
+        notes="\n\n".join(sections) if sections else None,
     )
     return await service.create_quotation(
         db, request=request, garage_id=user.garage_id, user_id=user.user_id

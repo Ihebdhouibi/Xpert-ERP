@@ -159,6 +159,16 @@ class DiagnosisRequest(BaseModel):
     completed: bool = False
 
 
+# Diagnosis catalogue (kept in sync with the frontend DIAGNOSIS_QUESTIONS).
+DIAGNOSIS_QUESTIONS: list[tuple[str, str]] = [
+    ("D1", "Problème au niveau de la motorisation (moteur)"),
+    ("D2", "Problème au niveau du freinage"),
+    ("D3", "Problème de transmission / embrayage"),
+    ("D4", "Problème électrique ou électronique"),
+    ("D5", "Problème de suspension / direction"),
+]
+
+
 class RepairOrderDetail(BaseModel):
     """Repair order full detail with line items and status history."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

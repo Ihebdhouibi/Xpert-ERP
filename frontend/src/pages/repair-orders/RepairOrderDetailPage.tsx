@@ -1341,12 +1341,17 @@ export function RepairOrderDetailPage() {
                       variant="contained"
                       fullWidth
                       startIcon={<DescriptionRoundedIcon />}
-                      disabled={createDevisMutation.isPending}
+                      disabled={createDevisMutation.isPending || !ro.diagnosis_completed_at}
                       onClick={() => createDevisMutation.mutate()}
                       sx={{ textTransform: 'none', fontWeight: 700 }}
                     >
                       {createDevisMutation.isPending ? 'Création…' : 'Créer un devis'}
                     </Button>
+                    {!ro.diagnosis_completed_at && (
+                      <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                        Terminez le diagnostic pour générer le devis.
+                      </Typography>
+                    )}
                   </CardContent>
                 </Card>
               </PermissionGate>
