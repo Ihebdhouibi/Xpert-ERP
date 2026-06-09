@@ -117,7 +117,7 @@ async def get_template(
 @router.put(
     "/notification-templates/{template_id}",
     response_model=TemplateResponse,
-    dependencies=[require_permission("notification.write")],
+    dependencies=[require_permission("notification.template.manage")],
 )
 async def update_template(
     template_id: int,

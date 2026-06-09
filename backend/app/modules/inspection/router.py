@@ -130,7 +130,7 @@ async def list_templates(
     "/inspection-templates",
     response_model=InspectionTemplateSummary,
     status_code=201,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.template.manage")],
 )
 async def create_template_endpoint(
     body: InspectionTemplateCreateRequest,
@@ -170,7 +170,7 @@ async def get_template(
 @router.put(
     "/inspection-templates/{public_id}",
     response_model=InspectionTemplateSummary,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.template.manage")],
 )
 async def update_template_endpoint(
     public_id: str,
@@ -200,7 +200,7 @@ async def update_template_endpoint(
     "/inspection-templates/{public_id}",
     status_code=204,
     response_model=None,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.template.manage")],
 )
 async def delete_template_endpoint(
     public_id: str,
@@ -261,7 +261,7 @@ async def list_inspections(
     "/inspections",
     response_model=InspectionDetail,
     status_code=201,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def create_inspection_endpoint(
     body: InspectionCreateRequest,
@@ -314,7 +314,7 @@ async def get_inspection(
 @router.put(
     "/inspections/{public_id}/status",
     response_model=InspectionSummary,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def transition_status_endpoint(
     public_id: str,
@@ -352,7 +352,7 @@ async def transition_status_endpoint(
 @router.post(
     "/inspections/{public_id}/results",
     response_model=BulkResultsResponse,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def submit_bulk_results(
     public_id: str,
@@ -396,7 +396,7 @@ async def submit_bulk_results(
     "/inspections/{public_id}/recommendations",
     response_model=list[VehicleRecommendationResponse],
     status_code=201,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def archive_declined_endpoint(
     public_id: str,
@@ -425,7 +425,7 @@ async def archive_declined_endpoint(
 @router.post(
     "/inspections/{public_id}/convert-to-ro",
     response_model=InspectionSummary,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def convert_to_ro_endpoint(
     public_id: str,
@@ -501,7 +501,7 @@ async def download_inspection_report(
     "/inspections/{public_id}/approval-link",
     response_model=GenerateApprovalLinkResponse,
     status_code=201,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
 )
 async def create_approval_link(
     public_id: str,

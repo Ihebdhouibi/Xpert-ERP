@@ -58,7 +58,7 @@ async def _resolve_inspection(
     "/upload-sessions",
     response_model=UploadSessionOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
     summary="Initiate a resumable chunked upload session",
 )
 async def create_session(
@@ -92,7 +92,7 @@ async def create_session(
 @router.get(
     "/upload-sessions/{session_id}",
     response_model=UploadSessionOut,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
     summary="Get upload session state (for resume)",
 )
 async def get_session(
@@ -109,7 +109,7 @@ async def get_session(
 @router.put(
     "/upload-sessions/{session_id}/parts/{part_number}",
     response_model=PartUploadOut,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
     summary="Upload one chunk (1-based part number)",
 )
 async def upload_part(
@@ -145,7 +145,7 @@ async def upload_part(
 @router.post(
     "/upload-sessions/{session_id}/complete",
     response_model=RoMediaOut,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
     summary="Finalise the upload and create the media record",
 )
 async def complete_session(
@@ -201,7 +201,7 @@ async def get_signed_url(
     "/{media_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_model=None,
-    dependencies=[require_permission("inspection.write")],
+    dependencies=[require_permission("inspection.execute")],
     summary="Soft-delete a media record",
 )
 async def delete_media(
