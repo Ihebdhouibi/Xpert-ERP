@@ -780,7 +780,6 @@ export function RepairOrderDetailPage() {
   // Add-labor inline form state
   const [showAddLabor, setShowAddLabor] = useState(false)
   const [laborType, setLaborType] = useState('')
-  const [laborMinutes, setLaborMinutes] = useState('')
   const [laborRate, setLaborRate] = useState('')
 
   // Add-part inline form state
@@ -842,13 +841,12 @@ export function RepairOrderDetailPage() {
   const addLaborMutation = useMutation({
     mutationFn: () => repairOrderApi.addLaborLine(publicId, {
       labor_type: laborType,
-      duration_minutes: parseInt(laborMinutes, 10),
       rate_minor: Math.round(parseFloat(laborRate) * 100),
     }),
     onSuccess: () => {
       success('Ligne de main d\'œuvre ajoutée.')
       setShowAddLabor(false)
-      setLaborType(''); setLaborMinutes(''); setLaborRate('')
+      setLaborType(''); setLaborRate('')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la ligne.'),
@@ -1107,14 +1105,13 @@ export function RepairOrderDetailPage() {
                 <Box sx={{ px: 3, pb: 2 }}>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
                     <TextField size="small" label="Désignation" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
-                    <TextField size="small" label="Durée (min)" type="number" value={laborMinutes} onChange={e => setLaborMinutes(e.target.value)} sx={{ flex: 1 }} />
                     <TextField size="small" label="Prix (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
                   </Stack>
                   <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => setShowAddLabor(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
                     <Button
                       size="small" variant="contained"
-                      disabled={addLaborMutation.isPending || !laborType.trim() || !laborMinutes || !laborRate}
+                      disabled={addLaborMutation.isPending || !laborType.trim() || !laborRate}
                       onClick={() => addLaborMutation.mutate()}
                       sx={{ textTransform: 'none', fontWeight: 700 }}
                     >
@@ -1133,7 +1130,6 @@ export function RepairOrderDetailPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Désignation</TableCell>
-                      <TableCell align="right">Durée</TableCell>
                       <TableCell align="right">Prix</TableCell>
                       <TableCell align="right">Montant</TableCell>
                     </TableRow>
@@ -1145,9 +1141,6 @@ export function RepairOrderDetailPage() {
                           <Typography variant="body2" fontWeight={500}>{line.labor_type}</Typography>
                         </TableCell>
                         <TableCell align="right">
-                          <Typography variant="body2">{line.duration_minutes} min</Typography>
-                        </TableCell>
-                        <TableCell align="right">
                           <Typography variant="body2">{formatMinor(line.rate_minor, currency)}</Typography>
                         </TableCell>
                         <TableCell align="right">
@@ -1156,7 +1149,7 @@ export function RepairOrderDetailPage() {
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                      <TableCell colSpan={3}>
+                      <TableCell colSpan={2}>
                         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           Total MO
                         </Typography>

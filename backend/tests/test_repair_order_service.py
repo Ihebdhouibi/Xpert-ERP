@@ -222,11 +222,11 @@ class TestLaborLines:
         updated = await RepairOrderService.add_labor_line(
             db_session, GARAGE, ACTOR, str(ro.public_id),
             labor_type="Oil change",
-            duration_minutes=60,
+            duration_minutes=0,
             rate_minor=5000,  # 50.00
         )
-        # amount = 60 * 5000 = 300,000 minor units
-        assert updated.actual_cost_minor == 300000
+        # Labor is a flat price: amount = rate (duration is no longer a factor)
+        assert updated.actual_cost_minor == 5000
 
     async def test_multiple_labor_lines_sum_correctly(self, db_session: AsyncSession):
         ro = await _create_ro(db_session)
@@ -234,13 +234,13 @@ class TestLaborLines:
         pid = str(ro.public_id)
 
         await RepairOrderService.add_labor_line(
-            db_session, GARAGE, ACTOR, pid, "Labor A", 30, 4000
+            db_session, GARAGE, ACTOR, pid, "Labor A", 0, 4000
         )
         updated = await RepairOrderService.add_labor_line(
-            db_session, GARAGE, ACTOR, pid, "Labor B", 60, 5000
+            db_session, GARAGE, ACTOR, pid, "Labor B", 0, 5000
         )
-        # (30*4000) + (60*5000) = 120,000 + 300,000 = 420,000
-        assert updated.actual_cost_minor == 420000
+        # Flat price per line: 4000 + 5000 = 9,000
+        assert updated.actual_cost_minor == 9000
 
 
 # ---------------------------------------------------------------------------
@@ -268,12 +268,12 @@ class TestPartLines:
         pid = str(ro.public_id)
 
         await RepairOrderService.add_labor_line(
-            db_session, GARAGE, ACTOR, pid, "Labor", 60, 5000
-        )  # 300,000
+            db_session, GARAGE, ACTOR, pid, "Labor", 0, 5000
+        )  # flat 5,000
         updated = await RepairOrderService.add_part_line(
             db_session, GARAGE, ACTOR, pid, "Filter", 1, 2000
         )  # 2,000
-        assert updated.actual_cost_minor == 302000
+        assert updated.actual_cost_minor == 7000
 
 
 # ---------------------------------------------------------------------------

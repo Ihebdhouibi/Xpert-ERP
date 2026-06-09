@@ -100,7 +100,7 @@ export interface StatusTransitionInput {
 
 export interface LaborLineInput {
   labor_type: string
-  duration_minutes: number
+  duration_minutes?: number
   rate_minor: number
 }
 

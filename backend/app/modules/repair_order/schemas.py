@@ -9,7 +9,7 @@ from app.modules.repair_order.models import ROStatus
 class ROLaborLineCreateRequest(BaseModel):
     """Request to add a labor line to a repair order."""
     labor_type: str = Field(..., min_length=1, max_length=100)
-    duration_minutes: int = Field(..., gt=0)
+    duration_minutes: int = Field(0, ge=0)
     rate_minor: int = Field(..., gt=0)
 
 

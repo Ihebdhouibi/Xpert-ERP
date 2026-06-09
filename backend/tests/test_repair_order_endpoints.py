@@ -347,12 +347,12 @@ class TestLaborLines:
 
         resp = await ro_client.post(
             f"/api/v1/repair-orders/{pid}/labor-lines",
-            json={"labor_type": "Oil change", "duration_minutes": 30, "rate_minor": 4000},
+            json={"labor_type": "Oil change", "rate_minor": 4000},
             headers=_auth(token),
         )
         assert resp.status_code == 200
-        # 30 * 4000 = 120,000
-        assert resp.json()["actual_cost_minor"] == 120000
+        # Labor is a flat price: amount = rate, duration is no longer sent
+        assert resp.json()["actual_cost_minor"] == 4000
 
 
 # ---------------------------------------------------------------------------
