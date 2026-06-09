@@ -14,7 +14,7 @@ from app.core.redis import get_redis
 from app.main import create_app
 from app.modules.auth.models import Permission, Role, RolePermission
 
-SUPPLIER_PERMISSIONS = ("supplier.read", "supplier.write")
+SUPPLIER_PERMISSIONS = ("supplier.read", "supplier.create", "supplier.update", "supplier.delete")
 PART_PERMISSIONS = ("part.read", "part.create", "part.update", "part.delete")
 ALL_PERMISSIONS = SUPPLIER_PERMISSIONS + PART_PERMISSIONS
 

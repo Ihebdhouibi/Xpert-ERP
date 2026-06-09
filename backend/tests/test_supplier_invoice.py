@@ -28,7 +28,7 @@ PO_PERMISSIONS = (
     "purchase_order.reception.record",
 )
 PART_PERMISSIONS = ("part.read", "part.create", "part.update", "part.delete")
-SUPPLIER_PERMISSIONS = ("supplier.read", "supplier.write")
+SUPPLIER_PERMISSIONS = ("supplier.read", "supplier.create", "supplier.update", "supplier.delete")
 
 ALL_PERMISSIONS = SI_PERMISSIONS + PO_PERMISSIONS + PART_PERMISSIONS + SUPPLIER_PERMISSIONS
 
