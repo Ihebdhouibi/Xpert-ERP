@@ -25,7 +25,6 @@ import { repairOrderApi } from '../../lib/repairOrderApi'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { MoneyField } from '../../components/ui/MoneyField'
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 const PRIORITY_LABELS: Record<string, string> = {
@@ -90,8 +89,6 @@ export function RepairOrderCreatePage() {
   // Form fields
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('normal')
-  const [estimatedMinor, setEstimatedMinor] = useState('')
-  const [estimatedCurrency, setEstimatedCurrency] = useState('EUR')
 
   // Validation errors
   const [fieldErrors, setFieldErrors] = useState<{ customer?: string; description?: string }>({})
@@ -182,8 +179,6 @@ export function RepairOrderCreatePage() {
         vehicle_id: selectedVehicle?.id ?? null,
         description: description.trim(),
         priority: priority ?? null,
-        estimated_cost_minor: estimatedMinor ? Number(estimatedMinor) : null,
-        estimated_cost_currency: estimatedCurrency || null,
       })
       navigate(`/repair-orders/${ro.id}`)
     } catch (err) {
@@ -380,7 +375,7 @@ export function RepairOrderCreatePage() {
         <Grid item xs={12} md={5}>
           <Stack spacing={3}>
             <SectionCard
-              title="Priorité & Estimation"
+              title="Priorité"
               icon={<TuneRoundedIcon sx={{ fontSize: 20 }} />}
             >
               <Stack spacing={2.5}>
@@ -400,22 +395,6 @@ export function RepairOrderCreatePage() {
                     </MenuItem>
                   ))}
                 </TextField>
-
-                <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <MoneyField
-                    label="Coût estimé"
-                    valueMinor={Number(estimatedMinor) || 0}
-                    onChangeMinor={(m) => setEstimatedMinor(m ? String(m) : '')}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Devise"
-                    value={estimatedCurrency}
-                    onChange={e => setEstimatedCurrency(e.target.value.toUpperCase())}
-                    sx={{ width: 100, flexShrink: 0 }}
-                    inputProps={{ style: { fontFamily: 'monospace', textTransform: 'uppercase' }, maxLength: 3 }}
-                  />
-                </Stack>
               </Stack>
             </SectionCard>
           </Stack>
