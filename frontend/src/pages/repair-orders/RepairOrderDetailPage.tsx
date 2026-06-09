@@ -1189,9 +1189,9 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddPart && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="flex-start">
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="flex-start" flexWrap="wrap">
                     <Autocomplete
-                      sx={{ flex: 2 }}
+                      sx={{ flex: 2, minWidth: 0, width: { xs: '100%', sm: 'auto' } }}
                       size="small"
                       options={partsResults?.items ?? []}
                       getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
@@ -1222,7 +1222,7 @@ export function RepairOrderDetailPage() {
                       value={partQty}
                       onChange={e => setPartQty(e.target.value)}
                       inputProps={{ min: 1, max: selectedPart?.stock_on_hand ?? undefined, step: 1 }}
-                      sx={{ flex: 0, width: 110 }}
+                      sx={{ flexShrink: 0, width: 110 }}
                       helperText={selectedPart ? `Max : ${selectedPart.stock_on_hand}` : ''}
                     />
                     <TextField
@@ -1230,7 +1230,7 @@ export function RepairOrderDetailPage() {
                       label="Prix unit. (€)"
                       value={selectedPart ? (selectedPart.selling_price_minor / 100).toFixed(2) : ''}
                       InputProps={{ readOnly: true }}
-                      sx={{ flex: 0, width: 120 }}
+                      sx={{ flexShrink: 0, width: 120 }}
                     />
                   </Stack>
                   <Stack direction="row" spacing={1}>
