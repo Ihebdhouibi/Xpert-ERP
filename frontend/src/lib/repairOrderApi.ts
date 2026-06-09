@@ -108,6 +108,8 @@ export interface PartLineInput {
   part_name: string
   quantity: number
   unit_cost_minor: number
+  // Public id of the catalogue part — when set, the backend reserves stock.
+  part_public_id?: string
 }
 
 export const STATUS_LABELS: Record<ROStatus, string> = {

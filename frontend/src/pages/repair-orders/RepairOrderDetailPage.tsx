@@ -852,6 +852,7 @@ export function RepairOrderDetailPage() {
       part_name: selectedPart!.name,
       quantity: parseInt(partQty, 10),
       unit_cost_minor: selectedPart!.selling_price_minor,
+      part_public_id: selectedPart!.id,
     }),
     onSuccess: () => {
       success('Pièce ajoutée.')
