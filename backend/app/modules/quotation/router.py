@@ -98,10 +98,16 @@ async def create_quotation_from_repair_order(
     ro_public_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> QuotationOut:
+    from decimal import Decimal
+
+    from app.modules.quotation.models import LineKind
+    from app.modules.quotation.schemas import QuotationLineCreateRequest
     from app.modules.repair_order.repository import RepairOrderRepository
     from app.modules.repair_order.schemas import DIAGNOSIS_QUESTIONS
 
-    ro = await RepairOrderRepository.get_by_public_id(db, garage_id=user.garage_id, public_id=ro_public_id)
+    ro = await RepairOrderRepository.get_by_public_id(
+        db, garage_id=user.garage_id, public_id=ro_public_id, load_relationships=True
+    )
     if not ro:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found.")
 
@@ -131,11 +137,39 @@ async def create_quotation_from_repair_order(
         if diag_notes:
             sections.append(f"Observations : {diag_notes}")
 
+    # Copy the repair order's labor and part lines into the quotation.
+    lines: list[QuotationLineCreateRequest] = []
+    for ll in ro.labor_lines:
+        label = (
+            f"{ll.labor_type} ({ll.duration_minutes} min)"
+            if ll.duration_minutes
+            else ll.labor_type
+        )
+        lines.append(
+            QuotationLineCreateRequest(
+                kind=LineKind.labor,
+                description=label,
+                quantity=Decimal(1),
+                unit_price_minor=ll.amount_minor,
+            )
+        )
+    for pl in ro.part_lines:
+        lines.append(
+            QuotationLineCreateRequest(
+                kind=LineKind.part,
+                part_id=pl.part_id,
+                description=pl.part_name,
+                quantity=Decimal(pl.quantity),
+                unit_price_minor=pl.unit_cost_minor,
+            )
+        )
+
     request = QuotationCreateRequest(
         customer_id=ro.customer_id,
         vehicle_id=ro.vehicle_id,
         repair_order_id=ro.id,
         notes="\n\n".join(sections) if sections else None,
+        lines=lines,
     )
     return await service.create_quotation(
         db, request=request, garage_id=user.garage_id, user_id=user.user_id
