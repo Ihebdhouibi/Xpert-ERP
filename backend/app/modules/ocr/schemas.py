@@ -62,6 +62,11 @@ class OcrRegionRequest(BaseModel):
     y2: int
 
 
+class SuggestFieldRequest(BaseModel):
+    """Ask the engine to auto-match a single field from the recognised text."""
+    field: str
+
+
 class IngestLine(BaseModel):
     """One best-effort line item parsed from an invoice (for prefill only)."""
     description: Optional[str] = None

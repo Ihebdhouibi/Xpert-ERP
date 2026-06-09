@@ -427,6 +427,39 @@ async def ocr_region(
     return await engine.run_ocr_region(data, box)
 
 
+async def suggest_field(
+    db: AsyncSession,
+    *,
+    extraction_public_id: uuid.UUID,
+    field_key: str,
+) -> "str | None":
+    """Auto-match a field with the best candidate from the recognised text."""
+    from app.modules.ocr.engine import OcrLine
+
+    extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
+    if extraction is None:
+        raise OcrNotFoundError(str(extraction_public_id))
+
+    sf = extraction.structured_fields or {}
+    layout = sf.get("__layout__", {}) or {}
+    boxes = layout.get("boxes", {}) or {}
+    scores = extraction.confidence_scores or {}
+    # Rebuild the recognised lines (ligne_*) with boxes for layout-aware matching.
+    lines: list[OcrLine] = []
+    for key, value in sf.items():
+        if not key.startswith("ligne_"):
+            continue
+        lines.append(
+            OcrLine(
+                text=str(value),
+                confidence=float(scores.get(key, 0.0) or 0.0),
+                box=boxes.get(key),
+            )
+        )
+    result = RawOcrResult(lines=lines, full_text="\n".join(ln.text for ln in lines))
+    return extractors.suggest_field(result, field_key)
+
+
 async def reject_extraction(
     db: AsyncSession,
     *,

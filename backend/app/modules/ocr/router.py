@@ -13,6 +13,7 @@ from app.modules.ocr.schemas import (
     IngestionResult,
     OcrExtractionOut,
     OcrRegionRequest,
+    SuggestFieldRequest,
 )
 from app.modules.ocr.service import (
     OcrInvalidStateError,
@@ -177,6 +178,27 @@ async def ocr_region(
     except OcrNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
     return {"text": text}
+
+
+@router.post(
+    "/{extraction_id}/suggest-field",
+    dependencies=[require_permission("document.read")],
+    summary="Auto-match a single field with the best candidate in the text",
+)
+async def suggest_field(
+    extraction_id: uuid.UUID,
+    body: SuggestFieldRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the best-guess value for a field from the whole recognised text."""
+    try:
+        value = await service.suggest_field(
+            db, extraction_public_id=extraction_id, field_key=body.field
+        )
+    except OcrNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
+    return {"value": value}
 
 
 @router.post(

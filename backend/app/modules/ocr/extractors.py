@@ -166,6 +166,10 @@ def extract_national_id(result: RawOcrResult) -> FieldMap:
 
 # A monetary amount in French format: 1 234,56 / 1.234,56 / 1234.56 / 99,00
 _RE_AMOUNT = re.compile(r"\b(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})\b")
+# Same, but never matches a percentage (e.g. the "3.51%" in a discount note).
+_RE_AMOUNT_NO_PCT = re.compile(
+    r"\b(\d{1,3}(?:[ .]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})\b(?!\s*%)"
+)
 # Day/month may be single- or double-digit (e.g. 2.6.2021 or 02/06/2021)
 _RE_DATE_ANY = re.compile(r"\b(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})\b")
 # A line that looks like a description followed by qty / unit price / total
@@ -399,3 +403,78 @@ def extract_invoice(result: RawOcrResult) -> FieldMap:
 def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
     """Extract structured fields from a supplier invoice (facture fournisseur)."""
     return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")
+
+
+# ---------------------------------------------------------------------------
+# On-demand single-field suggestion ("AI auto-match" from the recognised text)
+# ---------------------------------------------------------------------------
+
+# field_key → (label keyword | None, value regex | None). A None value regex
+# means "take the line after the label" (free-text field).
+_SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
+    # Invoices
+    "date_facture": (_KW_DATE_FACTURE, _RE_DATE_ANY),
+    "date_echeance": (_KW_DATE_ECHEANCE, _RE_DATE_ANY),
+    "total_ht": (_KW_TOTAL_HT, _RE_AMOUNT_NO_PCT),
+    "total_ttc": (_KW_TOTAL_TTC, _RE_AMOUNT_NO_PCT),
+    "tva": (_KW_TVA, _RE_AMOUNT_NO_PCT),
+    "client": (_KW_CLIENT, None),
+    "fournisseur": (_KW_FOURNISSEUR, None),
+    # Carte grise
+    "immatriculation": (None, _RE_IMMATRICULATION),
+    "vin": (None, _RE_VIN),
+    "proprietaire": (_KW_PROPRIETAIRE, None),
+    "marque": (_KW_MARQUE, None),
+    "modele": (_KW_MODELE, None),
+    "date_mise_en_circulation": (_KW_DATE_MEC, _RE_DATE),
+    # CIN
+    "nom": (_KW_NOM, None),
+    "prenom": (_KW_PRENOM, None),
+    "cin": (None, _RE_CIN),
+    "date_naissance": (_KW_DATE_NAISS, _RE_BIRTH_DATE),
+}
+
+
+def suggest_field(result: RawOcrResult, field_key: str) -> Optional[str]:
+    """Best-guess value for a single field from the whole recognised text.
+
+    Layout-aware: prefers the value near the field's label, then the first value
+    matching the field's pattern, then a type-based fallback (any date / amount).
+    """
+    lines = result.lines
+
+    if field_key == "numero_facture":
+        numero = _extract_invoice_number(lines)
+        return numero[0] if numero else None
+
+    spec = _SUGGEST_SPECS.get(field_key)
+    if spec:
+        keyword, value_re = spec
+        if value_re is not None:
+            if keyword is not None:
+                res = _value_near_keyword(lines, keyword, value_re)
+                if res:
+                    return res[0]
+            for ln in lines:
+                m = value_re.search(ln.text)
+                if m:
+                    return _match_value(m)
+        elif keyword is not None:
+            res = _best_line_after_keyword(lines, keyword)
+            if res:
+                return res[0]
+
+    # Type-based fallback inferred from the field name.
+    if "date" in field_key:
+        for ln in lines:
+            m = _RE_DATE_ANY.search(ln.text)
+            if m:
+                return _match_value(m)
+    if any(t in field_key for t in ("total", "montant", "ht", "ttc", "tva")):
+        for ln in lines:
+            if _KW_AMOUNT_SKIP.search(ln.text):
+                continue
+            m = _RE_AMOUNT_NO_PCT.search(ln.text)
+            if m:
+                return _match_value(m)
+    return None

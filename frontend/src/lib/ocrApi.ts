@@ -103,4 +103,9 @@ export const ocrApi = {
     apiClient
       .post<{ text: string }>(`/ocr/${extractionId}/ocr-region`, box)
       .then((r) => r.data),
+
+  suggestField: (extractionId: string, field: string) =>
+    apiClient
+      .post<{ value: string | null }>(`/ocr/${extractionId}/suggest-field`, { field })
+      .then((r) => r.data),
 }

@@ -35,6 +35,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CropFreeIcon from '@mui/icons-material/CropFree'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -315,6 +316,8 @@ export function OcrReviewPage() {
   // When set, the next region drawn on the preview is OCR'd and written here.
   const [cropTarget, setCropTarget] = useState<string | null>(null)
   const [cropLoading, setCropLoading] = useState(false)
+  // Field currently being auto-matched (AI) from the recognised text.
+  const [suggesting, setSuggesting] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -454,6 +457,27 @@ export function OcrReviewPage() {
     } finally {
       setCropLoading(false)
       setCropTarget(null)
+    }
+  }
+
+  // AI auto-match: fill the field with the best candidate from the whole text.
+  const handleSuggest = async (key: string) => {
+    if (!extractionId) return
+    setSuggesting(key)
+    setError(null)
+    try {
+      const { value } = await ocrApi.suggestField(extractionId, key)
+      if (value) {
+        setEdited((prev) => ({ ...prev, [key]: value }))
+        setActiveField(key)
+        if (canHighlight) setHighlight(boxesForValue(value))
+      } else {
+        setError('Aucune correspondance trouvée pour ce champ.')
+      }
+    } catch {
+      setError('Échec de la correspondance automatique.')
+    } finally {
+      setSuggesting(null)
     }
   }
 
@@ -721,6 +745,23 @@ export function OcrReviewPage() {
                           </IconButton>
                         </Tooltip>
                       )}
+                      <Tooltip title="Correspondance automatique (IA) depuis le texte reconnu">
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="secondary"
+                            disabled={suggesting !== null}
+                            onClick={() => handleSuggest(key)}
+                            sx={{ mt: 0.5 }}
+                          >
+                            {suggesting === key ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <AutoAwesomeIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
                     </Stack>
                     <Typography
                       variant="caption"
