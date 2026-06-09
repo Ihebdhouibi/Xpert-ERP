@@ -723,6 +723,13 @@ function PhotosPanel({ publicId }: { publicId: string }) {
                 >
                   <BrokenImageRoundedIcon sx={{ color: '#CBD5E1', fontSize: 32 }} />
                 </Box>
+              ) : photo.mime_type?.startsWith('video/') ? (
+                <video
+                  src={photo.url}
+                  muted
+                  preload="metadata"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
               ) : (
                 <img
                   src={photo.url}
@@ -736,11 +743,11 @@ function PhotosPanel({ publicId }: { publicId: string }) {
         </Box>
       )}
 
-      <PermissionGate permission="repair_order.update">
+      <PermissionGate permission="repair_order.media.upload">
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic"
+          accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,video/webm"
           multiple
           style={{ display: 'none' }}
           onChange={e => handleFiles(e.target.files)}
@@ -753,7 +760,7 @@ function PhotosPanel({ publicId }: { publicId: string }) {
           onClick={() => fileInputRef.current?.click()}
           sx={{ textTransform: 'none', fontWeight: 600 }}
         >
-          {uploadMutation.isPending ? 'Envoi…' : 'Ajouter des photos'}
+          {uploadMutation.isPending ? 'Envoi…' : 'Ajouter photos/vidéos'}
         </Button>
       </PermissionGate>
     </Box>

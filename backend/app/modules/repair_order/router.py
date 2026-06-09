@@ -609,7 +609,7 @@ async def save_diagnosis(
     "/{public_id}/photos",
     response_model=ROPhotoSummary,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[require_permission("repair_order.update")],
+    dependencies=[require_permission("repair_order.media.upload")],
 )
 async def upload_photo(
     public_id: str,
@@ -617,7 +617,7 @@ async def upload_photo(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> ROPhotoSummary:
-    """Upload a photo for a repair order (stored in S3)."""
+    """Upload a photo or video for a repair order (stored in S3/MinIO media bucket)."""
     import uuid as _uuid
     from app.modules.documents.storage import upload_bytes
     from app.core.config import get_settings
@@ -626,7 +626,10 @@ async def upload_photo(
     if not ro:
         raise HTTPException(status_code=404, detail="Repair order not found")
 
-    allowed = {"image/jpeg", "image/png", "image/webp", "image/heic"}
+    allowed = {
+        "image/jpeg", "image/png", "image/webp", "image/heic",
+        "video/mp4", "video/quicktime", "video/webm",
+    }
     if file.content_type not in allowed:
         raise HTTPException(
             status_code=422,
@@ -634,8 +637,8 @@ async def upload_photo(
         )
 
     data = await file.read()
-    if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
 
     settings = get_settings()
     storage_key = f"repair-orders/{ro.id}/photos/{_uuid.uuid4()}/{file.filename}"
