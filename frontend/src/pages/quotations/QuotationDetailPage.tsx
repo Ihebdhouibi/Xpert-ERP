@@ -39,6 +39,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import PrintRoundedIcon from '@mui/icons-material/PrintRounded'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import {
   quotationApi,
   QUOTATION_STATUS_LABELS,
@@ -358,6 +359,13 @@ export function QuotationDetailPage() {
         ]}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
+            {quotation.repair_order_public_id && (
+              <Button size="small" variant="contained" startIcon={<ArrowBackRoundedIcon />}
+                onClick={() => navigate(`/repair-orders/${quotation.repair_order_public_id}`)}
+                sx={{ textTransform: 'none' }}>
+                Retour à l'ordre de réparation
+              </Button>
+            )}
             <Tooltip title="Aperçu / Imprimer">
               <span>
                 <Button size="small" variant="outlined" startIcon={<PrintRoundedIcon />}
