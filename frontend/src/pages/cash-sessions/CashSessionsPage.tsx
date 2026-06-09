@@ -19,6 +19,7 @@ import LockOpenRoundedIcon from '@mui/icons-material/LockOpenRounded'
 import LockRoundedIcon from '@mui/icons-material/LockRounded'
 import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { cashSessionApi, type CashSessionOut } from '../../lib/cashSessionApi'
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -141,7 +142,20 @@ export function CashSessionsPage() {
   const { data: current } = useQuery({
     queryKey: ['cash-session-current'],
     queryFn: cashSessionApi.getCurrent,
-    staleTime: 30_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+    // Poll only while a session is open so the expected cash stays current.
+    refetchInterval: q => (q.state.data ? 15_000 : false),
+  })
+
+  // Live per-method tallies for the open session (income as payments come in).
+  const { data: zreport } = useQuery({
+    queryKey: ['cash-session-zreport', current?.id],
+    queryFn: () => cashSessionApi.getZReport(current!.id),
+    enabled: !!current,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   })
 
   const { data, isLoading, isError } = useQuery({
@@ -206,6 +220,51 @@ export function CashSessionsPage() {
 
       {current && (
         <CurrentSessionBanner session={current} onClose={() => setCloseOpen(true)} />
+      )}
+
+      {current && (
+        <Card variant="outlined" sx={{ mb: 2.5, borderRadius: 2 }}>
+          <CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+              <Typography variant="subtitle2" fontWeight={700}>Encaissements de la session</Typography>
+              <Typography variant="caption" color="text.secondary">Mis à jour automatiquement</Typography>
+            </Stack>
+            <Stack spacing={1}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" color="text.secondary">Fond de caisse (ouverture)</Typography>
+                <Typography variant="body2" fontWeight={600}>{formatMinor(current.opening_float ?? 0)}</Typography>
+              </Stack>
+              {(zreport?.tallies ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.disabled">Aucun encaissement pour le moment.</Typography>
+              ) : (
+                zreport!.tallies.map(t => (
+                  <Stack key={t.payment_method} direction="row" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">
+                      {PAYMENT_METHOD_LABELS[t.payment_method as PaymentMethod] ?? t.payment_method}
+                      <Typography component="span" variant="caption" color="text.disabled" ml={0.75}>
+                        ({t.count})
+                      </Typography>
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>{formatMinor(t.total_minor)}</Typography>
+                  </Stack>
+                ))
+              )}
+              <Divider />
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" fontWeight={700}>Total encaissé</Typography>
+                <Typography variant="body2" fontWeight={700} color="success.main">
+                  {formatMinor(zreport?.total_all_methods ?? 0)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="body2" fontWeight={700}>Caisse espèces attendue</Typography>
+                <Typography variant="body2" fontWeight={700}>
+                  {current.expected_cash_so_far != null ? formatMinor(current.expected_cash_so_far) : '—'}
+                </Typography>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
       )}
 
       <DataTable
