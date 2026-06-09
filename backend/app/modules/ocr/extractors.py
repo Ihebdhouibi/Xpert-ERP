@@ -296,6 +296,51 @@ def _extract_line_items(lines) -> Optional[tuple[str, float]]:
     return json.dumps(items, ensure_ascii=False), 0.40
 
 
+def _match_value(m: re.Match) -> str:
+    return m.group(1) if m.groups() else m.group(0)
+
+
+def _value_near_keyword(lines, keyword_re: re.Pattern, value_re: re.Pattern):
+    """Find a value spatially associated with a keyword (structured/layout-aware).
+
+    Order of preference: same line as the label, then the value directly *below*
+    it (column header → value), then to its *right* (label : value). Uses the
+    per-line bounding boxes so table cells are matched correctly.
+    """
+    kw_lines = [ln for ln in lines if keyword_re.search(ln.text)]
+    # 1. Same line as the keyword
+    for kw in kw_lines:
+        m = value_re.search(kw.text)
+        if m:
+            return _match_value(m), kw.confidence
+    # 2. Spatially nearest value below or to the right of any keyword line
+    best = None
+    best_score: Optional[float] = None
+    for kw in kw_lines:
+        if not kw.box:
+            continue
+        kx1, ky1, kx2, ky2 = kw.box
+        kcx, kcy = (kx1 + kx2) / 2, (ky1 + ky2) / 2
+        for cand in lines:
+            if cand is kw or not cand.box:
+                continue
+            m = value_re.search(cand.text)
+            if not m:
+                continue
+            cx1, cy1, cx2, cy2 = cand.box
+            x_overlap = min(kx2, cx2) - max(kx1, cx1)
+            y_overlap = min(ky2, cy2) - max(ky1, cy1)
+            score: Optional[float] = None
+            if cy1 >= ky2 - 4 and x_overlap > -8:           # value below the label
+                score = (cy1 - ky2) + abs((cx1 + cx2) / 2 - kcx)
+            elif cx1 >= kx2 - 4 and y_overlap > -4:          # value to the right
+                score = (cx1 - kx2) + abs((cy1 + cy2) / 2 - kcy)
+            if score is not None and (best_score is None or score < best_score):
+                best_score = score
+                best = (_match_value(m), cand.confidence)
+    return best
+
+
 def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, party_field: str) -> FieldMap:
     """Shared header extraction for customer and supplier invoices."""
     fields: FieldMap = {}
@@ -306,25 +351,21 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
     if numero:
         fields["numero_facture"] = numero
 
-    # Dates — labelled first, then fall back to the first date in the document
-    for line in lines:
-        if _KW_DATE_FACTURE.search(line.text):
-            m = _RE_DATE_ANY.search(line.text)
-            if m:
-                fields["date_facture"] = (m.group(1), line.confidence)
-                break
-    if "date_facture" not in fields:
+    # Invoice date — labelled (layout-aware), else the first date in the document
+    dfac = _value_near_keyword(lines, _KW_DATE_FACTURE, _RE_DATE_ANY)
+    if dfac:
+        fields["date_facture"] = dfac
+    else:
         for line in lines:
             m = _RE_DATE_ANY.search(line.text)
             if m:
                 fields["date_facture"] = (m.group(1), line.confidence)
                 break
-    for line in lines:
-        if _KW_DATE_ECHEANCE.search(line.text):
-            m = _RE_DATE_ANY.search(line.text)
-            if m:
-                fields["date_echeance"] = (m.group(1), line.confidence)
-                break
+
+    # Due date — labelled (layout-aware): value is often in the cell below the label
+    dech = _value_near_keyword(lines, _KW_DATE_ECHEANCE, _RE_DATE_ANY)
+    if dech:
+        fields["date_echeance"] = dech
 
     # Party (supplier or client)
     after_party = _best_line_after_keyword(lines, party_keyword)
