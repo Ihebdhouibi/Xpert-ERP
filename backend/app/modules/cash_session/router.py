@@ -22,7 +22,7 @@ logger = get_logger("cash_session.router")
     "/cash-sessions",
     status_code=status.HTTP_201_CREATED,
     response_model=CashSessionOut,
-    dependencies=[require_permission("cash.open")],
+    dependencies=[require_permission("cash_session.open")],
 )
 async def open_cash_session(
     current_user: AuthUser,
@@ -42,7 +42,7 @@ async def open_cash_session(
 @router.post(
     "/cash-sessions/{session_id}/close",
     response_model=CashSessionOut,
-    dependencies=[require_permission("cash.close")],
+    dependencies=[require_permission("cash_session.close")],
 )
 async def close_cash_session(
     session_id: int,
@@ -71,7 +71,7 @@ async def close_cash_session(
 @router.get(
     "/cash-sessions/current",
     response_model=CashSessionOut | None,
-    dependencies=[require_permission("cash.read")],
+    dependencies=[require_permission("cash_session.read")],
 )
 async def get_current_session(
     current_user: AuthUser,
@@ -84,7 +84,7 @@ async def get_current_session(
 @router.get(
     "/cash-sessions",
     response_model=CashSessionListResponse,
-    dependencies=[require_permission("cash.read")],
+    dependencies=[require_permission("cash_session.read")],
 )
 async def list_cash_sessions(
     current_user: AuthUser,
@@ -101,7 +101,7 @@ async def list_cash_sessions(
 @router.get(
     "/cash-sessions/{session_id}",
     response_model=CashSessionOut,
-    dependencies=[require_permission("cash.read")],
+    dependencies=[require_permission("cash_session.read")],
 )
 async def get_cash_session(
     session_id: int,
@@ -117,7 +117,7 @@ async def get_cash_session(
 @router.get(
     "/cash-sessions/{session_id}/z-report",
     response_model=ZReportData,
-    dependencies=[require_permission("cash.read")],
+    dependencies=[require_permission("cash_session.read")],
 )
 async def get_z_report(
     session_id: int,
@@ -133,7 +133,7 @@ async def get_z_report(
 
 @router.get(
     "/cash-sessions/{session_id}/z-report/pdf",
-    dependencies=[require_permission("cash.read")],
+    dependencies=[require_permission("cash_session.read")],
 )
 async def get_z_report_pdf(
     session_id: int,
