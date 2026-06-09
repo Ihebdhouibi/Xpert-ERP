@@ -1086,8 +1086,8 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(laborTotal, currency)}
                   </Typography>
-                  {(ro.status === 'paused_approval' || ro.status === 'in_repair') && (
-                    <PermissionGate permission="repair_order.update">
+                  {ro.status === 'diagnosis' && (
+                    <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddLabor(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
                       </Button>
@@ -1177,8 +1177,8 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(partsTotal, currency)}
                   </Typography>
-                  {(ro.status === 'paused_parts' || ro.status === 'in_repair') && (
-                    <PermissionGate permission="repair_order.update">
+                  {ro.status === 'diagnosis' && (
+                    <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddPart(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
                       </Button>

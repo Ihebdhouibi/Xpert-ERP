@@ -405,7 +405,7 @@ async def transition_status(
 @router.post(
     "/{public_id}/labor-lines",
     response_model=RepairOrderDetail,
-    dependencies=[require_permission("repair_order.update")],
+    dependencies=[require_permission("repair_order.transition")],
 )
 async def add_labor_line(
     public_id: str,
@@ -437,7 +437,7 @@ async def add_labor_line(
 @router.post(
     "/{public_id}/part-lines",
     response_model=RepairOrderDetail,
-    dependencies=[require_permission("repair_order.update")],
+    dependencies=[require_permission("repair_order.transition")],
 )
 async def add_part_line(
     public_id: str,
