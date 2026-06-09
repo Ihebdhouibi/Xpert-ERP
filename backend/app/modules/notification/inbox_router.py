@@ -84,12 +84,12 @@ async def list_my_notifications(
     )
 
 
-@router.post("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{notification_id}/read")
 async def mark_read(
     notification_id: int,
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     notif = (
         await db.execute(
             select(AppNotification).where(
@@ -103,13 +103,14 @@ async def mark_read(
     if notif.read_at is None:
         notif.read_at = datetime.now(tz=timezone.utc)
         await db.commit()
+    return {"status": "read"}
 
 
-@router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/read-all")
 async def mark_all_read(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> dict:
     await db.execute(
         update(AppNotification)
         .where(
@@ -119,3 +120,4 @@ async def mark_all_read(
         .values(read_at=datetime.now(tz=timezone.utc))
     )
     await db.commit()
+    return {"status": "ok"}
