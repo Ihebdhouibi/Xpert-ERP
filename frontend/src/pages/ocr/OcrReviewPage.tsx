@@ -16,6 +16,7 @@ import {
   CircularProgress,
   Collapse,
   Divider,
+  IconButton,
   Link,
   Paper,
   Stack,
@@ -25,6 +26,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
@@ -32,6 +34,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import CropFreeIcon from '@mui/icons-material/CropFree'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -309,6 +312,9 @@ export function OcrReviewPage() {
   const [showRaw, setShowRaw] = useState(false)
   const [highlight, setHighlight] = useState<number[][]>([])
   const [activeField, setActiveField] = useState<string | null>(null)
+  // When set, the next region drawn on the preview is OCR'd and written here.
+  const [cropTarget, setCropTarget] = useState<string | null>(null)
+  const [cropLoading, setCropLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -416,6 +422,38 @@ export function OcrReviewPage() {
     if (text) {
       setEdited((prev) => ({ ...prev, [activeField]: text }))
       setHighlight(picked.map((p) => p.box))
+    }
+  }
+
+  // Dispatch a drawn region: crop-and-OCR if a crop target is armed, else
+  // assign from the already-recognised lines within the region.
+  const handleRegionDrawn = async (rect: DrawRect) => {
+    if (!cropTarget) {
+      assignRegion(rect)
+      return
+    }
+    const target = cropTarget
+    const box = {
+      x1: Math.round(rect.x1),
+      y1: Math.round(rect.y1),
+      x2: Math.round(rect.x2),
+      y2: Math.round(rect.y2),
+    }
+    setCropLoading(true)
+    setError(null)
+    try {
+      const { text } = await ocrApi.ocrRegion(extractionId!, box)
+      if (text) {
+        setEdited((prev) => ({ ...prev, [target]: text }))
+        setHighlight([[box.x1, box.y1, box.x2, box.y2]])
+      } else {
+        setError('Aucun texte reconnu dans la zone sélectionnée.')
+      }
+    } catch {
+      setError('Échec de la reconnaissance de la zone.')
+    } finally {
+      setCropLoading(false)
+      setCropTarget(null)
     }
   }
 
@@ -547,12 +585,19 @@ export function OcrReviewPage() {
               </Link>
             )}
           </Stack>
+          {cropTarget && (
+            <Alert severity="info" sx={{ mb: 1 }} icon={<CropFreeIcon fontSize="small" />}>
+              {cropLoading
+                ? 'Reconnaissance de la zone…'
+                : 'Dessinez la zone à reconnaître sur le document.'}
+            </Alert>
+          )}
           <DocumentPreview
             url={previewUrl}
             layout={layout}
             highlight={highlight}
-            drawMode={canHighlight && activeField !== null}
-            onRegionDrawn={assignRegion}
+            drawMode={canHighlight && (activeField !== null || cropTarget !== null)}
+            onRegionDrawn={handleRegionDrawn}
           />
         </Paper>
 
@@ -643,21 +688,40 @@ export function OcrReviewPage() {
                 const conf = extraction.confidence_scores?.[key]
                 return (
                   <Box key={key}>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      label={FIELD_LABELS[key] ?? key}
-                      value={edited[key] ?? ''}
-                      multiline={key === 'lignes'}
-                      placeholder="Non détecté — saisir manuellement"
-                      onFocus={() => {
-                        setActiveField(key)
-                        if (canHighlight) setHighlight(boxesForValue(edited[key] ?? ''))
-                      }}
-                      onChange={(e) =>
-                        setEdited((prev) => ({ ...prev, [key]: e.target.value }))
-                      }
-                    />
+                    <Stack direction="row" spacing={0.5} alignItems="flex-start">
+                      <TextField
+                        sx={{ flex: 1 }}
+                        size="small"
+                        label={FIELD_LABELS[key] ?? key}
+                        value={edited[key] ?? ''}
+                        multiline={key === 'lignes'}
+                        placeholder="Non détecté — saisir manuellement"
+                        onFocus={() => {
+                          setActiveField(key)
+                          setCropTarget(null)
+                          if (canHighlight) setHighlight(boxesForValue(edited[key] ?? ''))
+                        }}
+                        onChange={(e) =>
+                          setEdited((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                      />
+                      {canHighlight && (
+                        <Tooltip title="Recadrer et reconnaître une zone du document">
+                          <IconButton
+                            size="small"
+                            color={cropTarget === key ? 'primary' : 'default'}
+                            disabled={cropLoading}
+                            onClick={() => {
+                              setActiveField(key)
+                              setCropTarget((prev) => (prev === key ? null : key))
+                            }}
+                            sx={{ mt: 0.5 }}
+                          >
+                            <CropFreeIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
                     <Typography
                       variant="caption"
                       color="text.secondary"

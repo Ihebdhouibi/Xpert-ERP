@@ -12,6 +12,7 @@ from app.modules.ocr.schemas import (
     ConfirmFieldsRequest,
     IngestionResult,
     OcrExtractionOut,
+    OcrRegionRequest,
 )
 from app.modules.ocr.service import (
     OcrInvalidStateError,
@@ -153,6 +154,29 @@ async def ingest_extraction(
     except OcrInvalidStateError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return result
+
+
+@router.post(
+    "/{extraction_id}/ocr-region",
+    dependencies=[require_permission("document.read")],
+    summary="OCR a cropped region of the document and return its text",
+)
+async def ocr_region(
+    extraction_id: uuid.UUID,
+    body: OcrRegionRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Run OCR on a user-drawn rectangle of the source document."""
+    try:
+        text = await service.ocr_region(
+            db,
+            extraction_public_id=extraction_id,
+            box=(body.x1, body.y1, body.x2, body.y2),
+        )
+    except OcrNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
+    return {"text": text}
 
 
 @router.post(

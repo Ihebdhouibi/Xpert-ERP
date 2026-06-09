@@ -54,6 +54,14 @@ class ConfirmFieldsRequest(BaseModel):
     confirmed_fields: dict[str, str]
 
 
+class OcrRegionRequest(BaseModel):
+    """A rectangle (original-image pixel coords) to OCR on demand."""
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+
 class IngestLine(BaseModel):
     """One best-effort line item parsed from an invoice (for prefill only)."""
     description: Optional[str] = None

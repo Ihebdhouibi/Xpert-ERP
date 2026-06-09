@@ -95,4 +95,12 @@ export const ocrApi = {
     apiClient
       .post<OcrExtractionOut>(`/ocr/${extractionId}/reject`)
       .then((r) => r.data),
+
+  ocrRegion: (
+    extractionId: string,
+    box: { x1: number; y1: number; x2: number; y2: number },
+  ) =>
+    apiClient
+      .post<{ text: string }>(`/ocr/${extractionId}/ocr-region`, box)
+      .then((r) => r.data),
 }

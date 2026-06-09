@@ -193,6 +193,44 @@ class PaddleOcrEngine(OcrEngine):
                 continue
         return lines, (width, height)
 
+    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        """OCR just a rectangular region [x1,y1,x2,y2] of the document image.
+
+        Coordinates are in the same pixel space as the stored layout boxes
+        (original image, or first page rendered at PDF_RENDER_DPI for PDFs).
+        """
+        import io as _io
+
+        try:
+            from PIL import Image  # type: ignore[import]
+        except Exception:
+            return ""
+
+        if _is_pdf(file_bytes):
+            pages = _pdf_to_image_bytes(file_bytes)
+            if not pages:
+                return ""
+            base = _bytes_to_numpy(pages[0])
+        else:
+            base = _bytes_to_numpy(file_bytes)
+
+        h, w = base.shape[:2]
+        pad = 3  # small margin so glyphs at the edges aren't clipped
+        x1, y1, x2, y2 = (int(box[0]) - pad, int(box[1]) - pad, int(box[2]) + pad, int(box[3]) + pad)
+        x1, x2 = max(0, min(x1, w)), max(0, min(x2, w))
+        y1, y2 = max(0, min(y1, h)), max(0, min(y2, h))
+        if x2 - x1 < 3 or y2 - y1 < 3:
+            return ""
+        crop = base[y1:y2, x1:x2]
+        buf = _io.BytesIO()
+        Image.fromarray(crop).save(buf, format="PNG")
+        lines = self._ocr_image(buf.getvalue())[0]
+        return " ".join(ln.text for ln in lines).strip()
+
+    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
+
     def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
         # PDFs are rasterised page-by-page; images are OCR'd directly.
         width, height = 0, 0
