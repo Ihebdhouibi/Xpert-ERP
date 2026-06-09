@@ -147,24 +147,77 @@ async def _maybe_create_alert(
 ) -> None:
     from sqlalchemy import select
     from app.modules.parts.models import Part
+    from app.modules.parts.stock_models import LowStockAlert, LowStockAlertStatus
 
     result = await db.execute(
         select(
             Part.reorder_threshold,
             Part.supplier_hint_id,
             Part.reorder_quantity,
+            Part.name,
         ).where(Part.id == part_id)
     )
     row = result.first()
-    if row and row[0] is not None and on_hand <= row[0]:
-        await StockRepository.create_alert(
+    if not (row and row[0] is not None and on_hand <= row[0]):
+        return
+    threshold, supplier_hint, reorder_qty, part_name = row
+
+    # Dedup: don't raise a new alert (or notify) if one is already unresolved.
+    existing = (
+        await db.execute(
+            select(LowStockAlert.id).where(
+                LowStockAlert.garage_id == garage_id,
+                LowStockAlert.part_id == part_id,
+                LowStockAlert.status != LowStockAlertStatus.resolved,
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+
+    await StockRepository.create_alert(
+        db,
+        garage_id=garage_id,
+        part_id=part_id,
+        on_hand=on_hand,
+        threshold=threshold,
+        suggested_supplier_id=supplier_hint,
+        suggested_reorder_quantity=reorder_qty,
+    )
+    await _notify_low_stock(db, garage_id, part_name, on_hand, threshold)
+
+
+async def _notify_low_stock(
+    db: AsyncSession, garage_id: int, part_name: str, on_hand: int, threshold: int
+) -> None:
+    """Notify admins/secretaries (in-app bell) about a low-stock part."""
+    from sqlalchemy import select
+
+    from app.modules.auth.models import AppUser, Role, UserRole, UserStatus
+    from app.modules.notification.inbox_router import create_app_notification
+
+    recipients = (
+        await db.execute(
+            select(AppUser.id)
+            .distinct()
+            .join(UserRole, UserRole.user_id == AppUser.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(
+                AppUser.garage_id == garage_id,
+                AppUser.deleted_at.is_(None),
+                AppUser.status == UserStatus.active,
+                Role.code.in_(["admin", "super_admin", "secretary"]),
+            )
+        )
+    ).scalars().all()
+    for uid in recipients:
+        await create_app_notification(
             db,
             garage_id=garage_id,
-            part_id=part_id,
-            on_hand=on_hand,
-            threshold=row[0],
-            suggested_supplier_id=row[1],
-            suggested_reorder_quantity=row[2],
+            recipient_id=uid,
+            title=f"Stock bas : {part_name}",
+            body=f"Stock {on_hand} ≤ seuil {threshold} — réapprovisionnement conseillé.",
+            link="/stock?tab=alerts",
         )
 
 

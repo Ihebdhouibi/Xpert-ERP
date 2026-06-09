@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -33,7 +34,6 @@ import {
   stockApi,
   MOVEMENT_LABELS,
   ALERT_STATUS_LABELS,
-  type LowStockAlertStatus,
   type StockMovementType,
 } from '../../lib/stockApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
@@ -645,7 +645,9 @@ function ValuationTab() {
 // Main page
 // ---------------------------------------------------------------------------
 export function StockPage() {
-  const [tab, setTab] = useState(0)
+  const [searchParams] = useSearchParams()
+  // Deep-link: /stock?tab=alerts opens the Alerts tab (e.g. from a notification).
+  const [tab, setTab] = useState(searchParams.get('tab') === 'alerts' ? 2 : 0)
 
   const alertsQ = useQuery({
     queryKey: ['stock', 'alerts', 'count'],
