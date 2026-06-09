@@ -15,12 +15,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import PointOfSaleRoundedIcon from '@mui/icons-material/PointOfSaleRounded'
 import LockOpenRoundedIcon from '@mui/icons-material/LockOpenRounded'
 import LockRoundedIcon from '@mui/icons-material/LockRounded'
 import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonCheckedRounded'
 import { cashSessionApi, type CashSessionOut } from '../../lib/cashSessionApi'
-import { PAYMENT_METHOD_LABELS } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -134,6 +132,8 @@ export function CashSessionsPage() {
   const qc = useQueryClient()
   const { success, error } = useToast()
   const [page, setPage] = useState(0)
+  const [openOpen, setOpenOpen] = useState(false)
+  const [openingFloat, setOpeningFloat] = useState('')
   const [closeOpen, setCloseOpen] = useState(false)
   const [countedCash, setCountedCash] = useState('')
   const [closingReason, setClosingReason] = useState('')
@@ -150,14 +150,21 @@ export function CashSessionsPage() {
   })
 
   const openMutation = useMutation({
-    mutationFn: cashSessionApi.open,
+    mutationFn: (opening: number) => cashSessionApi.open({ opening_float: opening }),
     onSuccess: () => {
       success('Session de caisse ouverte.')
+      setOpenOpen(false)
+      setOpeningFloat('')
       void qc.invalidateQueries({ queryKey: ['cash-session-current'] })
       void qc.invalidateQueries({ queryKey: ['cash-sessions'] })
     },
     onError: () => error('Impossible d\'ouvrir la session. Une session est peut-être déjà ouverte.'),
   })
+
+  const handleOpen = () => {
+    const minor = openingFloat ? Math.round(parseFloat(openingFloat) * 100) : 0
+    openMutation.mutate(minor)
+  }
 
   const closeMutation = useMutation({
     mutationFn: ({ id, counted }: { id: number; counted: number; reason?: string }) =>
@@ -188,7 +195,7 @@ export function CashSessionsPage() {
             <Button
               variant="contained"
               startIcon={<LockOpenRoundedIcon />}
-              onClick={() => openMutation.mutate()}
+              onClick={() => setOpenOpen(true)}
               disabled={openMutation.isPending}
             >
               Ouvrir une session
@@ -215,6 +222,39 @@ export function CashSessionsPage() {
         emptyDescription="Ouvrez votre première session de caisse pour commencer."
       />
 
+      {/* Open session dialog */}
+      <Dialog open={openOpen} onClose={() => setOpenOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LockOpenRoundedIcon sx={{ color: 'primary.main', fontSize: 20 }} />
+          Ouvrir une session
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} pt={1}>
+            <TextField
+              label="Fond de caisse (€)"
+              type="number"
+              value={openingFloat}
+              onChange={e => setOpeningFloat(e.target.value)}
+              fullWidth
+              placeholder="Ex: 100.00"
+              helperText="Montant d'espèces présent dans la caisse à l'ouverture (laisser vide pour 0)"
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setOpenOpen(false)}>Annuler</Button>
+          <Button
+            variant="contained"
+            startIcon={<LockOpenRoundedIcon />}
+            onClick={handleOpen}
+            disabled={openMutation.isPending}
+          >
+            Ouvrir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Close session dialog */}
       <Dialog open={closeOpen} onClose={() => setCloseOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -228,11 +268,17 @@ export function CashSessionsPage() {
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                   Récapitulatif de la session #{current?.id}
                 </Typography>
+                <Stack direction="row" justifyContent="space-between" mb={0.5}>
+                  <Typography variant="body2" color="text.secondary">Fond de caisse (ouverture)</Typography>
+                  <Typography variant="body2" fontWeight={600}>
+                    {formatMinor(current?.opening_float ?? 0)}
+                  </Typography>
+                </Stack>
                 <Stack direction="row" justifyContent="space-between">
                   <Typography variant="body2" color="text.secondary">Caisse espèces attendue</Typography>
                   <Typography variant="body2" fontWeight={600}>
-                    {current?.expected_total_cash != null
-                      ? formatMinor(current.expected_total_cash)
+                    {current?.expected_cash_so_far != null
+                      ? formatMinor(current.expected_cash_so_far)
                       : '—'}
                   </Typography>
                 </Stack>
@@ -255,12 +301,12 @@ export function CashSessionsPage() {
               multiline
               rows={2}
             />
-            {countedCash && current?.expected_total_cash != null && (
+            {countedCash && current?.expected_cash_so_far != null && (
               <Box>
                 <Divider sx={{ mb: 1.5 }} />
                 {(() => {
                   const counted = Math.round(parseFloat(countedCash) * 100)
-                  const diff = counted - (current.expected_total_cash ?? 0)
+                  const diff = counted - (current.expected_cash_so_far ?? 0)
                   return (
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" fontWeight={600}>Écart</Typography>

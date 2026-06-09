@@ -76,6 +76,32 @@ async def _compute_tallies(
     return tallies, total_all
 
 
+async def _sum_cash_payments(db: AsyncSession, session_id: int) -> int:
+    """Sum of cash-method payments recorded against this session."""
+    result = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Payment.amount_minor), 0)).where(
+            Payment.cash_session_id == session_id,
+            Payment.payment_method == PaymentMethod.cash,
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def _expected_cash(db: AsyncSession, session: CashSession) -> int:
+    """Expected physical cash = opening float + cash payments taken in."""
+    return session.opening_float + await _sum_cash_payments(db, session.id)
+
+
+async def _to_out(db: AsyncSession, session: CashSession) -> CashSessionOut:
+    """Serialize a session, filling the live `expected_cash_so_far` field."""
+    out = CashSessionOut.model_validate(session)
+    if session.status == CashSessionStatus.open:
+        out.expected_cash_so_far = await _expected_cash(db, session)
+    else:
+        out.expected_cash_so_far = session.expected_total_cash
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
@@ -86,6 +112,7 @@ async def open_session(
     *,
     garage_id: int,
     user_id: int,
+    opening_float: int = 0,
 ) -> CashSessionOut:
     logger.info("open_session_start", garage_id=garage_id, user_id=user_id)
     existing = await repo.get_open_session(db, garage_id)
@@ -99,13 +126,19 @@ async def open_session(
         status=CashSessionStatus.open,
         opened_at=datetime.now(tz=timezone.utc),
         opened_by_id=user_id,
+        opening_float=opening_float,
     )
     await repo.create(db, session)
     await db.commit()
 
     fresh = await repo.get_by_id(db, session.id, garage_id)
-    logger.info("cash_session_opened", session_id=session.id, garage_id=garage_id)
-    return CashSessionOut.model_validate(fresh)
+    logger.info(
+        "cash_session_opened",
+        session_id=session.id,
+        garage_id=garage_id,
+        opening_float=opening_float,
+    )
+    return await _to_out(db, fresh)
 
 
 async def close_session(
@@ -125,14 +158,8 @@ async def close_session(
     if session.status == CashSessionStatus.closed:
         raise SessionAlreadyClosedError(session_id)
 
-    # Compute expected cash from payments in this session (cash method only)
-    result = await db.execute(
-        select(sqlfunc.coalesce(sqlfunc.sum(Payment.amount_minor), 0)).where(
-            Payment.cash_session_id == session_id,
-            Payment.payment_method == PaymentMethod.cash,
-        )
-    )
-    expected = result.scalar_one()
+    # Expected drawer cash = opening float + cash payments taken in this session
+    expected = await _expected_cash(db, session)
 
     difference = counted_total_cash - expected
 
@@ -159,7 +186,7 @@ async def close_session(
         difference=difference,
         garage_id=garage_id,
     )
-    return CashSessionOut.model_validate(fresh)
+    return await _to_out(db, fresh)
 
 
 async def get_session(
@@ -169,7 +196,7 @@ async def get_session(
     session = await repo.get_by_id(db, session_id, garage_id)
     if not session:
         raise SessionNotFoundError(session_id)
-    return CashSessionOut.model_validate(session)
+    return await _to_out(db, session)
 
 
 async def get_current_open_session(
@@ -179,7 +206,7 @@ async def get_current_open_session(
     session = await repo.get_open_session(db, garage_id)
     if not session:
         return None
-    return CashSessionOut.model_validate(session)
+    return await _to_out(db, session)
 
 
 async def list_sessions(
@@ -192,7 +219,7 @@ async def list_sessions(
     logger.info("list_sessions_start", garage_id=garage_id, page=page)
     items, total = await repo.list_by_garage(db, garage_id, page=page, page_size=page_size)
     return CashSessionListResponse(
-        items=[CashSessionOut.model_validate(s) for s in items],
+        items=[await _to_out(db, s) for s in items],
         total=total,
         page=page,
         page_size=page_size,

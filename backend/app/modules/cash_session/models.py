@@ -43,7 +43,12 @@ class CashSession(Base):
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
     )
 
-    # Computed on close: sum of cash payments in this session
+    # Cash float placed in the drawer at open time (change fund), in minor units
+    opening_float: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0", default=0
+    )
+
+    # Computed on close: opening_float + sum of cash payments in this session
     expected_total_cash: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     # Physical count entered by closer
     counted_total_cash: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)

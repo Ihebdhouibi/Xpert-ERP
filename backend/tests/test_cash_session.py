@@ -412,6 +412,43 @@ class TestCashSessionEndpoints:
         assert data["status"] == "closed"
         assert data["difference"] == 0
 
+    async def test_open_with_opening_float_reports_expected_cash(
+        self, cs_client: AsyncClient
+    ) -> None:
+        token = await self._login(cs_client)
+        resp = await cs_client.post(
+            "/api/v1/cash-sessions",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"opening_float": 5000},
+        )
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["opening_float"] == 5000
+        # No payments yet, so the expected drawer cash is just the float.
+        assert data["expected_cash_so_far"] == 5000
+
+    async def test_close_balances_against_opening_float(
+        self, cs_client: AsyncClient
+    ) -> None:
+        token = await self._login(cs_client)
+        open_resp = await cs_client.post(
+            "/api/v1/cash-sessions",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"opening_float": 5000},
+        )
+        session_id = open_resp.json()["id"]
+
+        # Counting exactly the float (no cash payments) balances to zero.
+        resp = await cs_client.post(
+            f"/api/v1/cash-sessions/{session_id}/close",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"counted_total_cash": 5000},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["expected_total_cash"] == 5000
+        assert data["difference"] == 0
+
     async def test_close_nonzero_diff_without_reason_returns_422(
         self, cs_client: AsyncClient
     ) -> None:

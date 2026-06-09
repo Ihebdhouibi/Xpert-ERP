@@ -32,10 +32,17 @@ export interface CashSessionOut {
   opened_by_id: number | null
   closed_at: string | null
   closed_by_id: number | null
+  opening_float: number
   expected_total_cash: number | null
   counted_total_cash: number | null
   difference: number | null
   closing_reason: string | null
+  /** opening_float + cash payments so far (live for open sessions). */
+  expected_cash_so_far: number | null
+}
+
+export interface OpenSessionInput {
+  opening_float?: number
 }
 
 export interface CashSessionListResponse {
@@ -51,8 +58,8 @@ export interface CloseSessionInput {
 }
 
 export const cashSessionApi = {
-  open(): Promise<CashSessionOut> {
-    return apiClient.post('/cash-sessions').then(r => r.data)
+  open(input?: OpenSessionInput): Promise<CashSessionOut> {
+    return apiClient.post('/cash-sessions', input ?? {}).then(r => r.data)
   },
 
   close(sessionId: number, input: CloseSessionInput): Promise<CashSessionOut> {

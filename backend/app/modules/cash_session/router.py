@@ -9,6 +9,7 @@ from app.modules.cash_session.schemas import (
     CashSessionListResponse,
     CashSessionOut,
     CloseSessionRequest,
+    OpenSessionRequest,
     ZReportData,
 )
 from app.modules.cash_session import service
@@ -26,6 +27,7 @@ logger = get_logger("cash_session.router")
 )
 async def open_cash_session(
     current_user: AuthUser,
+    body: OpenSessionRequest = OpenSessionRequest(),
     db=Depends(get_db),
 ):
     """Open a new cash session. Only one session may be open per garage at a time."""
@@ -34,6 +36,7 @@ async def open_cash_session(
             db,
             garage_id=current_user.garage_id,
             user_id=current_user.user_id,
+            opening_float=body.opening_float,
         )
     except service.SessionAlreadyOpenError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

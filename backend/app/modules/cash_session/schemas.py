@@ -11,7 +11,9 @@ from app.modules.payment.models import PaymentMethod
 
 
 class OpenSessionRequest(BaseModel):
-    pass  # no inputs required; garage + user from auth token
+    opening_float: int = Field(
+        0, ge=0, description="Cash float in the drawer at open time, in minor units"
+    )
 
 
 class CloseSessionRequest(BaseModel):
@@ -50,10 +52,15 @@ class CashSessionOut(BaseModel):
     opened_by_id: Optional[int]
     closed_at: Optional[datetime]
     closed_by_id: Optional[int]
+    opening_float: int = 0
     expected_total_cash: Optional[int]
     counted_total_cash: Optional[int]
     difference: Optional[int]
     closing_reason: Optional[str]
+    # opening_float + cash payments so far; live value for open sessions, the
+    # stored expected_total_cash for closed ones. Lets the UI show the expected
+    # drawer amount before the session is closed.
+    expected_cash_so_far: Optional[int] = None
 
 
 class CashSessionListResponse(BaseModel):
