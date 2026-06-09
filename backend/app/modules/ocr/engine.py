@@ -231,6 +231,32 @@ class PaddleOcrEngine(OcrEngine):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
 
+    def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
+        """Return the document's first page as PNG bytes.
+
+        PDFs are rasterised at PDF_RENDER_DPI (same space as the layout boxes so
+        the highlight overlay aligns); images are re-encoded to PNG. On any
+        failure the original bytes are returned unchanged.
+        """
+        import io as _io
+
+        if _is_pdf(file_bytes):
+            pages = _pdf_to_image_bytes(file_bytes)
+            return pages[0] if pages else b""
+        try:
+            from PIL import Image  # type: ignore[import]
+
+            arr = _bytes_to_numpy(file_bytes)
+            buf = _io.BytesIO()
+            Image.fromarray(arr).save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception:
+            return file_bytes
+
+    async def render_first_page_png(self, file_bytes: bytes) -> bytes:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.render_first_page_png_sync, file_bytes)
+
     def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
         # PDFs are rasterised page-by-page; images are OCR'd directly.
         width, height = 0, 0

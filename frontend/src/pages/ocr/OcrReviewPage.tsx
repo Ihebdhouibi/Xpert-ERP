@@ -40,7 +40,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
-import { documentsApi } from '../../lib/documentsApi'
 
 // ---------------------------------------------------------------------------
 // Friendly labels for the structured field keys produced by the extractors
@@ -327,6 +326,7 @@ export function OcrReviewPage() {
     if (!extractionId) return
     let cancelled = false
     let pollTimer: ReturnType<typeof setTimeout>
+    let objectUrl: string | null = null
 
     async function load() {
       try {
@@ -345,13 +345,16 @@ export function OcrReviewPage() {
         }
         setEdited(semantic)
 
-        if (data.document_public_id) {
-          try {
-            const res = await documentsApi.getSignedUrl(data.document_public_id)
-            if (!cancelled) setPreviewUrl(res.url)
-          } catch {
-            /* preview is best-effort */
+        // Always preview a rendered image (PDFs are rasterised server-side) so
+        // the view is a plain image with a working highlight/crop overlay.
+        try {
+          const blob = await ocrApi.getPageImage(extractionId!)
+          if (!cancelled) {
+            objectUrl = URL.createObjectURL(blob)
+            setPreviewUrl(objectUrl)
           }
+        } catch {
+          /* preview is best-effort */
         }
       } catch {
         if (!cancelled) setError("Impossible de charger l'extraction OCR.")
@@ -364,6 +367,7 @@ export function OcrReviewPage() {
     return () => {
       cancelled = true
       clearTimeout(pollTimer)
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [extractionId])
 

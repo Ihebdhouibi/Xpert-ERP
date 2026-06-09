@@ -108,4 +108,10 @@ export const ocrApi = {
     apiClient
       .post<{ value: string | null }>(`/ocr/${extractionId}/suggest-field`, { field })
       .then((r) => r.data),
+
+  // First page rendered as a PNG (PDFs rasterised) — returned as a Blob.
+  getPageImage: (extractionId: string) =>
+    apiClient
+      .get<Blob>(`/ocr/${extractionId}/page-image`, { responseType: 'blob' })
+      .then((r) => r.data),
 }

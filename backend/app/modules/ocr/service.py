@@ -427,6 +427,26 @@ async def ocr_region(
     return await engine.run_ocr_region(data, box)
 
 
+async def get_page_image(
+    db: AsyncSession,
+    *,
+    extraction_public_id: uuid.UUID,
+) -> bytes:
+    """Return the document's first page rendered as a PNG (for inline preview)."""
+    extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
+    if extraction is None:
+        raise OcrNotFoundError(str(extraction_public_id))
+    document = await doc_repo.get_by_id(db, document_id=extraction.document_id)
+    if document is None:
+        raise OcrDocumentMissingError(str(extraction.document_id))
+    cfg = get_settings()
+    data = await doc_storage.download_object(
+        bucket=cfg.s3_bucket_documents, key=document.storage_key
+    )
+    engine = PaddleOcrEngine.get()
+    return await engine.render_first_page_png(data)
+
+
 async def suggest_field(
     db: AsyncSession,
     *,

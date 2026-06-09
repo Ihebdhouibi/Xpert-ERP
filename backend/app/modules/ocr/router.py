@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -178,6 +178,24 @@ async def ocr_region(
     except OcrNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
     return {"text": text}
+
+
+@router.get(
+    "/{extraction_id}/page-image",
+    dependencies=[require_permission("document.read")],
+    summary="Render the document's first page as a PNG image for inline preview",
+)
+async def page_image(
+    extraction_id: uuid.UUID,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Return the first page as PNG (rasterises PDFs) so the preview is a plain image."""
+    try:
+        data = await service.get_page_image(db, extraction_public_id=extraction_id)
+    except OcrNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
+    return Response(content=data, media_type="image/png")
 
 
 @router.post(
