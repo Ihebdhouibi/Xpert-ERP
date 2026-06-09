@@ -122,15 +122,16 @@ export const STATUS_LABELS: Record<ROStatus, string> = {
 
 export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   created: ['diagnosis'],
-  diagnosis: ['in_repair'],
-  // During repair you can pause for parts or for client approval, or finish.
-  in_repair: ['paused_parts', 'paused_approval', 'finished'],
-  finished: ['delivered'],
-  delivered: [],
+  // After diagnosis + devis, wait for the client to approve the quotation.
+  diagnosis: ['paused_approval'],
+  // Client approved → start the repair.
+  paused_approval: ['in_repair'],
+  // During repair you can pause for parts, or finish.
+  in_repair: ['paused_parts', 'finished'],
   // "Waiting for parts" is a sub-state of repair: once parts arrive, resume repair.
   paused_parts: ['in_repair'],
-  // "Waiting for client approval": once approved, resume repair or finish.
-  paused_approval: ['in_repair', 'finished'],
+  finished: ['delivered'],
+  delivered: [],
 }
 
 export interface TimeEntry {

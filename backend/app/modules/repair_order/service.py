@@ -196,9 +196,9 @@ class RepairOrderService:
         if not can_transition(ro.status, new_status):
             raise InvalidStatusTransitionError(ro.status, new_status)
 
-        # Step preconditions: a repair can only start once a mechanic has accepted
-        # the job and the diagnosis is complete.
-        if ro.status == ROStatus.diagnosis and new_status == ROStatus.in_repair:
+        # Step preconditions: a diagnosis can only be closed (→ awaiting client
+        # approval) once a mechanic has accepted the job and the diagnosis is done.
+        if ro.status == ROStatus.diagnosis and new_status == ROStatus.paused_approval:
             missing: list[str] = []
             if ro.assigned_user_id is None:
                 missing.append("affecter un mécanicien")

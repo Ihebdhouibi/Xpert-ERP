@@ -141,7 +141,7 @@ function StatusTransitionPanel({
 
   // Step preconditions that must be met before moving forward.
   const blockReason = (target: ROStatus): string | null => {
-    if (ro.status === 'diagnosis' && target === 'in_repair') {
+    if (ro.status === 'diagnosis' && target === 'paused_approval') {
       if (!ro.assigned_user_id) return "Affectez d'abord un mécanicien."
       if (!ro.assignment_accepted_at) return "L'affectation doit être acceptée."
       if (!ro.diagnosis_completed_at) return 'Terminez le diagnostic.'
