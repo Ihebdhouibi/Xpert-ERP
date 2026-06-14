@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -13,6 +14,8 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  ListItemIcon,
+  Menu,
   MenuItem,
   Paper,
   Select,
@@ -28,6 +31,10 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import TableChartIcon from '@mui/icons-material/TableChart'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
@@ -50,6 +57,7 @@ import {
 } from '../../lib/supplierInvoiceApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
+import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { apiClient } from '../../lib/apiClient'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -60,13 +68,6 @@ import { useToast } from '../../contexts/ToastContext'
 // Helpers
 // ---------------------------------------------------------------------------
 
-const STATUS_COLORS: Record<SIStatus, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
-  draft: 'default',
-  posted: 'info',
-  approved: 'success',
-  paid: 'success',
-  cancelled: 'error',
-}
 
 const MATCH_COLORS: Record<SIMatchStatus, 'success' | 'warning' | 'error'> = {
   ok: 'success',
@@ -84,7 +85,7 @@ function fmt(minor: number) {
   return (minor / 100).toLocaleString('fr-FR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }) + ' MAD'
+  }) + ' €'
 }
 
 // ---------------------------------------------------------------------------
@@ -98,10 +99,12 @@ interface CreateDialogProps {
 }
 
 interface LineForm {
-  po_line_id: number | ''
+  po_line_id: number | null
+  part_public_id: string
+  part_name: string
   description: string
   quantity: number
-  unit_price_ht: number
+  unit_price_eur: number
   vat_rate: number
 }
 
@@ -118,6 +121,14 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
   const [lines, setLines] = useState<LineForm[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [extraLinePart, setExtraLinePart] = useState<PartSummary | null>(null)
+
+  const { data: partsData } = useQuery({
+    queryKey: ['parts-all'],
+    queryFn: () => partsApi.list({ page_size: 200 }),
+    enabled: open,
+  })
+  const allParts: PartSummary[] = partsData?.items ?? []
 
   useEffect(() => {
     if (!open) return
@@ -138,7 +149,8 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
         setPos(
           r.items.filter(
             (po) =>
-              ['sent', 'partially_received', 'completed'].includes(po.status),
+              ['sent', 'partially_received', 'completed'].includes(po.status) &&
+              (po.supplier_public_id === supplierPublicId || !po.supplier_public_id),
           ),
         ),
       )
@@ -156,9 +168,11 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
       setLines(
         found.lines.map((l) => ({
           po_line_id: l.id,
-          description: '',
-          quantity: l.quantity_received,
-          unit_price_ht: l.unit_price_ht,
+          part_public_id: '',
+          part_name: l.part_name ?? `Pièce #${l.part_id}`,
+          description: l.part_name ?? '',
+          quantity: l.quantity_received > 0 ? l.quantity_received : l.quantity_ordered,
+          unit_price_eur: l.unit_price_ht / 100,
           vat_rate: 20,
         })),
       )
@@ -167,12 +181,31 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
     }
   }, [poPublicId, pos])
 
-  const updateLine = (i: number, field: keyof LineForm, value: string | number) =>
+  const updateLine = (i: number, field: keyof LineForm, value: string | number | null) =>
     setLines((l) => l.map((ln, idx) => (idx === i ? { ...ln, [field]: value } : ln)))
 
-  const totalHt = lines.reduce((s, l) => s + (l.quantity * l.unit_price_ht), 0)
-  const totalTtc = lines.reduce(
-    (s, l) => s + Math.round(l.quantity * l.unit_price_ht * (1 + l.vat_rate / 100)),
+  const removeLine = (i: number) =>
+    setLines((prev) => prev.filter((_, idx) => idx !== i))
+
+  const addExtraLine = (part: PartSummary) => {
+    setLines((prev) => [
+      ...prev,
+      {
+        po_line_id: null,
+        part_public_id: part.id,
+        part_name: part.name,
+        description: part.name,
+        quantity: 1,
+        unit_price_eur: 0,
+        vat_rate: 20,
+      },
+    ])
+    setExtraLinePart(null)
+  }
+
+  const totalHtEur = lines.reduce((s, l) => s + l.unit_price_eur * l.quantity, 0)
+  const totalTtcEur = lines.reduce(
+    (s, l) => s + l.unit_price_eur * l.quantity * (1 + l.vat_rate / 100),
     0,
   )
 
@@ -189,10 +222,10 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
         po_public_id: poPublicId,
         number: number.trim(),
         lines: lines.map((l) => ({
-          po_line_id: l.po_line_id as number,
+          ...(l.po_line_id !== null ? { po_line_id: l.po_line_id } : { part_public_id: l.part_public_id }),
           description: l.description,
           quantity: l.quantity,
-          unit_price_ht: l.unit_price_ht,
+          unit_price_ht: Math.round(l.unit_price_eur * 100),
           vat_rate: l.vat_rate,
         })),
         received_at: receivedAt || null,
@@ -201,7 +234,6 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
       }
       const si = await supplierInvoiceApi.create(payload)
       onCreated(si)
-      // reset
       setSupplierPublicId('')
       setPoPublicId('')
       setNumber('')
@@ -217,7 +249,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Nouvelle facture fournisseur</DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
@@ -283,18 +315,20 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
             onChange={(e) => setNotes(e.target.value)}
           />
 
-          {lines.length > 0 && (
+          {selectedPo && (
             <>
               <Typography variant="subtitle2">Lignes</Typography>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Description</TableCell>
+                    <TableCell>Pièce</TableCell>
+                    <TableCell>Note</TableCell>
                     <TableCell align="right">Qté reçue (BC)</TableCell>
                     <TableCell align="right">Qté facturée</TableCell>
-                    <TableCell align="right">PU HT (cts)</TableCell>
+                    <TableCell align="right">PU HT (€)</TableCell>
                     <TableCell align="right">TVA %</TableCell>
                     <TableCell align="right">Total HT</TableCell>
+                    <TableCell />
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -303,10 +337,16 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                     return (
                       <TableRow key={i}>
                         <TableCell>
+                          <Typography variant="body2" fontWeight={600}>{ln.part_name}</Typography>
+                        </TableCell>
+                        <TableCell>
                           <TextField
                             size="small"
+                            placeholder="Note optionnelle"
                             value={ln.description}
                             onChange={(e) => updateLine(i, 'description', e.target.value)}
+                            variant="standard"
+                            sx={{ minWidth: 120 }}
                           />
                         </TableCell>
                         <TableCell align="right">
@@ -317,7 +357,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                             size="small"
                             type="number"
                             value={ln.quantity}
-                            onChange={(e) => updateLine(i, 'quantity', parseInt(e.target.value) || 0)}
+                            onChange={(e) => updateLine(i, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
                             inputProps={{ min: 1, style: { width: 70 } }}
                           />
                         </TableCell>
@@ -325,9 +365,16 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                           <TextField
                             size="small"
                             type="number"
-                            value={ln.unit_price_ht}
-                            onChange={(e) => updateLine(i, 'unit_price_ht', parseInt(e.target.value) || 0)}
-                            inputProps={{ min: 0, style: { width: 90 } }}
+                            value={ln.unit_price_eur || ''}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value)
+                              updateLine(i, 'unit_price_eur', isNaN(v) ? 0 : v)
+                            }}
+                            onBlur={(e) => {
+                              const v = parseFloat(e.target.value)
+                              if (!isNaN(v)) updateLine(i, 'unit_price_eur', Math.round(v * 100) / 100)
+                            }}
+                            inputProps={{ min: 0, step: 1, style: { width: 90 } }}
                           />
                         </TableCell>
                         <TableCell align="right">
@@ -339,15 +386,47 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                             inputProps={{ min: 0, max: 100, style: { width: 60 } }}
                           />
                         </TableCell>
-                        <TableCell align="right">{fmt(ln.quantity * ln.unit_price_ht)}</TableCell>
+                        <TableCell align="right">
+                          {(ln.unit_price_eur * ln.quantity).toFixed(2)} €
+                        </TableCell>
+                        <TableCell>
+                          {ln.po_line_id === null && (
+                            <IconButton size="small" onClick={() => removeLine(i)} color="error">
+                              <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
                       </TableRow>
                     )
                   })}
                 </TableBody>
               </Table>
+
+              {/* Extra line adder */}
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Autocomplete
+                  options={allParts}
+                  getOptionLabel={(p) => `${p.name} (${p.sku_code})`}
+                  value={extraLinePart}
+                  onChange={(_, val) => setExtraLinePart(val)}
+                  size="small"
+                  sx={{ minWidth: 260 }}
+                  renderInput={(params) => <TextField {...params} label="Ajouter une pièce (optionnel)" />}
+                />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  disabled={!extraLinePart}
+                  onClick={() => extraLinePart && addExtraLine(extraLinePart)}
+                >
+                  Ajouter
+                </Button>
+              </Stack>
+
               <Stack direction="row" justifyContent="flex-end" spacing={3} pr={1}>
-                <Typography variant="body2">Total HT: <strong>{fmt(totalHt)}</strong></Typography>
-                <Typography variant="body2">Total TTC: <strong>{fmt(totalTtc)}</strong></Typography>
+                <Typography variant="body2">Total HT: <strong>{totalHtEur.toFixed(2)} €</strong></Typography>
+                <Typography variant="body2">Total TTC: <strong>{totalTtcEur.toFixed(2)} €</strong></Typography>
               </Stack>
             </>
           )}
@@ -537,6 +616,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   const [overrideOpen, setOverrideOpen] = useState(false)
   const [accountingOpen, setAccountingOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
     if (severity === 'success') toastSuccess(message)
@@ -579,6 +659,19 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
       () => supplierInvoiceApi.cancel(si.id, { version: si.version }),
       'Facture annulée',
     )
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const url = await supplierInvoiceApi.getPdf(si.id)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      showSnack('Impossible de générer le PDF.', 'error')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -734,6 +827,14 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
 
       {/* Actions */}
       <Stack direction="row" spacing={1} flexWrap="wrap">
+        <Button
+          variant="outlined"
+          startIcon={<PictureAsPdfIcon />}
+          onClick={handleDownloadPdf}
+          disabled={pdfLoading}
+        >
+          {pdfLoading ? <CircularProgress size={18} /> : 'Générer PDF'}
+        </Button>
         {si.status === 'draft' && (
           <Button
             variant="contained"
@@ -835,13 +936,42 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
 // ---------------------------------------------------------------------------
 
 export function SupplierInvoicePage() {
-  const { success: toastSuccess } = useToast()
+  const { success: toastSuccess, error: toastError } = useToast()
   const qc = useQueryClient()
   const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<SIStatus | ''>('')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<SupplierInvoice | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [exportMenuAnchor, setExportMenuAnchor] = useState<null | HTMLElement>(null)
+  const [exporting, setExporting] = useState(false)
+
+  const handleExportCsv = async () => {
+    setExportMenuAnchor(null)
+    setExporting(true)
+    try {
+      await supplierInvoiceApi.exportCsv()
+      toastSuccess('Export CSV téléchargé.')
+    } catch {
+      toastError('Erreur lors de l\'export.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportPdf = async () => {
+    setExportMenuAnchor(null)
+    setExporting(true)
+    try {
+      const url = await supplierInvoiceApi.exportPdf()
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toastError('Erreur lors de l\'export.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['supplier-invoices', statusFilter, search, page],
@@ -878,9 +1008,34 @@ export function SupplierInvoicePage() {
         title="Factures fournisseurs"
         subtitle={`${total} facture${total !== 1 ? 's' : ''} · Rapprochement 3 voies`}
         actions={
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-            Nouvelle facture
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              startIcon={exporting ? <CircularProgress size={18} /> : <AccountBalanceIcon />}
+              endIcon={<ArrowDropDownIcon />}
+              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+              disabled={exporting}
+            >
+              Export comptable (payées)
+            </Button>
+            <Menu
+              anchorEl={exportMenuAnchor}
+              open={Boolean(exportMenuAnchor)}
+              onClose={() => setExportMenuAnchor(null)}
+            >
+              <MenuItem onClick={handleExportCsv}>
+                <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
+                Télécharger CSV
+              </MenuItem>
+              <MenuItem onClick={handleExportPdf}>
+                <ListItemIcon><PictureAsPdfIcon fontSize="small" /></ListItemIcon>
+                Télécharger PDF
+              </MenuItem>
+            </Menu>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+              Nouvelle facture
+            </Button>
+          </Stack>
         }
       />
 

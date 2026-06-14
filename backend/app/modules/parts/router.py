@@ -168,7 +168,7 @@ async def list_parts(
     status: Optional[PartStatus] = None,
     include_deleted: bool = False,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
 ) -> PartListResponse:
     parts, total = await PartRepository.list(
         db,

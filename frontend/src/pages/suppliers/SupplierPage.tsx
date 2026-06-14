@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -53,7 +54,7 @@ const STATUS_COLOR: Record<SupplierStatus, 'success' | 'default'> = {
   inactive: 'default',
 }
 
-function money(minor: number, currency = 'MAD') {
+function money(minor: number, currency = 'EUR') {
   return `${(minor / 100).toFixed(2)} ${currency}`
 }
 
@@ -212,10 +213,8 @@ interface PriceHistoryDialogProps {
 
 function PriceHistoryDialog({ open, supplier, onClose }: PriceHistoryDialogProps) {
   const qc = useQueryClient()
-  const [partSearch, setPartSearch] = useState('')
-  const [selectedPartId, setSelectedPartId] = useState('')
-  const [priceMinor, setPriceMinor] = useState('')
-  const [currency, setCurrency] = useState('MAD')
+  const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
+  const [priceEur, setPriceEur] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState('')
   const [addError, setAddError] = useState('')
 
@@ -226,24 +225,23 @@ function PriceHistoryDialog({ open, supplier, onClose }: PriceHistoryDialogProps
   })
 
   const { data: partsData } = useQuery({
-    queryKey: ['parts', partSearch],
-    queryFn: () => partsApi.list({ search: partSearch, page_size: 10 }),
-    enabled: partSearch.length >= 2,
+    queryKey: ['parts-all'],
+    queryFn: () => partsApi.list({ page_size: 200 }),
+    enabled: open,
   })
 
   const addMutation = useMutation({
     mutationFn: () =>
       supplierApi.addPrice(supplier!.id, {
-        part_public_id: selectedPartId,
-        unit_price_minor: Math.round(Number(priceMinor) * 100),
-        currency,
+        part_public_id: selectedPart!.id,
+        unit_price_minor: Math.round(Number(priceEur) * 100),
+        currency: 'EUR',
         effective_from: effectiveFrom,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['supplier-prices', supplier?.id] })
-      setSelectedPartId('')
-      setPartSearch('')
-      setPriceMinor('')
+      setSelectedPart(null)
+      setPriceEur('')
       setEffectiveFrom('')
       setAddError('')
     },
@@ -252,14 +250,14 @@ function PriceHistoryDialog({ open, supplier, onClose }: PriceHistoryDialogProps
 
   function handleAdd() {
     setAddError('')
-    if (!selectedPartId || !priceMinor || !effectiveFrom) {
+    if (!selectedPart || !priceEur || !effectiveFrom) {
       setAddError('Tous les champs sont obligatoires.')
       return
     }
     addMutation.mutate()
   }
 
-  const parts: PartSummary[] = partsData?.items ?? []
+  const allParts: PartSummary[] = partsData?.items ?? []
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -268,42 +266,24 @@ function PriceHistoryDialog({ open, supplier, onClose }: PriceHistoryDialogProps
       </DialogTitle>
       <DialogContent>
         <Typography variant="subtitle2" mb={1}>Ajouter un prix</Typography>
-        <Stack direction="row" spacing={1} mb={2} flexWrap="wrap">
-          <TextField
-            label="Rechercher une pièce"
-            value={partSearch}
-            onChange={(e) => { setPartSearch(e.target.value); setSelectedPartId('') }}
+        <Stack direction="row" spacing={1} mb={2} flexWrap="wrap" alignItems="flex-start">
+          <Autocomplete
+            options={allParts}
+            getOptionLabel={(p) => `${p.name} (${p.sku_code})`}
+            value={selectedPart}
+            onChange={(_, val) => setSelectedPart(val)}
             size="small"
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: 240 }}
+            renderInput={(params) => <TextField {...params} label="Pièce" />}
           />
-          {parts.length > 0 && !selectedPartId && (
-            <Paper sx={{ p: 1, maxHeight: 140, overflowY: 'auto', minWidth: 220 }}>
-              {parts.map((p) => (
-                <Box
-                  key={p.id}
-                  sx={{ cursor: 'pointer', px: 1, py: 0.5, '&:hover': { bgcolor: 'action.hover' } }}
-                  onClick={() => { setSelectedPartId(p.id); setPartSearch(p.name) }}
-                >
-                  <Typography variant="body2">{p.name} ({p.sku_code})</Typography>
-                </Box>
-              ))}
-            </Paper>
-          )}
           <TextField
-            label="Prix (MAD)"
-            value={priceMinor}
-            onChange={(e) => setPriceMinor(e.target.value)}
+            label="Prix (€)"
+            value={priceEur}
+            onChange={(e) => setPriceEur(e.target.value)}
             type="number"
             inputProps={{ min: 0, step: '0.01' }}
             size="small"
             sx={{ width: 130 }}
-          />
-          <TextField
-            label="Devise"
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            size="small"
-            sx={{ width: 80 }}
           />
           <TextField
             label="Valable dès"
@@ -375,14 +355,12 @@ function PriceHistoryDialog({ open, supplier, onClose }: PriceHistoryDialogProps
 // ---------------------------------------------------------------------------
 
 function PriceComparisonTab() {
-  const [partSearch, setPartSearch] = useState('')
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [atDate, setAtDate] = useState('')
 
   const { data: partsData } = useQuery({
-    queryKey: ['parts-search', partSearch],
-    queryFn: () => partsApi.list({ search: partSearch, page_size: 10 }),
-    enabled: partSearch.length >= 2,
+    queryKey: ['parts-all'],
+    queryFn: () => partsApi.list({ page_size: 200 }),
   })
 
   const { data: comparison = [], isLoading, isFetched } = useQuery({
@@ -392,54 +370,39 @@ function PriceComparisonTab() {
     enabled: !!selectedPart,
   })
 
-  const parts: PartSummary[] = partsData?.items ?? []
+  const allParts: PartSummary[] = partsData?.items ?? []
 
   return (
     <Box>
       <Typography variant="h6" mb={2}>
         Comparaison des prix fournisseurs
       </Typography>
-      <Stack direction="row" spacing={2} mb={3} flexWrap="wrap">
-        <Box sx={{ position: 'relative' }}>
-          <TextField
-            label="Rechercher une pièce"
-            value={partSearch}
-            onChange={(e) => { setPartSearch(e.target.value); setSelectedPart(null) }}
-            size="small"
-            sx={{ minWidth: 250 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-          />
-          {parts.length > 0 && !selectedPart && (
-            <Paper
-              sx={{
-                position: 'absolute',
-                zIndex: 10,
-                mt: 0.5,
-                p: 1,
-                maxHeight: 160,
-                overflowY: 'auto',
-                minWidth: 280,
+      <Stack direction="row" spacing={2} mb={3} flexWrap="wrap" alignItems="flex-start">
+        <Autocomplete
+          options={allParts}
+          getOptionLabel={(p) => `${p.name} (${p.sku_code})`}
+          value={selectedPart}
+          onChange={(_, val) => setSelectedPart(val)}
+          size="small"
+          sx={{ minWidth: 280 }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Sélectionner une pièce"
+              InputProps={{
+                ...params.InputProps,
+                startAdornment: (
+                  <>
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                    {params.InputProps.startAdornment}
+                  </>
+                ),
               }}
-            >
-              {parts.map((p) => (
-                <Box
-                  key={p.id}
-                  sx={{ cursor: 'pointer', px: 1, py: 0.5, '&:hover': { bgcolor: 'action.hover' } }}
-                  onClick={() => { setSelectedPart(p); setPartSearch(p.name) }}
-                >
-                  <Typography variant="body2" fontWeight={600}>{p.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{p.sku_code}</Typography>
-                </Box>
-              ))}
-            </Paper>
+            />
           )}
-        </Box>
+        />
         <TextField
           label="Date historique"
           value={atDate}

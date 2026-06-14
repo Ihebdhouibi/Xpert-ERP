@@ -22,6 +22,7 @@ from app.modules.delivery_note import repository as delivery_note_repo
 from app.modules.invoice import repository as invoice_repo
 from app.modules.quotation import repository as quotation_repo
 from app.modules.vehicles import repository as vehicle_repo
+from app.modules.purchase_order.repository import PurchaseOrderRepository
 
 logger = get_logger("pdf.service")
 
@@ -180,6 +181,89 @@ async def render_delivery_note_pdf(
         return pdf_bytes
     except Exception:
         logger.exception("render_delivery_note_pdf_error", delivery_note_id=delivery_note_id, garage_id=garage_id)
+        raise
+
+
+async def render_purchase_order_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch the purchase order from DB, resolve names, render HTML template, return PDF bytes."""
+    from sqlalchemy import select
+    from app.modules.supplier.models import Supplier
+    from app.modules.parts.models import Part
+
+    logger.info("render_purchase_order_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
+        if po is None:
+            raise ValueError(f"Purchase order {public_id} not found")
+
+        supplier_res = await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+        supplier = supplier_res.scalar_one_or_none()
+
+        part_ids = list({line.part_id for line in po.lines})
+        parts_map: dict[int, str] = {}
+        if part_ids:
+            parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
+            parts_map = {p.id: p.name for p in parts_res.scalars()}
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": po,
+            "supplier": supplier,
+            "parts_map": parts_map,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("purchase_order.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_purchase_order_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_purchase_order_pdf_error", public_id=public_id, garage_id=garage_id)
+        raise
+
+
+async def render_supplier_invoice_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch supplier invoice, resolve supplier name, render PDF."""
+    from sqlalchemy import select
+    from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
+    from app.modules.supplier.models import Supplier
+
+    logger.info("render_supplier_invoice_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
+        if si is None:
+            raise ValueError(f"Supplier invoice {public_id} not found")
+
+        supplier_res = await db.execute(select(Supplier).where(Supplier.id == si.supplier_id))
+        supplier = supplier_res.scalar_one_or_none()
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": si,
+            "supplier": supplier,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("supplier_invoice.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_supplier_invoice_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_supplier_invoice_pdf_error", public_id=public_id, garage_id=garage_id)
         raise
 
 

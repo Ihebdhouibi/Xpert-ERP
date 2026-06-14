@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Box,
@@ -31,6 +31,7 @@ import MoveToInboxIcon from '@mui/icons-material/MoveToInbox'
 import CancelIcon from '@mui/icons-material/Cancel'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import ReceiptIcon from '@mui/icons-material/Receipt'
 import {
   purchaseOrderApi,
@@ -44,6 +45,7 @@ import {
   POMatchFlag,
 } from '../../lib/purchaseOrderApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
+import { supplierInvoiceApi } from '../../lib/supplierInvoiceApi'
 import { partsApi } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -70,7 +72,7 @@ const MATCH_COLORS: Record<POMatchFlag, 'success' | 'warning' | 'error'> = {
 }
 
 function formatMoney(minor: number) {
-  return (minor / 100).toFixed(2) + ' MAD'
+  return (minor / 100).toFixed(2) + ' €'
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +107,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
   useEffect(() => {
     if (!open) return
     supplierApi.list({ status: 'active', page_size: 100 }).then((r) => setSuppliers(r.items))
-    partsApi.list({ page_size: 200 }).then((r) => setParts(r.items))
+    partsApi.list({ page_size: 200 }).then((r) => setParts(r.items)).catch(() => setError('Impossible de charger les pièces'))
   }, [open])
 
   const handleAddLine = () =>
@@ -133,7 +135,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
         lines: lines.map((l) => ({
           part_public_id: l.part_public_id,
           quantity_ordered: l.quantity_ordered,
-          unit_price_ht: l.unit_price_ht,
+          unit_price_ht: Math.round(l.unit_price_ht * 100),
         })),
       }
       const po = await purchaseOrderApi.create(payload)
@@ -191,7 +193,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
               <TableRow>
                 <TableCell>Pièce</TableCell>
                 <TableCell width={100}>Qté</TableCell>
-                <TableCell width={130}>Prix HT (MAD)</TableCell>
+                <TableCell width={130}>Prix HT</TableCell>
                 <TableCell width={40} />
               </TableRow>
             </TableHead>
@@ -225,9 +227,15 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                     <TextField
                       size="small"
                       type="number"
-                      value={(ln.unit_price_ht / 100).toFixed(2)}
-                      onChange={(e) => updateLine(i, 'unit_price_ht', Math.round((parseFloat(e.target.value) || 0) * 100))}
-                      inputProps={{ min: 0, step: '0.01' }}
+                      value={ln.unit_price_ht || ''}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        if (raw === '') return
+                        const num = parseFloat(raw)
+                        if (!isNaN(num) && num >= 0) updateLine(i, 'unit_price_ht', num)
+                      }}
+                      onBlur={() => updateLine(i, 'unit_price_ht', Math.round(ln.unit_price_ht * 100) / 100)}
+                      inputProps={{ min: 0, step: 1 }}
                     />
                   </TableCell>
                   <TableCell>
@@ -248,7 +256,7 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
           </Box>
 
           <Typography variant="body2" fontWeight={600}>
-            Total HT : {formatMoney(totalHt)}
+            Total HT : {totalHt.toFixed(2)} €
           </Typography>
         </Stack>
       </DialogContent>
@@ -462,6 +470,175 @@ function InvoiceDialog({ open, po, onClose, onSaved }: InvoiceDialogProps) {
 }
 
 // ---------------------------------------------------------------------------
+// CreateSupplierInvoiceDialog
+// ---------------------------------------------------------------------------
+
+interface CreateSIDialogProps {
+  open: boolean
+  po: PurchaseOrder | null
+  onClose: () => void
+  onCreated: () => void
+}
+
+interface SILineForm {
+  po_line_id: number
+  part_name: string
+  quantity: number
+  unit_price_ht: number
+}
+
+function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSIDialogProps) {
+  const { success } = useToast()
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [notes, setNotes] = useState('')
+  const [linesForms, setLinesForms] = useState<SILineForm[]>([])
+  const [formError, setFormError] = useState('')
+
+  useEffect(() => {
+    if (po && open) {
+      setInvoiceNumber('')
+      setDueDate('')
+      setNotes('')
+      setFormError('')
+      setLinesForms(
+        po.lines
+          .filter((l) => l.quantity_received > 0)
+          .map((l) => ({
+            po_line_id: l.id,
+            part_name: l.part_name ?? `Pièce #${l.part_id}`,
+            quantity: l.quantity_received,
+            unit_price_ht: l.unit_price_ht,
+          }))
+      )
+    }
+  }, [po, open])
+
+  const createMutation = useMutation({
+    mutationFn: () => {
+      if (!po?.supplier_public_id) throw new Error('Supplier ID missing')
+      return supplierInvoiceApi.create({
+        supplier_public_id: po.supplier_public_id!,
+        po_public_id: po.id,
+        number: invoiceNumber.trim(),
+        due_date: dueDate || null,
+        notes: notes.trim() || null,
+        lines: linesForms.map((l) => ({
+          po_line_id: l.po_line_id,
+          quantity: l.quantity,
+          unit_price_ht: l.unit_price_ht,
+        })),
+      })
+    },
+    onSuccess: () => {
+      success('Facture fournisseur créée.')
+      onCreated()
+    },
+    onError: (e: any) => {
+      setFormError(e?.response?.data?.detail || 'Erreur lors de la création.')
+    },
+  })
+
+  function handleSubmit() {
+    setFormError('')
+    if (!invoiceNumber.trim()) { setFormError('Le numéro de facture est obligatoire.'); return }
+    if (linesForms.length === 0) { setFormError('Aucune ligne à facturer (quantités reçues nulles).'); return }
+    createMutation.mutate()
+  }
+
+  if (!po) return null
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>Créer facture fournisseur — {po.doc_number}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} mt={1}>
+          {formError && <Alert severity="error">{formError}</Alert>}
+          <Stack direction="row" spacing={2}>
+            <TextField
+              label="N° facture fournisseur"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.target.value)}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Date d'échéance"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+          <TextField
+            label="Notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            multiline
+            rows={2}
+            fullWidth
+          />
+          <Typography variant="subtitle2">Lignes facturées</Typography>
+          {linesForms.length === 0 ? (
+            <Alert severity="warning">Aucune pièce reçue sur ce bon de commande.</Alert>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Pièce</TableCell>
+                  <TableCell align="right">Quantité</TableCell>
+                  <TableCell align="right">Prix unit. HT</TableCell>
+                  <TableCell align="right">Total HT</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {linesForms.map((l, idx) => (
+                  <TableRow key={l.po_line_id}>
+                    <TableCell>{l.part_name}</TableCell>
+                    <TableCell align="right">
+                      <TextField
+                        size="small"
+                        type="number"
+                        value={l.quantity}
+                        onChange={(e) => {
+                          const q = Math.max(1, parseInt(e.target.value) || 1)
+                          setLinesForms((prev) => prev.map((x, i) => i === idx ? { ...x, quantity: q } : x))
+                        }}
+                        inputProps={{ min: 1 }}
+                        sx={{ width: 80 }}
+                      />
+                    </TableCell>
+                    <TableCell align="right">{formatMoney(l.unit_price_ht)}</TableCell>
+                    <TableCell align="right">{formatMoney(l.quantity * l.unit_price_ht)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell colSpan={3} align="right"><strong>Total HT</strong></TableCell>
+                  <TableCell align="right">
+                    <strong>{formatMoney(linesForms.reduce((s, l) => s + l.quantity * l.unit_price_ht, 0))}</strong>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={createMutation.isPending}>Annuler</Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={createMutation.isPending || linesForms.length === 0}
+        >
+          {createMutation.isPending ? <CircularProgress size={20} /> : 'Créer la facture'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // PODetail
 // ---------------------------------------------------------------------------
 
@@ -472,14 +649,28 @@ interface PODetailProps {
 }
 
 function PODetail({ po, onBack, onUpdated }: PODetailProps) {
+  const qc = useQueryClient()
   const [receiveOpen, setReceiveOpen] = useState(false)
   const [invoiceOpen, setInvoiceOpen] = useState(false)
+  const [createSIOpen, setCreateSIOpen] = useState(false)
   const [actioning, setActioning] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
   const [error, setError] = useState('')
 
   const canSend = po.status === 'draft'
   const canReceive = po.status === 'sent' || po.status === 'partially_received'
   const canCancel = po.status !== 'completed' && po.status !== 'cancelled'
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const url = await purchaseOrderApi.getPdf(po.id)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      setError('Impossible de générer le PDF.')
+    } finally { setPdfLoading(false) }
+  }
 
   const handleSend = async () => {
     setActioning(true); setError('')
@@ -515,6 +706,9 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Stack direction="row" spacing={1} mb={3}>
+        <Button variant="outlined" startIcon={<PictureAsPdfIcon />} onClick={handleDownloadPdf} disabled={pdfLoading}>
+          {pdfLoading ? <CircularProgress size={20} /> : 'Générer PDF'}
+        </Button>
         {canSend && (
           <Button variant="outlined" startIcon={<SendIcon />} onClick={handleSend} disabled={actioning}>
             Envoyer au fournisseur
@@ -530,6 +724,11 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
             Contrôle facture
           </Button>
         )}
+        {(po.status === 'partially_received' || po.status === 'completed') && (
+          <Button variant="contained" color="success" startIcon={<ReceiptIcon />} onClick={() => setCreateSIOpen(true)}>
+            Créer facture fournisseur
+          </Button>
+        )}
         {canCancel && (
           <Button variant="outlined" color="error" startIcon={<CancelIcon />} onClick={() => setCancelOpen(true)} disabled={actioning}>
             Annuler
@@ -540,7 +739,7 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
       <Stack direction="row" spacing={4} mb={3}>
         <Box>
           <Typography variant="caption" color="text.secondary">Fournisseur</Typography>
-          <Typography>ID {po.supplier_id}</Typography>
+          <Typography>{po.supplier_name ?? `ID ${po.supplier_id}`}</Typography>
         </Box>
         <Box>
           <Typography variant="caption" color="text.secondary">Livraison prévue</Typography>
@@ -570,7 +769,7 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
         <TableBody>
           {po.lines.map((l) => (
             <TableRow key={l.id}>
-              <TableCell>Pièce #{l.part_id}</TableCell>
+              <TableCell>{l.part_name ?? `Pièce #${l.part_id}`}</TableCell>
               <TableCell align="right">{l.quantity_ordered}</TableCell>
               <TableCell align="right">{formatMoney(l.unit_price_ht)}</TableCell>
               <TableCell align="right">{l.quantity_received}</TableCell>
@@ -598,6 +797,15 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
         po={po}
         onClose={() => setInvoiceOpen(false)}
         onSaved={(updated) => { onUpdated(updated); setInvoiceOpen(false) }}
+      />
+      <CreateSupplierInvoiceDialog
+        open={createSIOpen}
+        po={po}
+        onClose={() => setCreateSIOpen(false)}
+        onCreated={() => {
+          setCreateSIOpen(false)
+          qc.invalidateQueries({ queryKey: ['supplier-invoices'] })
+        }}
       />
       <ConfirmDialog
         open={cancelOpen}
@@ -697,7 +905,7 @@ export function PurchaseOrderPage() {
             id: 'supplier',
             label: 'Fournisseur',
             render: po => (
-              <Typography variant="body2" color="text.secondary">ID {po.supplier_id}</Typography>
+              <Typography variant="body2" color="text.secondary">{po.supplier_name ?? `ID ${po.supplier_id}`}</Typography>
             ),
           },
           {

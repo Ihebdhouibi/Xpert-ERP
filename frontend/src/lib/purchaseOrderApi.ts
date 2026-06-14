@@ -12,6 +12,7 @@ export type POMatchFlag = 'ok' | 'qty_mismatch' | 'inv_mismatch'
 export interface POLine {
   id: number
   part_id: number
+  part_name?: string | null
   quantity_ordered: number
   unit_price_ht: number
   quantity_received: number
@@ -22,6 +23,8 @@ export interface POLine {
 export interface PurchaseOrder {
   id: string
   supplier_id: number
+  supplier_name?: string | null
+  supplier_public_id?: string | null
   doc_number: string | null
   status: POStatus
   expected_delivery_date: string | null
@@ -143,5 +146,11 @@ export const purchaseOrderApi = {
     return apiClient
       .post(`/stock/alerts/${alertId}/create-po`, body)
       .then((r) => r.data)
+  },
+
+  getPdf(publicId: string): Promise<string> {
+    return apiClient
+      .get(`/pdf/purchase-orders/${publicId}`, { responseType: 'blob' })
+      .then((r) => URL.createObjectURL(r.data as Blob))
   },
 }

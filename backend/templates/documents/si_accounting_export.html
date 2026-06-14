@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="doc-title">JOURNAL DES ACHATS — FACTURES FOURNISSEURS PAYÉES</div>
+
+<div class="doc-meta">
+  <table>
+    <tr>
+      <td class="label">Date d'export</td>
+      <td><strong>{{ export_date }}</strong></td>
+      <td class="label">Nombre de factures</td>
+      <td><strong>{{ invoice_count }}</strong></td>
+    </tr>
+  </table>
+</div>
+
+<table class="lines-table">
+  <thead>
+    <tr>
+      <th>N° Facture</th>
+      <th style="width:9%">Date</th>
+      <th style="width:9%">Échéance</th>
+      <th style="width:18%">Fournisseur</th>
+      <th style="width:8%" class="num">Compte</th>
+      <th>Libellé</th>
+      <th class="amount" style="width:11%">Débit (€)</th>
+      <th class="amount" style="width:11%">Crédit (€)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.number }}</td>
+      <td>{{ row.date }}</td>
+      <td>{{ row.due }}</td>
+      <td>{{ row.supplier }}</td>
+      <td class="num"><strong>{{ row.account }}</strong></td>
+      <td>{{ row.label }}</td>
+      <td class="amount">{{ row.debit }}</td>
+      <td class="amount">{{ row.credit }}</td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="8" style="text-align:center; color:#888; padding:8pt;">Aucune facture payée</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="totals-wrapper">
+  <table class="totals-table">
+    <tr class="subtotal">
+      <td class="t-label">Total débits HT (607)</td>
+      <td class="t-value">{{ total_ht }} €</td>
+    </tr>
+    <tr class="vat">
+      <td class="t-label">Total TVA (44566)</td>
+      <td class="t-value">{{ total_tva }} €</td>
+    </tr>
+    <tr class="total">
+      <td class="t-label">Total crédits TTC (401)</td>
+      <td class="t-value">{{ total_ttc }} €</td>
+    </tr>
+  </table>
+</div>
+
+{% endblock %}

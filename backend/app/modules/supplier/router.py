@@ -88,7 +88,7 @@ class SupplierListResponse(BaseModel):
 class SupplierPriceCreateRequest(BaseModel):
     part_public_id: str = Field(..., description="Catalog part public_id (UUID)")
     unit_price_minor: int = Field(..., gt=0)
-    currency: str = Field("MAD", min_length=3, max_length=3)
+    currency: str = Field("EUR", min_length=3, max_length=3)
     effective_from: date
 
 

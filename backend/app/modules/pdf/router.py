@@ -20,6 +20,66 @@ logger = get_logger("pdf.router")
 
 
 @router.get(
+    "/purchase-orders/{public_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF document"},
+        404: {"description": "Purchase order not found"},
+    },
+    dependencies=[require_permission("purchase_order.read")],
+)
+async def download_purchase_order_pdf(
+    public_id: str,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_purchase_order_pdf(
+            db, public_id=public_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    filename = f"bon-commande-{public_id[:8]}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/supplier-invoices/{public_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF document"},
+        404: {"description": "Supplier invoice not found"},
+    },
+    dependencies=[require_permission("supplier_invoice.read")],
+)
+async def download_supplier_invoice_pdf(
+    public_id: str,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_supplier_invoice_pdf(
+            db, public_id=public_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Supplier invoice not found")
+
+    filename = f"facture-fournisseur-{public_id[:8]}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
     "/quotations/{quotation_id}",
     response_class=Response,
     responses={

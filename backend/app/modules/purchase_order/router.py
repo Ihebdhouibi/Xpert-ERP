@@ -5,6 +5,7 @@ from typing import Annotated, Any, Optional
 
 from fastapi import Depends, HTTPException, Query
 from fastapi import status as http_status
+from sqlalchemy import select
 from fastapi.routing import APIRouter
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,6 +83,7 @@ class POLineResponse(BaseModel):
 
     id: int
     part_id: int
+    part_name: Optional[str] = None
     quantity_ordered: int
     unit_price_ht: int
     quantity_received: int
@@ -94,6 +96,8 @@ class POSummary(BaseModel):
 
     id: str
     supplier_id: int
+    supplier_name: Optional[str] = None
+    supplier_public_id: Optional[str] = None
     doc_number: Optional[str]
     status: str
     expected_delivery_date: Optional[date]
@@ -142,6 +146,9 @@ async def list_purchase_orders(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> POListResponse:
+    from app.modules.supplier.models import Supplier
+    from app.modules.parts.models import Part
+
     items, total = await PurchaseOrderRepository.list(
         db,
         garage_id=user.garage_id,
@@ -150,12 +157,32 @@ async def list_purchase_orders(
         page=page,
         page_size=page_size,
     )
-    return POListResponse(
-        items=[POSummary.model_validate(po) for po in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+
+    supplier_ids = list({po.supplier_id for po in items})
+    suppliers_map: dict[int, str] = {}
+    suppliers_public_id_map: dict[int, str] = {}
+    if supplier_ids:
+        sup_res = await db.execute(select(Supplier).where(Supplier.id.in_(supplier_ids)))
+        for s in sup_res.scalars():
+            suppliers_map[s.id] = s.name
+            suppliers_public_id_map[s.id] = str(s.public_id)
+
+    all_part_ids = list({line.part_id for po in items for line in po.lines})
+    parts_map: dict[int, str] = {}
+    if all_part_ids:
+        parts_res = await db.execute(select(Part).where(Part.id.in_(all_part_ids)))
+        parts_map = {p.id: p.name for p in parts_res.scalars()}
+
+    summaries = []
+    for po in items:
+        s = POSummary.model_validate(po)
+        s.supplier_name = suppliers_map.get(po.supplier_id)
+        s.supplier_public_id = suppliers_public_id_map.get(po.supplier_id)
+        for line_resp, line_orm in zip(s.lines, po.lines):
+            line_resp.part_name = parts_map.get(line_orm.part_id)
+        summaries.append(s)
+
+    return POListResponse(items=summaries, total=total, page=page, page_size=page_size)
 
 
 @router.post(
@@ -199,10 +226,28 @@ async def get_purchase_order(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> POSummary:
+    from app.modules.supplier.models import Supplier
+    from app.modules.parts.models import Part
+
     po = await PurchaseOrderRepository.get_by_public_id(db, user.garage_id, public_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found")
-    return POSummary.model_validate(po)
+
+    supplier_res = await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+    supplier = supplier_res.scalar_one_or_none()
+
+    part_ids = list({line.part_id for line in po.lines})
+    parts_map: dict[int, str] = {}
+    if part_ids:
+        parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
+        parts_map = {p.id: p.name for p in parts_res.scalars()}
+
+    summary = POSummary.model_validate(po)
+    summary.supplier_name = supplier.name if supplier else None
+    summary.supplier_public_id = str(supplier.public_id) if supplier else None
+    for line_resp, line_orm in zip(summary.lines, po.lines):
+        line_resp.part_name = parts_map.get(line_orm.part_id)
+    return summary
 
 
 @router.put(
