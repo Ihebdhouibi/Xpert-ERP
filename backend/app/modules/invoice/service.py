@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.modules.delivery_note.models import DeliveryNote
 from app.modules.invoice import repository as repo
 from app.modules.invoice.models import Invoice, InvoiceLine, InvoiceStatus, InvoiceLineKind
 from app.modules.invoice.schemas import (
@@ -248,6 +250,11 @@ async def delete_invoice(
         raise InvoiceNotFoundError(invoice_id)
     if inv.status != InvoiceStatus.draft:
         raise InvoiceStateError("Only draft invoices can be deleted.")
+    await db.execute(
+        update(DeliveryNote)
+        .where(DeliveryNote.invoice_id == inv.id)
+        .values(invoice_id=None)
+    )
     await repo.soft_delete(db, inv, deleted_by=user_id)
     await db.commit()
     logger.info("delete_invoice_success", invoice_id=invoice_id, garage_id=garage_id)
