@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Divider,
   Grid,
@@ -233,7 +234,30 @@ function LineCard({
                 filterOptions={(x) => x}
                 getOptionLabel={(p) => `${p.sku_code} — ${p.name}`}
                 isOptionEqualToValue={(a, b) => a.id === b.id}
+                getOptionDisabled={(p) => p.stock_on_hand === 0}
                 noOptionsText={debouncedPartSearch ? 'Aucun résultat' : 'Tapez pour rechercher…'}
+                renderOption={(props, p) => (
+                  <Box component="li" {...props} key={p.int_id}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" width="100%">
+                      <Stack>
+                        <Typography variant="body2" fontWeight={600}>{p.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" fontFamily="monospace">{p.sku_code}</Typography>
+                      </Stack>
+                      <Chip
+                        label={p.stock_on_hand === 0 ? 'Rupture' : `${p.stock_on_hand} en stock`}
+                        size="small"
+                        sx={{
+                          ml: 2,
+                          bgcolor: p.stock_on_hand === 0 ? '#FEE2E2' : '#DCFCE7',
+                          color: p.stock_on_hand === 0 ? '#DC2626' : '#16A34A',
+                          fontWeight: 600,
+                          fontSize: '0.7rem',
+                          flexShrink: 0,
+                        }}
+                      />
+                    </Stack>
+                  </Box>
+                )}
                 renderInput={(params) => (
                   <TextField
                     {...params}
