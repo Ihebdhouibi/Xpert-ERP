@@ -49,7 +49,7 @@ import { invoiceApi } from '../../lib/invoiceApi'
 import { deliveryNoteApi } from '../../lib/deliveryNoteApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
-import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { partsApi, type PartCategory, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -88,71 +88,6 @@ function TotalRow({ label, value, bold, color }: { label: string; value: string;
   )
 }
 
-// Part autocomplete used inside the add-line form
-function AddLinePartAutocomplete({
-  value, inputValue, onInputChange, onChange,
-}: {
-  value: PartSummary | null
-  inputValue: string
-  onInputChange: (v: string) => void
-  onChange: (p: PartSummary | null) => void
-}) {
-  const [debounced, setDebounced] = useState(inputValue)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const handleInput = (v: string) => {
-    onInputChange(v)
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setDebounced(v), 300)
-  }
-
-  const { data, isFetching } = useQuery({
-    queryKey: ['parts-search-detail', debounced],
-    queryFn: () => partsApi.list({ search: debounced || undefined, page_size: 50 }),
-    placeholderData: (prev: typeof data) => prev,
-  })
-  const parts = data?.items ?? []
-
-  return (
-    <Autocomplete
-      options={parts}
-      loading={isFetching}
-      value={value}
-      onChange={(_e, v) => onChange(v)}
-      inputValue={inputValue}
-      onInputChange={(_e, v) => handleInput(v)}
-      filterOptions={x => x}
-      noOptionsText={debounced ? 'Aucune pièce trouvée' : 'Tapez un nom ou référence'}
-      getOptionLabel={p => `${p.sku_code} — ${p.name}`}
-      isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
-      renderOption={(props, p) => (
-        <Box component="li" {...props} key={p.int_id}>
-          <Stack>
-            <Typography variant="body2" fontWeight={600}>{p.name}</Typography>
-            <Typography variant="caption" color="text.secondary" fontFamily="monospace">{p.sku_code}</Typography>
-          </Stack>
-        </Box>
-      )}
-      renderInput={params => (
-        <TextField
-          {...params}
-          label="Pièce"
-          size="small"
-          sx={{ flex: 1 }}
-          InputProps={{
-            ...params.InputProps,
-            endAdornment: (
-              <>
-                {isFetching && <CircularProgress size={16} />}
-                {params.InputProps.endAdornment}
-              </>
-            ),
-          }}
-        />
-      )}
-    />
-  )
-}
 
 export function QuotationDetailPage() {
   const { publicId } = useParams<{ publicId: string }>()
@@ -174,6 +109,9 @@ export function QuotationDetailPage() {
   const [lineVat, setLineVat] = useState('20')
   const [linePartInput, setLinePartInput] = useState('')
   const [lineSelectedPart, setLineSelectedPart] = useState<PartSummary | null>(null)
+  const [lineSelectedCategory, setLineSelectedCategory] = useState<PartCategory | null>(null)
+  const [linePartDebounced, setLinePartDebounced] = useState('')
+  const partDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { data: quotation, isLoading, isError } = useQuery({
     queryKey: ['quotation', publicId],
@@ -193,6 +131,30 @@ export function QuotationDetailPage() {
     enabled: !!quotation?.vehicle_id,
     staleTime: 5 * 60 * 1000,
   })
+
+  const { data: partCategories = [] } = useQuery({
+    queryKey: ['part-categories', 'for-quotation'],
+    queryFn: () => partsApi.listCategories({ flat: true }),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: partsData, isFetching: partsLoading } = useQuery({
+    queryKey: ['parts', 'for-quotation-line', lineSelectedCategory?.id, linePartDebounced],
+    queryFn: () => partsApi.list({
+      search: linePartDebounced || undefined,
+      category_id: lineSelectedCategory?.id,
+      page_size: 50,
+    }),
+    enabled: lineKind === 'part' && !!lineSelectedCategory,
+    placeholderData: (prev) => prev,
+  })
+  const availableParts = partsData?.items ?? []
+
+  const handlePartInputChange = (v: string) => {
+    setLinePartInput(v)
+    if (partDebounceRef.current) clearTimeout(partDebounceRef.current)
+    partDebounceRef.current = setTimeout(() => setLinePartDebounced(v), 300)
+  }
 
   const sendMutation = useMutation({
     mutationFn: () => quotationApi.send(publicId!, quotation!.version),
@@ -263,7 +225,9 @@ export function QuotationDetailPage() {
     setLineDiscount('0')
     setLineVat('20')
     setLinePartInput('')
+    setLinePartDebounced('')
     setLineSelectedPart(null)
+    setLineSelectedCategory(null)
     setLineKind('labor')
   }
 
@@ -344,7 +308,7 @@ export function QuotationDetailPage() {
 
   // Validity of add-line form
   const addLineValid = lineKind === 'part'
-    ? (!!lineSelectedPart || linePartInput.trim().length > 0) && !!linePrice
+    ? !!lineSelectedPart && !!linePrice
     : lineDesc.trim().length > 0 && !!linePrice
 
   return (
@@ -483,32 +447,118 @@ export function QuotationDetailPage() {
                 {showAddLine && canEditLines && (
                   <Box sx={{ py: 2, px: 0.5, borderBottom: '1px solid #E2E8F0', mb: 1 }}>
                     <Stack spacing={1.5}>
-                      {/* Row 1: type + description / part selector */}
+                      {/* Row 1: type + description (non-part) OR type alone (part) */}
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                         <TextField
                           select size="small" label="Type" value={lineKind}
-                          onChange={e => { setLineKind(e.target.value as LineKind); setLineDesc(''); setLinePartInput(''); setLineSelectedPart(null) }}
+                          onChange={e => {
+                            setLineKind(e.target.value as LineKind)
+                            setLineDesc('')
+                            setLinePartInput('')
+                            setLinePartDebounced('')
+                            setLineSelectedPart(null)
+                            setLineSelectedCategory(null)
+                          }}
                           sx={{ minWidth: 140 }}
                         >
                           {LINE_KINDS.map(k => <MenuItem key={k} value={k}>{LINE_KIND_LABELS[k]}</MenuItem>)}
                         </TextField>
-                        {lineKind === 'part' ? (
-                          <AddLinePartAutocomplete
-                            value={lineSelectedPart}
-                            inputValue={linePartInput}
-                            onInputChange={setLinePartInput}
-                            onChange={p => {
-                              setLineSelectedPart(p)
-                              if (p) setLinePrice(String(p.selling_price_minor / 100))
-                            }}
-                          />
-                        ) : (
+                        {lineKind !== 'part' && (
                           <TextField size="small" label="Description" value={lineDesc}
                             onChange={e => setLineDesc(e.target.value)} sx={{ flex: 1 }} required />
                         )}
                       </Stack>
 
-                      {/* Row 2: qty (not labor) + prix + remise + tva */}
+                      {/* Part selector: step 1 — category, step 2 — part with stock */}
+                      {lineKind === 'part' && (
+                        <>
+                          <Autocomplete
+                            options={partCategories}
+                            value={lineSelectedCategory}
+                            onChange={(_e, v) => {
+                              setLineSelectedCategory(v)
+                              setLineSelectedPart(null)
+                              setLinePartInput('')
+                              setLinePartDebounced('')
+                              setLinePrice('')
+                            }}
+                            getOptionLabel={(c) => c.name}
+                            isOptionEqualToValue={(a, b) => a.id === b.id}
+                            noOptionsText="Aucune catégorie"
+                            renderInput={(params) => (
+                              <TextField {...params} label="Catégorie *" size="small" fullWidth />
+                            )}
+                          />
+                          {lineSelectedCategory && (
+                            <Autocomplete
+                              options={availableParts}
+                              loading={partsLoading}
+                              value={lineSelectedPart}
+                              onChange={(_e, v) => {
+                                setLineSelectedPart(v)
+                                if (v) {
+                                  setLinePartInput(`${v.sku_code} — ${v.name}`)
+                                  setLinePrice(String(v.selling_price_minor / 100))
+                                } else {
+                                  setLinePartInput('')
+                                  setLinePartDebounced('')
+                                  setLinePrice('')
+                                }
+                              }}
+                              inputValue={linePartInput}
+                              onInputChange={(_e, v, reason) => {
+                                if (reason === 'input' || reason === 'clear') handlePartInputChange(v)
+                              }}
+                              filterOptions={(x) => x}
+                              getOptionLabel={(p) => `${p.sku_code} — ${p.name}`}
+                              isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+                              getOptionDisabled={(p) => p.stock_on_hand === 0}
+                              noOptionsText={linePartDebounced ? 'Aucune pièce trouvée' : 'Tapez pour rechercher…'}
+                              renderOption={(props, p) => (
+                                <Box component="li" {...props} key={p.int_id}>
+                                  <Stack direction="row" justifyContent="space-between" alignItems="center" width="100%">
+                                    <Stack>
+                                      <Typography variant="body2" fontWeight={600}>{p.name}</Typography>
+                                      <Typography variant="caption" color="text.secondary" fontFamily="monospace">{p.sku_code}</Typography>
+                                    </Stack>
+                                    <Chip
+                                      label={p.stock_on_hand === 0 ? 'Rupture' : `${p.stock_on_hand} en stock`}
+                                      size="small"
+                                      sx={{
+                                        ml: 2,
+                                        bgcolor: p.stock_on_hand === 0 ? '#FEE2E2' : '#DCFCE7',
+                                        color: p.stock_on_hand === 0 ? '#DC2626' : '#16A34A',
+                                        fontWeight: 600,
+                                        fontSize: '0.7rem',
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                  </Stack>
+                                </Box>
+                              )}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  label="Pièce *"
+                                  size="small"
+                                  fullWidth
+                                  InputProps={{
+                                    ...params.InputProps,
+                                    endAdornment: (
+                                      <>
+                                        {partsLoading && <CircularProgress size={16} />}
+                                        {params.InputProps.endAdornment}
+                                      </>
+                                    ),
+                                  }}
+                                />
+                              )}
+                            />
+                          )}
+                        </>
+                      )}
+
+                      {/* Qty + prix + remise + tva */}
                       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                         {lineKind !== 'labor' && (
                           <TextField size="small" label="Quantité" type="number" value={lineQty}
