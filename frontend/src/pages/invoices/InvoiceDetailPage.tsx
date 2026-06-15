@@ -10,6 +10,7 @@ import {
   Chip,
   Divider,
   Grid,
+  IconButton,
   LinearProgress,
   Stack,
   Table,
@@ -28,10 +29,14 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
   type InvoiceLineKind,
+  type InvoiceLineOut,
+  type InvoiceOut,
 } from '../../lib/invoiceApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -41,6 +46,7 @@ import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 import { RecordPaymentDialog } from '../../components/invoice/RecordPaymentDialog'
 import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPanel'
+import { AddInvoiceLineDialog } from '../../components/invoice/AddInvoiceLineDialog'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -101,6 +107,9 @@ export function InvoiceDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [lineDialogOpen, setLineDialogOpen] = useState(false)
+  const [editLine, setEditLine] = useState<InvoiceLineOut | null>(null)
+  const [deleteLineId, setDeleteLineId] = useState<number | null>(null)
 
   const handlePdfPreview = async () => {
     if (!invoice) return
@@ -166,6 +175,40 @@ export function InvoiceDetailPage() {
     },
     onError: () => toastError('Impossible de supprimer la facture.'),
   })
+
+  const removeLineMutation = useMutation({
+    mutationFn: (lineId: number) => invoiceApi.removeLine(publicId!, lineId, invoice!.version),
+    onSuccess: (updated: InvoiceOut) => {
+      success('Ligne supprimée')
+      setDeleteLineId(null)
+      queryClient.setQueryData(['invoice', publicId], updated)
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: () => {
+      toastError('Impossible de supprimer la ligne.')
+      setDeleteLineId(null)
+    },
+  })
+
+  function handleLineSaved(updated: InvoiceOut) {
+    queryClient.setQueryData(['invoice', publicId], updated)
+    queryClient.invalidateQueries({ queryKey: ['invoices'] })
+  }
+
+  function openAddLine() {
+    setEditLine(null)
+    setLineDialogOpen(true)
+  }
+
+  function openEditLine(line: InvoiceLineOut) {
+    setEditLine(line)
+    setLineDialogOpen(true)
+  }
+
+  function closeLineDialog() {
+    setLineDialogOpen(false)
+    setEditLine(null)
+  }
 
   if (isLoading) return <LoadingScreen />
   if (isError || !invoice) {
@@ -352,8 +395,19 @@ export function InvoiceDetailPage() {
                   <Chip
                     label={invoice.lines.length}
                     size="small"
-                    sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 600, ml: 'auto !important' }}
+                    sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 600 }}
                   />
+                  {invoice.status === 'draft' && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<AddRoundedIcon />}
+                      onClick={openAddLine}
+                      sx={{ ml: 'auto !important' }}
+                    >
+                      Ajouter une ligne
+                    </Button>
+                  )}
                 </Stack>
                 <Divider sx={{ mb: 0 }} />
                 {invoice.lines.length === 0 ? (
@@ -374,6 +428,9 @@ export function InvoiceDetailPage() {
                               {h}
                             </TableCell>
                           ))}
+                          {invoice.status === 'draft' && (
+                            <TableCell sx={{ py: 1.25, width: 72 }} />
+                          )}
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -433,6 +490,31 @@ export function InvoiceDetailPage() {
                                   {formatMinor(line.line_total_minor, invoice.currency)}
                                 </Typography>
                               </TableCell>
+                              {invoice.status === 'draft' && (
+                                <TableCell align="right" sx={{ py: 1, px: 0.5 }}>
+                                  <Stack direction="row" spacing={0} justifyContent="flex-end">
+                                    <Tooltip title="Modifier">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => openEditLine(line)}
+                                        sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                                      >
+                                        <EditRoundedIcon sx={{ fontSize: 15 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Supprimer">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => setDeleteLineId(line.id)}
+                                        disabled={removeLineMutation.isPending && deleteLineId === line.id}
+                                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+                                      >
+                                        <DeleteRoundedIcon sx={{ fontSize: 15 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Stack>
+                                </TableCell>
+                              )}
                             </TableRow>
                           )
                         })}
@@ -611,6 +693,28 @@ export function InvoiceDetailPage() {
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setDeleteOpen(false)}
       />
+
+      <ConfirmDialog
+        open={deleteLineId !== null}
+        title="Supprimer cette ligne ?"
+        message="La ligne sera définitivement retirée de la facture."
+        confirmLabel="Supprimer"
+        dangerous
+        loading={removeLineMutation.isPending}
+        onConfirm={() => deleteLineId !== null && removeLineMutation.mutate(deleteLineId)}
+        onCancel={() => setDeleteLineId(null)}
+      />
+
+      {invoice && (
+        <AddInvoiceLineDialog
+          open={lineDialogOpen}
+          onClose={closeLineDialog}
+          invoicePublicId={publicId!}
+          invoiceVersion={invoice.version}
+          editLine={editLine}
+          onSaved={handleLineSaved}
+        />
+      )}
     </Box>
   )
 }
