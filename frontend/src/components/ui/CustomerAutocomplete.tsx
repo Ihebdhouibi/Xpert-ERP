@@ -41,7 +41,7 @@ export function CustomerAutocomplete({
 
   const options: CustomerSummary[] = data?.items ?? []
 
-  const selectedOption = options.find(o => o.numeric_id === value) ?? null
+  const selectedOption = options.find(o => o.int_id === value) ?? null
 
   const getLabel = useCallback((c: CustomerSummary) => {
     const name = c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name
@@ -52,13 +52,13 @@ export function CustomerAutocomplete({
     <Autocomplete
       value={selectedOption}
       onChange={(_, newValue) => {
-        onChange(newValue?.numeric_id ?? null, newValue)
+        onChange(newValue?.int_id ?? null, newValue)
       }}
       inputValue={inputValue}
       onInputChange={(_, v) => setInputValue(v)}
       options={options}
       getOptionLabel={getLabel}
-      isOptionEqualToValue={(a, b) => a.numeric_id === b.numeric_id}
+      isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
       loading={isFetching}
       disabled={disabled}
       noOptionsText={inputValue.length < 1 ? 'Tapez pour rechercher…' : 'Aucun client trouvé'}
@@ -82,7 +82,7 @@ export function CustomerAutocomplete({
         />
       )}
       renderOption={(props, option) => (
-        <Box component="li" {...props} key={option.numeric_id}>
+        <Box component="li" {...props} key={option.int_id}>
           <Box>
             <Typography variant="body2" fontWeight={600}>
               {option.company_name

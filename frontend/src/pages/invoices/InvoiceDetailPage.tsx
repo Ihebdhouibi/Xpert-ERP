@@ -198,17 +198,15 @@ export function InvoiceDetailPage() {
         ]}
         actions={
           <Stack direction="row" spacing={1}>
-            {invoice.status !== 'draft' && (
-              <Button
-                variant="outlined"
-                startIcon={<PictureAsPdfRoundedIcon />}
-                onClick={handlePdfPreview}
-                disabled={pdfLoading}
-                size="small"
-              >
-                {pdfLoading ? 'Génération…' : 'Aperçu PDF'}
-              </Button>
-            )}
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfRoundedIcon />}
+              onClick={handlePdfPreview}
+              disabled={pdfLoading}
+              size="small"
+            >
+              {pdfLoading ? 'Génération…' : 'Aperçu PDF'}
+            </Button>
             {invoice.status === 'draft' && (
               <Button
                 variant="outlined"

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -19,6 +20,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
+import { deliveryNoteApi, type DeliveryNoteOut } from '../../lib/deliveryNoteApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -96,7 +98,7 @@ const columns: Column<InvoiceOut>[] = [
     label: 'Client',
     render: row => (
       <Typography variant="body2" fontWeight={500}>
-        Client #{row.customer_id}
+        {row.customer_name ?? `Client #${row.customer_id}`}
       </Typography>
     ),
   },
@@ -177,22 +179,47 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   const [dueAt, setDueAt] = useState('')
   const [notes, setNotes] = useState('')
   const [customerError, setCustomerError] = useState(false)
+  const [selectedBls, setSelectedBls] = useState<DeliveryNoteOut[]>([])
+
+  const { data: blsData, isLoading: blsLoading } = useQuery({
+    queryKey: ['delivery-notes', 'available-for-invoice', customerId],
+    queryFn: () => deliveryNoteApi.listAvailableForInvoice(customerId!),
+    enabled: !!customerId,
+  })
+
+  const availableBls = blsData?.items ?? []
 
   const mutation = useMutation({
-    mutationFn: () =>
-      invoiceApi.create({
+    mutationFn: () => {
+      if (selectedBls.length > 0) {
+        return invoiceApi.fromDeliveryNotes({
+          customer_id: customerId!,
+          delivery_note_ids: selectedBls.map(bl => bl.public_id),
+          due_at: dueAt ? `${dueAt}T00:00:00` : null,
+          notes: notes || null,
+        })
+      }
+      return invoiceApi.create({
         customer_id: customerId!,
         due_at: dueAt ? `${dueAt}T00:00:00` : null,
         notes: notes || null,
-      }),
+      })
+    },
     onSuccess: inv => {
       onCreated(inv.public_id)
       setCustomerId(null)
       setDueAt('')
       setNotes('')
+      setSelectedBls([])
     },
     onError: () => toastError('Erreur lors de la création de la facture.'),
   })
+
+  function handleCustomerChange(id: number | null) {
+    setCustomerId(id)
+    setCustomerError(false)
+    setSelectedBls([])
+  }
 
   function handleSubmit() {
     if (!customerId) { setCustomerError(true); return }
@@ -200,18 +227,49 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
     mutation.mutate()
   }
 
+  function handleClose() {
+    setCustomerId(null)
+    setDueAt('')
+    setNotes('')
+    setSelectedBls([])
+    setCustomerError(false)
+    onClose()
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Nouvelle facture</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} pt={1}>
           <CustomerAutocomplete
             value={customerId}
-            onChange={id => { setCustomerId(id); setCustomerError(false) }}
+            onChange={handleCustomerChange}
             required
             error={customerError}
             helperText={customerError ? 'Sélectionnez un client' : undefined}
           />
+          {customerId && (
+            <Autocomplete
+              multiple
+              options={availableBls}
+              loading={blsLoading}
+              value={selectedBls}
+              onChange={(_, newValue) => setSelectedBls(newValue)}
+              getOptionLabel={bl =>
+                `${bl.doc_number ?? 'Sans numéro'} — ${bl.issued_at ? new Date(bl.issued_at).toLocaleDateString('fr-FR') : ''} — ${formatMinor(bl.total_minor, bl.currency)}`
+              }
+              isOptionEqualToValue={(a, b) => a.public_id === b.public_id}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  label="Bons de livraison (optionnel)"
+                  placeholder={!blsLoading && availableBls.length === 0 ? 'Aucun BL disponible' : 'Sélectionner...'}
+                />
+              )}
+              noOptionsText="Aucun bon de livraison disponible"
+              loadingText="Chargement..."
+            />
+          )}
           <TextField
             label="Date d'échéance (optionnel)"
             type="date"
@@ -231,7 +289,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button variant="outlined" onClick={onClose}>Annuler</Button>
+        <Button variant="outlined" onClick={handleClose}>Annuler</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={mutation.isPending}>
           Créer la facture
         </Button>

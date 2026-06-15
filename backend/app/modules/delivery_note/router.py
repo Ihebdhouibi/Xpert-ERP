@@ -72,6 +72,7 @@ async def list_delivery_notes(
     user: AuthUser,
     customer_id: Optional[int] = Query(None),
     status_filter: Optional[DeliveryNoteStatus] = Query(None, alias="status"),
+    available_for_invoice: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -79,6 +80,7 @@ async def list_delivery_notes(
     return await service.list_delivery_notes(
         db, user.garage_id,
         customer_id=customer_id, status=status_filter,
+        available_for_invoice=available_for_invoice,
         page=page, page_size=page_size,
     )
 

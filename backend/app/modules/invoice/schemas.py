@@ -67,6 +67,14 @@ class ConvertQuotationRequest(BaseModel):
     due_at: Optional[datetime] = None
 
 
+class InvoiceFromDeliveryNotesRequest(BaseModel):
+    customer_id: int
+    delivery_note_ids: list[str] = Field(..., min_length=1)
+    currency: str = Field(default="EUR", min_length=3, max_length=3)
+    due_at: Optional[datetime] = None
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
 class InvoiceUpdateRequest(BaseModel):
     vehicle_id: Optional[int] = None
     repair_order_id: Optional[int] = None
