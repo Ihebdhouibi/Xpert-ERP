@@ -25,7 +25,7 @@ async def get_by_id(
 ) -> Optional[Quotation]:
     stmt = (
         select(Quotation)
-        .options(selectinload(Quotation.lines))
+        .options(selectinload(Quotation.lines), selectinload(Quotation.customer))
         .where(Quotation.id == quotation_id, Quotation.garage_id == garage_id)
     )
     if not include_deleted:
@@ -42,7 +42,7 @@ async def get_by_public_id(
 ) -> Optional[Quotation]:
     stmt = (
         select(Quotation)
-        .options(selectinload(Quotation.lines))
+        .options(selectinload(Quotation.lines), selectinload(Quotation.customer))
         .where(Quotation.public_id == public_id, Quotation.garage_id == garage_id)
     )
     if not include_deleted:
@@ -73,7 +73,7 @@ async def list_quotations(
     total = count_result.scalar_one()
 
     rows = await db.execute(
-        base_stmt.options(selectinload(Quotation.lines))
+        base_stmt.options(selectinload(Quotation.lines), selectinload(Quotation.customer))
         .order_by(Quotation.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

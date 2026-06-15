@@ -75,7 +75,7 @@ const columns: Column<QuotationOut>[] = [
     label: 'Client',
     render: row => (
       <Typography variant="body2" fontWeight={500}>
-        Client #{row.customer_id}
+        {row.customer_name || `Client #${row.customer_id}`}
       </Typography>
     ),
   },
