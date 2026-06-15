@@ -676,7 +676,7 @@ export function RepairOrderDetailPage() {
   const [partQty, setPartQty] = useState('')
   const [partUnitPrice, setPartUnitPrice] = useState('')
   const [partRemise, setPartRemise] = useState('0')
-  const [partTva, setPartTva] = useState('0')
+  const [partTva, setPartTva] = useState('20')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -752,7 +752,7 @@ export function RepairOrderDetailPage() {
       success('Pièce ajoutée.')
       setShowAddPart(false)
       setSelectedPart(null); setPartSearch(''); setPartQty('')
-      setPartUnitPrice(''); setPartRemise('0'); setPartTva('0')
+      setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
@@ -1140,11 +1140,14 @@ export function RepairOrderDetailPage() {
                       label="TVA (%)"
                       type="number"
                       value={partTva}
-                      onChange={e => setPartTva(e.target.value)}
-                      inputProps={{ min: 0, max: 100, step: 0.01 }}
-                      sx={{ width: 110 }}
+                      InputProps={{ readOnly: true }}
+                      inputProps={{ style: {} }}
+                      sx={{
+                        width: 110,
+                        '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                        '& input': { color: 'text.secondary' },
+                      }}
                       helperText=" "
-                      disabled={!selectedPart}
                     />
                     {selectedPart && partQty && partUnitPrice && (
                       <Box sx={{ display: 'flex', alignItems: 'center', pb: '20px' }}>
@@ -1168,7 +1171,7 @@ export function RepairOrderDetailPage() {
                       onClick={() => {
                         setShowAddPart(false)
                         setSelectedPart(null); setPartSearch(''); setPartQty('')
-                        setPartUnitPrice(''); setPartRemise('0'); setPartTva('0')
+                        setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
                       }}
                       sx={{ textTransform: 'none' }}
                     >

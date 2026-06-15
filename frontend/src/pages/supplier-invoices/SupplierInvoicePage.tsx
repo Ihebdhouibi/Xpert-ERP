@@ -382,8 +382,12 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
                             size="small"
                             type="number"
                             value={ln.vat_rate}
-                            onChange={(e) => updateLine(i, 'vat_rate', parseFloat(e.target.value) || 0)}
-                            inputProps={{ min: 0, max: 100, style: { width: 60 } }}
+                            InputProps={{ readOnly: true }}
+                            inputProps={{ style: { width: 60, color: 'inherit' } }}
+                            sx={{
+                              '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                              '& input': { color: 'text.secondary' },
+                            }}
                           />
                         </TableCell>
                         <TableCell align="right">

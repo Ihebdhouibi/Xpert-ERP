@@ -76,7 +76,7 @@ interface LineRow {
   // all kinds
   description: string   // auto-filled for parts, manual for service/other
   quantity: string      // not used for 'service'
-  unit_price: string    // decimal TND string (read-only for parts — from catalogue)
+  unit_price: string    // decimal string (read-only for parts — from catalogue)
   remise_pct: string    // discount %, 0-100
   vat_rate: string
 }
@@ -92,7 +92,7 @@ function newLine(): LineRow {
     quantity: '1',
     unit_price: '',
     remise_pct: '0',
-    vat_rate: '0',
+    vat_rate: '20',
   }
 }
 
@@ -111,6 +111,7 @@ function LineCard({
   line,
   lineNumber,
   categories,
+  currency,
   onUpdate,
   onRemove,
   canRemove,
@@ -118,6 +119,7 @@ function LineCard({
   line: LineRow
   lineNumber: number
   categories: PartCategory[]
+  currency: string
   onUpdate: (id: number, updates: Partial<LineRow>) => void
   onRemove: (id: number) => void
   canRemove: boolean
@@ -287,7 +289,7 @@ function LineCard({
                   placement="top"
                 >
                   <TextField
-                    label="P.U. (TND)"
+                    label={`P.U. (${currency})`}
                     value={line.unit_price}
                     onChange={(e) => !isPart && onUpdate(line.tempId, { unit_price: e.target.value })}
                     size="small"
@@ -317,11 +319,15 @@ function LineCard({
                 <TextField
                   label="TVA %"
                   value={line.vat_rate}
-                  onChange={(e) => onUpdate(line.tempId, { vat_rate: e.target.value })}
                   size="small"
                   type="number"
-                  inputProps={{ min: 0, max: 100, step: 1, style: { textAlign: 'right' } }}
-                  sx={{ width: 90 }}
+                  inputProps={{ style: { textAlign: 'right' } }}
+                  InputProps={{ readOnly: true }}
+                  sx={{
+                    width: 90,
+                    '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                    '& input': { color: 'text.secondary' },
+                  }}
                 />
                 {lineTotal > 0 && (
                   <Typography
@@ -336,7 +342,7 @@ function LineCard({
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}{' '}
-                    TND
+                    {currency}
                   </Typography>
                 )}
               </Stack>
@@ -647,6 +653,7 @@ export function DeliveryNoteCreatePage() {
                     line={line}
                     lineNumber={idx + 1}
                     categories={categories}
+                    currency={currency}
                     onUpdate={updateLine}
                     onRemove={removeLine}
                     canRemove={lines.length > 1}

@@ -171,7 +171,7 @@ export function QuotationDetailPage() {
   const [lineQty, setLineQty] = useState('1')
   const [linePrice, setLinePrice] = useState('')
   const [lineDiscount, setLineDiscount] = useState('0')
-  const [lineVat, setLineVat] = useState('0')
+  const [lineVat, setLineVat] = useState('20')
   const [linePartInput, setLinePartInput] = useState('')
   const [lineSelectedPart, setLineSelectedPart] = useState<PartSummary | null>(null)
 
@@ -261,7 +261,7 @@ export function QuotationDetailPage() {
     setLineQty('1')
     setLinePrice('')
     setLineDiscount('0')
-    setLineVat('0')
+    setLineVat('20')
     setLinePartInput('')
     setLineSelectedPart(null)
     setLineKind('labor')
@@ -524,8 +524,12 @@ export function QuotationDetailPage() {
                           onChange={e => setLineDiscount(e.target.value)}
                           sx={{ width: 110 }} inputProps={{ min: 0, max: 100 }} />
                         <TextField size="small" label="TVA %" type="number" value={lineVat}
-                          onChange={e => setLineVat(e.target.value)}
-                          sx={{ width: 100 }} inputProps={{ min: 0 }} />
+                          InputProps={{ readOnly: true }}
+                          sx={{
+                            width: 100,
+                            '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                            '& input': { color: 'text.secondary' },
+                          }} />
                       </Stack>
 
                       <Stack direction="row" spacing={1} justifyContent="flex-end">

@@ -301,7 +301,7 @@ export function QuotationCreatePage() {
   const addLine = () => {
     setLines(prev => [
       ...prev,
-      { _key: ++_lineKey, kind: 'labor', description: '', quantity: 1, unit_price_minor: 0, discount_percent: 0, vat_rate: 0, _partSearch: '', _selectedPart: null },
+      { _key: ++_lineKey, kind: 'labor', description: '', quantity: 1, unit_price_minor: 0, discount_percent: 0, vat_rate: 20, _partSearch: '', _selectedPart: null },
     ])
   }
 
@@ -613,10 +613,14 @@ export function QuotationCreatePage() {
                               size="small"
                               label="TVA %"
                               type="number"
-                              value={line.vat_rate ?? 0}
-                              onChange={e => updateLine(line._key, { vat_rate: parseFloat(e.target.value) || 0 })}
-                              sx={{ width: 90 }}
-                              inputProps={{ min: 0 }}
+                              value={line.vat_rate ?? 20}
+                              inputProps={{ style: {} }}
+                              InputProps={{ readOnly: true }}
+                              sx={{
+                                width: 90,
+                                '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                                '& input': { color: 'text.secondary' },
+                              }}
                             />
                             <Box sx={{ minWidth: 90, pt: 0.75, textAlign: 'right' }}>
                               <Typography variant="caption" color="text.secondary" display="block" fontSize="0.65rem">
