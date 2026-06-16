@@ -111,9 +111,10 @@ async def list_credit_notes(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
+    invoice_id: Optional[int] = Query(None),
 ) -> CreditNoteListResponse:
     return await service.list_credit_notes(
-        db, current_user.garage_id, page=page, page_size=page_size
+        db, current_user.garage_id, page=page, page_size=page_size, invoice_id=invoice_id
     )
 
 

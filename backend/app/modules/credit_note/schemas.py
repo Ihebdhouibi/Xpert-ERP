@@ -11,42 +11,7 @@ from app.modules.payment.models import PaymentMethod
 
 
 # ---------------------------------------------------------------------------
-# Credit note schemas
-# ---------------------------------------------------------------------------
-
-
-class CreditNoteCreateRequest(BaseModel):
-    invoice_id: int
-    total_minor: int = Field(..., ge=1, description="Amount to credit in minor units (cents).")
-    reason: Optional[str] = Field(None, max_length=1000)
-
-
-class CreditNoteOut(BaseModel):
-    id: int
-    garage_id: int
-    invoice_id: int
-    doc_number: Optional[str]
-    status: CreditNoteStatus
-    total_minor: int
-    reason: Optional[str]
-    issued_at: Optional[datetime]
-    voided_at: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[int]
-
-    model_config = {"from_attributes": True}
-
-
-class CreditNoteListResponse(BaseModel):
-    items: list[CreditNoteOut]
-    total: int
-    page: int
-    page_size: int
-
-
-# ---------------------------------------------------------------------------
-# Refund schemas
+# Refund schemas (defined first — referenced by CreditNoteOut)
 # ---------------------------------------------------------------------------
 
 
@@ -73,3 +38,44 @@ class RefundOut(BaseModel):
     created_by: Optional[int]
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Credit note schemas
+# ---------------------------------------------------------------------------
+
+
+class CreditNoteCreateRequest(BaseModel):
+    invoice_id: int
+    total_minor: int = Field(..., ge=1, description="Amount to credit in minor units (cents).")
+    reason: Optional[str] = Field(None, max_length=1000)
+
+
+class CreditNoteOut(BaseModel):
+    id: int
+    garage_id: int
+    invoice_id: int
+    doc_number: Optional[str]
+    status: CreditNoteStatus
+    total_minor: int
+    reason: Optional[str]
+    issued_at: Optional[datetime]
+    voided_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[int]
+    refunds: list[RefundOut] = []
+    # Denormalised invoice fields — populated by service._build_cn_out()
+    invoice_doc_number: Optional[str] = None
+    invoice_public_id: Optional[str] = None
+    invoice_total_minor: int = 0
+    invoice_paid_amount_minor: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class CreditNoteListResponse(BaseModel):
+    items: list[CreditNoteOut]
+    total: int
+    page: int
+    page_size: int

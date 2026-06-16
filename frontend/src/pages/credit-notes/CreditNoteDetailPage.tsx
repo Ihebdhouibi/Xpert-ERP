@@ -17,8 +17,10 @@ import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import PublishRoundedIcon from '@mui/icons-material/PublishRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
+import MoneyOffRoundedIcon from '@mui/icons-material/MoneyOffRounded'
 import { creditNoteApi, CREDIT_NOTE_STATUS_LABELS } from '../../lib/creditNoteApi'
-import { invoiceApi } from '../../lib/invoiceApi'
+import { PAYMENT_METHOD_LABELS } from '../../lib/paymentApi'
+import { RecordRefundDialog } from '../../components/credit-note/RecordRefundDialog'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -47,21 +49,13 @@ export function CreditNoteDetailPage() {
 
   const [issueOpen, setIssueOpen] = useState(false)
   const [voidOpen, setVoidOpen] = useState(false)
+  const [refundOpen, setRefundOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
 
   const { data: avoir, isLoading, isError } = useQuery({
     queryKey: ['credit-note', id],
     queryFn: () => creditNoteApi.get(Number(id)),
     enabled: !!id,
-  })
-
-  const { data: invoice } = useQuery({
-    queryKey: ['invoice-by-id', avoir?.invoice_id],
-    queryFn: async () => {
-      const list = await invoiceApi.list({ page: 1, page_size: 200 })
-      return list.items.find(i => i.id === avoir!.invoice_id) ?? null
-    },
-    enabled: !!avoir?.invoice_id,
   })
 
   const issueMutation = useMutation({
@@ -123,11 +117,20 @@ export function CreditNoteDetailPage() {
 
   const anyMutating = issueMutation.isPending || voidMutation.isPending
 
+  // Refund logic — invoice data is embedded in avoir by the backend
+  const overpaidMinor = Math.max(
+    0,
+    avoir.invoice_paid_amount_minor - (avoir.invoice_total_minor - avoir.total_minor),
+  )
+  const totalRefundedMinor = (avoir.refunds ?? []).reduce((s, r) => s + r.amount_minor, 0)
+  const remainingRefundMinor = Math.max(0, overpaidMinor - totalRefundedMinor)
+  const showRefundSection = avoir.status === 'issued' && overpaidMinor > 0
+
   return (
     <Box>
       <PageHeader
         title={avoir.doc_number ?? 'Avoir brouillon'}
-        subtitle={invoice ? `Facture ${invoice.doc_number ?? `#${avoir.invoice_id}`}` : `Facture #${avoir.invoice_id}`}
+        subtitle={`Facture ${avoir.invoice_doc_number ?? `#${avoir.invoice_id}`}`}
         breadcrumbs={[
           { label: 'Avoirs', href: '/credit-notes' },
           { label: avoir.doc_number ?? 'Brouillon' },
@@ -172,14 +175,14 @@ export function CreditNoteDetailPage() {
               <InfoRow
                 label="Facture liée"
                 value={
-                  invoice ? (
+                  avoir.invoice_public_id ? (
                     <Button
                       size="small"
                       variant="text"
-                      onClick={() => navigate(`/invoices/${invoice.public_id}`)}
+                      onClick={() => navigate(`/invoices/${avoir.invoice_public_id}`)}
                       sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.8125rem' }}
                     >
-                      {invoice.doc_number ?? `Facture #${avoir.invoice_id}`}
+                      {avoir.invoice_doc_number ?? `Facture #${avoir.invoice_id}`}
                     </Button>
                   ) : (
                     <Typography variant="body2" fontFamily="monospace">
@@ -241,6 +244,50 @@ export function CreditNoteDetailPage() {
                   />
                 </>
               )}
+
+              {/* Refunds history */}
+              {(avoir.refunds ?? []).length > 0 && (
+                <>
+                  <Divider sx={{ mt: 1 }} />
+                  <Box pt={1.5} pb={0.5}>
+                    <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
+                      <MoneyOffRoundedIcon sx={{ fontSize: 16, color: '#EA580C' }} />
+                      <Typography variant="body2" fontWeight={700}>
+                        Remboursements effectués
+                      </Typography>
+                      <Chip
+                        label={(avoir.refunds ?? []).length}
+                        size="small"
+                        sx={{ bgcolor: '#FFF7ED', color: '#EA580C', fontWeight: 600 }}
+                      />
+                    </Stack>
+                    <Stack divider={<Divider />}>
+                      {(avoir.refunds ?? []).map(refund => (
+                        <Stack
+                          key={refund.id}
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          py={1}
+                        >
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {formatMinor(refund.amount_minor)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {PAYMENT_METHOD_LABELS[refund.payment_method]}
+                              {refund.reference ? ` · ${refund.reference}` : ''}
+                            </Typography>
+                          </Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(refund.refunded_at).toLocaleDateString('fr-FR')}
+                          </Typography>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Box>
+                </>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -269,6 +316,53 @@ export function CreditNoteDetailPage() {
                     -{formatMinor(avoir.total_minor)}
                   </Typography>
                 </Box>
+
+                {/* Refund section */}
+                {showRefundSection && (
+                  <Box sx={{ bgcolor: '#F8FAFC', borderRadius: 1.5, p: 2, mb: 2 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                      <MoneyOffRoundedIcon sx={{ fontSize: 16, color: '#EA580C' }} />
+                      <Typography variant="body2" fontWeight={700} color="#EA580C">
+                        Remboursement client
+                      </Typography>
+                    </Stack>
+                    <Stack spacing={0.5} mb={1.5}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption" color="text.secondary">Trop-perçu</Typography>
+                        <Typography variant="caption" fontWeight={600} color="error.main">
+                          {formatMinor(overpaidMinor)}
+                        </Typography>
+                      </Stack>
+                      {totalRefundedMinor > 0 && (
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Déjà remboursé</Typography>
+                          <Typography variant="caption" fontWeight={600} color="success.main">
+                            {formatMinor(totalRefundedMinor)}
+                          </Typography>
+                        </Stack>
+                      )}
+                      <Divider />
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption" fontWeight={700}>Restant à rembourser</Typography>
+                        <Typography variant="caption" fontWeight={700} color={remainingRefundMinor > 0 ? 'error.main' : 'success.main'}>
+                          {remainingRefundMinor > 0 ? formatMinor(remainingRefundMinor) : 'Soldé'}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                    {remainingRefundMinor > 0 && (
+                      <Button
+                        variant="contained"
+                        fullWidth
+                        size="small"
+                        startIcon={<MoneyOffRoundedIcon />}
+                        onClick={() => setRefundOpen(true)}
+                        sx={{ bgcolor: '#EA580C', '&:hover': { bgcolor: '#C2410C' } }}
+                      >
+                        Enregistrer un remboursement
+                      </Button>
+                    )}
+                  </Box>
+                )}
 
                 <Stack spacing={1.25}>
                   {avoir.status === 'draft' && (
@@ -331,6 +425,15 @@ export function CreditNoteDetailPage() {
         onConfirm={() => voidMutation.mutate()}
         onCancel={() => setVoidOpen(false)}
       />
+
+      {refundOpen && (
+        <RecordRefundDialog
+          open={refundOpen}
+          onClose={() => setRefundOpen(false)}
+          avoir={avoir}
+          remainingRefundMinor={remainingRefundMinor}
+        />
+      )}
     </Box>
   )
 }

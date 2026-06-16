@@ -5,6 +5,7 @@ import {
   Autocomplete,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,6 +17,7 @@ import {
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded'
+import MoneyOffRoundedIcon from '@mui/icons-material/MoneyOffRounded'
 import { creditNoteApi, CREDIT_NOTE_STATUS_LABELS, type CreditNoteOut } from '../../lib/creditNoteApi'
 import { invoiceApi, type InvoiceOut } from '../../lib/invoiceApi'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -184,7 +186,7 @@ const columns: Column<CreditNoteOut>[] = [
   {
     id: 'number',
     label: 'Numéro',
-    width: 150,
+    width: 170,
     render: row => (
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <Box
@@ -196,46 +198,55 @@ const columns: Column<CreditNoteOut>[] = [
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
           <AccountBalanceRoundedIcon sx={{ color: '#EA580C', fontSize: 17 }} />
         </Box>
-        <Typography variant="body2" fontWeight={700} fontFamily="monospace">
-          {row.doc_number ?? (
-            <Typography component="span" variant="caption" color="text.disabled" fontFamily="inherit">
-              Brouillon
-            </Typography>
-          )}
-        </Typography>
+        <Stack spacing={0.25}>
+          <Typography variant="body2" fontWeight={700} fontFamily="monospace">
+            {row.doc_number ?? (
+              <Typography component="span" variant="caption" color="text.disabled" fontFamily="inherit">
+                Brouillon
+              </Typography>
+            )}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+            Facture #{row.invoice_id}
+          </Typography>
+        </Stack>
       </Stack>
     ),
   },
   {
-    id: 'invoice',
-    label: 'Facture liée',
-    width: 120,
-    render: row => (
-      <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
-        Facture #{row.invoice_id}
-      </Typography>
-    ),
-  },
-  {
     id: 'amount',
-    label: 'Montant',
+    label: 'Montant avoir',
     align: 'right',
-    width: 120,
-    render: row => (
-      <Typography variant="body2" fontWeight={700} color="error.main">
-        -{formatMinor(row.total_minor)}
-      </Typography>
-    ),
+    width: 130,
+    render: row => {
+      const totalRefunded = (row.refunds ?? []).reduce((s, r) => s + r.amount_minor, 0)
+      return (
+        <Stack alignItems="flex-end" spacing={0.25}>
+          <Typography variant="body2" fontWeight={700} color="error.main">
+            -{formatMinor(row.total_minor)}
+          </Typography>
+          {totalRefunded > 0 && (
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <MoneyOffRoundedIcon sx={{ fontSize: 11, color: 'success.main' }} />
+              <Typography variant="caption" color="success.main" fontWeight={600}>
+                -{formatMinor(totalRefunded)} remb.
+              </Typography>
+            </Stack>
+          )}
+        </Stack>
+      )
+    },
   },
   {
     id: 'reason',
     label: 'Motif',
     render: row => (
-      <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 280 }}>
+      <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 260 }}>
         {row.reason ?? '—'}
       </Typography>
     ),
@@ -243,13 +254,34 @@ const columns: Column<CreditNoteOut>[] = [
   {
     id: 'status',
     label: 'Statut',
-    width: 110,
-    render: row => <StatusChip status={row.status} label={CREDIT_NOTE_STATUS_LABELS[row.status]} />,
+    width: 130,
+    render: row => {
+      const totalRefunded = (row.refunds ?? []).reduce((s, r) => s + r.amount_minor, 0)
+      const fullyRefunded = totalRefunded >= row.total_minor
+      return (
+        <Stack spacing={0.5}>
+          <StatusChip status={row.status} label={CREDIT_NOTE_STATUS_LABELS[row.status]} />
+          {row.status === 'issued' && row.refunds.length > 0 && (
+            <Chip
+              label={fullyRefunded ? 'Remboursé' : 'Part. remb.'}
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: '0.625rem',
+                fontWeight: 700,
+                bgcolor: fullyRefunded ? '#F0FDF4' : '#FFFBEB',
+                color: fullyRefunded ? '#16A34A' : '#D97706',
+              }}
+            />
+          )}
+        </Stack>
+      )
+    },
   },
   {
     id: 'date',
     label: 'Créé le',
-    width: 110,
+    width: 100,
     render: row => (
       <Typography variant="caption" color="text.secondary">
         {new Date(row.created_at).toLocaleDateString('fr-FR')}

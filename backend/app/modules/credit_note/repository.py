@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.modules.credit_note.models import CreditNote, Refund
 
@@ -22,7 +22,7 @@ async def get_credit_note_by_id(
     result = await db.execute(
         select(CreditNote)
         .where(CreditNote.id == cn_id, CreditNote.garage_id == garage_id)
-        .options(selectinload(CreditNote.refunds))
+        .options(selectinload(CreditNote.refunds), selectinload(CreditNote.invoice))
     )
     return result.scalar_one_or_none()
 
@@ -44,12 +44,20 @@ async def list_credit_notes(
     *,
     page: int = 1,
     page_size: int = 25,
+    invoice_id: int | None = None,
 ) -> tuple[list[CreditNote], int]:
     base = select(CreditNote).where(CreditNote.garage_id == garage_id)
+    if invoice_id is not None:
+        base = base.where(CreditNote.invoice_id == invoice_id)
     total_result = await db.execute(select(func.count()).select_from(base.subquery()))
     total: int = total_result.scalar_one()
     offset = (page - 1) * page_size
-    result = await db.execute(base.order_by(CreditNote.id.desc()).offset(offset).limit(page_size))
+    result = await db.execute(
+        base.options(selectinload(CreditNote.refunds), selectinload(CreditNote.invoice))
+        .order_by(CreditNote.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
     return list(result.scalars().all()), total
 
 

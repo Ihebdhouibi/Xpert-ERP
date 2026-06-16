@@ -23,6 +23,12 @@ export interface CreditNoteOut {
   created_at: string
   updated_at: string
   created_by: number | null
+  refunds: RefundOut[]
+  // Denormalised invoice fields (always present, populated by backend)
+  invoice_doc_number: string | null
+  invoice_public_id: string | null
+  invoice_total_minor: number
+  invoice_paid_amount_minor: number
 }
 
 export interface CreditNoteListResponse {
