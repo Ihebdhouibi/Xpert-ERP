@@ -38,6 +38,7 @@ import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
 import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
 import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
+import { CreditNoteDetailPage } from './pages/credit-notes/CreditNoteDetailPage'
 import { AccountingExportPage } from './pages/accounting/AccountingExportPage'
 import { UsersPage } from './pages/admin/UsersPage'
 import { RolesPage } from './pages/admin/RolesPage'
@@ -144,6 +145,7 @@ export const router = createBrowserRouter(
       { path: 'advance-payments', element: <AdvancePaymentsPage /> },
       { path: 'cash-sessions', element: <CashSessionsPage /> },
       { path: 'credit-notes', element: <CreditNotesPage /> },
+      { path: 'credit-notes/:id', element: <CreditNoteDetailPage /> },
       { path: 'accounting-export', element: <AccountingExportPage /> },
 
       // Analytics

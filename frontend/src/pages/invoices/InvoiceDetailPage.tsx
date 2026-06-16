@@ -31,6 +31,7 @@ import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -47,6 +48,8 @@ import { useToast } from '../../contexts/ToastContext'
 import { RecordPaymentDialog } from '../../components/invoice/RecordPaymentDialog'
 import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPanel'
 import { AddInvoiceLineDialog } from '../../components/invoice/AddInvoiceLineDialog'
+import { CreateCreditNoteDialog } from '../../components/credit-note/CreateCreditNoteDialog'
+import { CreditNotesPanel } from '../../components/credit-note/CreditNotesPanel'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -106,6 +109,7 @@ export function InvoiceDetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
+  const [creditNoteOpen, setCreditNoteOpen] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
   const [lineDialogOpen, setLineDialogOpen] = useState(false)
   const [editLine, setEditLine] = useState<InvoiceLineOut | null>(null)
@@ -382,6 +386,11 @@ export function InvoiceDetailPage() {
               <PaymentHistoryPanel invoiceId={invoice.id} currency={invoice.currency} />
             )}
 
+            {/* Credit notes */}
+            {invoice.status !== 'draft' && (
+              <CreditNotesPanel invoiceId={invoice.id} />
+            )}
+
             {/* Lines card */}
             <Card>
               <CardContent sx={{ p: 3 }}>
@@ -629,6 +638,19 @@ export function InvoiceDetailPage() {
                     </Button>
                   )}
 
+                  {(invoice.status === 'issued' || invoice.status === 'partial' || invoice.status === 'paid') && (
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      startIcon={<NoteAddRoundedIcon />}
+                      onClick={() => setCreditNoteOpen(true)}
+                      disabled={anyMutating}
+                      sx={{ borderColor: '#EA580C', color: '#EA580C', '&:hover': { borderColor: '#C2410C', bgcolor: '#FFF7ED' } }}
+                    >
+                      Créer un avoir
+                    </Button>
+                  )}
+
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (
                     <Button
                       variant="outlined"
@@ -668,6 +690,14 @@ export function InvoiceDetailPage() {
         <RecordPaymentDialog
           open={paymentOpen}
           onClose={() => setPaymentOpen(false)}
+          invoice={invoice}
+        />
+      )}
+
+      {invoice && (
+        <CreateCreditNoteDialog
+          open={creditNoteOpen}
+          onClose={() => setCreditNoteOpen(false)}
           invoice={invoice}
         />
       )}

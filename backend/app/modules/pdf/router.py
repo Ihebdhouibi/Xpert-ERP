@@ -1,5 +1,6 @@
 """PDF download router.
 
+GET /pdf/credit-notes/{id}     — requires credit_note.read
 GET /pdf/quotations/{id}       — requires quotation.read
 GET /pdf/invoices/{id}         — requires invoice.read
 GET /pdf/delivery-notes/{id}   — requires invoice.read
@@ -76,6 +77,36 @@ async def download_supplier_invoice_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/credit-notes/{credit_note_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF document"},
+        404: {"description": "Credit note not found"},
+    },
+    dependencies=[require_permission("credit_note.read")],
+)
+async def download_credit_note_pdf(
+    credit_note_id: int,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_credit_note_pdf(
+            db, credit_note_id=credit_note_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Credit note not found")
+
+    filename = f"avoir-{credit_note_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 

@@ -17,6 +17,7 @@ from app.core.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.modules.credit_note import repository as credit_note_repo
 from app.modules.customer import repository as customer_repo
 from app.modules.delivery_note import repository as delivery_note_repo
 from app.modules.invoice import repository as invoice_repo
@@ -264,6 +265,45 @@ async def render_supplier_invoice_pdf(
         return pdf_bytes
     except Exception:
         logger.exception("render_supplier_invoice_pdf_error", public_id=public_id, garage_id=garage_id)
+        raise
+
+
+async def render_credit_note_pdf(
+    db: AsyncSession, *, credit_note_id: int, garage_id: int
+) -> bytes:
+    """Fetch the credit note and its linked invoice, render HTML template, return PDF bytes."""
+    logger.info("render_credit_note_pdf_start", credit_note_id=credit_note_id, garage_id=garage_id)
+    try:
+        cn = await credit_note_repo.get_credit_note_by_id(db, credit_note_id, garage_id)
+        if cn is None:
+            raise ValueError(f"Credit note {credit_note_id} not found")
+
+        invoice = await invoice_repo.get_by_id(db, cn.invoice_id, garage_id)
+        customer = None
+        if invoice:
+            customer = await customer_repo.get_by_id(db, garage_id, invoice.customer_id)
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": cn,
+            "invoice": invoice,
+            "customer": customer,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("credit_note.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
+        )
+        logger.info("render_credit_note_pdf_success", credit_note_id=credit_note_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_credit_note_pdf_error", credit_note_id=credit_note_id, garage_id=garage_id)
         raise
 
 
