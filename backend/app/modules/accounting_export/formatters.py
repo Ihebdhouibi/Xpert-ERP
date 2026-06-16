@@ -93,18 +93,32 @@ def _generic_payments_csv(payments: list[dict[str, Any]]) -> str:
     return buf.getvalue()
 
 
-def _generic_purchases_csv(supplier_invoices: list[dict[str, Any]]) -> str:
+def _generic_purchases_csv(
+    supplier_invoices: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
+) -> str:
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["Date", "N° Facture", "Fournisseur", "Base HT (€)", "TVA (€)", "Total TTC (€)"])
+    w.writerow(["Date", "N° Document", "Type", "Fournisseur", "Base HT (€)", "TVA (€)", "Total TTC (€)"])
     for si in supplier_invoices:
         w.writerow([
             si["received_at"],
             si["number"],
+            "Facture",
             si["supplier_name"],
             _eur(si["total_ht"]),
             _eur(si["vat_amount"]),
             _eur(si["total_ttc"]),
+        ])
+    for scn in (supplier_credit_notes or []):
+        w.writerow([
+            str(scn["issued_at"]),
+            scn["doc_number"] or "AF",
+            "Avoir",
+            scn["supplier_name"],
+            _eur(-scn["total_ht"]),
+            _eur(-scn["vat_amount"]),
+            _eur(-scn["total_ttc"]),
         ])
     return buf.getvalue()
 
@@ -203,6 +217,35 @@ def _journal_rows_purchases(
     return rows
 
 
+def _journal_rows_supplier_credit_notes(
+    scns: list[dict[str, Any]],
+    date_fn,
+    dec_sep: str,
+) -> list[list[str]]:
+    """Reverse-purchase journal rows for supplier credit notes (avoirs fournisseur).
+
+    Accounting entry (mirrors the SI reversal):
+      Debit  401 (Fournisseurs)       — reduces supplier payable
+      Credit 607 (Achats)             — reverses purchase cost
+      Credit 445660 (TVA déductible)  — reverses deductible VAT
+    """
+    rows = []
+    for scn in scns:
+        dt = date_fn(str(scn["issued_at"]))
+        doc = (scn["doc_number"] or "AF")[:35]
+        sup = scn["supplier_name"][:35]
+        ht = _eur(scn["total_ht"], dec_sep)
+        vat = _eur(scn["vat_amount"], dec_sep)
+        ttc = _eur(scn["total_ttc"], dec_sep)
+        zero = _eur(0, dec_sep)
+        rows += [
+            ["ACH", dt, doc, _ACC_SUPPLIER, f"Fournisseur {sup}", ttc, zero],
+            ["ACH", dt, doc, _ACC_PURCHASES, "Retour achats", zero, ht],
+            ["ACH", dt, doc, _ACC_VAT_DEDUCTIBLE, "TVA déductible", zero, vat],
+        ]
+    return rows
+
+
 def _write_journal_csv(rows: list[list[str]], sep: str) -> str:
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=sep)
@@ -221,20 +264,17 @@ def _build_sage(
     payments: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
     vat_summary: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     sep = ";"
     date_fn = _date_fr
     dec = ","
+    achats_rows = _journal_rows_purchases(supplier_invoices, date_fn, dec) + \
+                  _journal_rows_supplier_credit_notes(supplier_credit_notes or [], date_fn, dec)
     return {
-        "journal_ventes.csv": _write_journal_csv(
-            _journal_rows_sales(invoices, date_fn, dec), sep
-        ),
-        "journal_reglements.csv": _write_journal_csv(
-            _journal_rows_payments(payments, date_fn, dec), sep
-        ),
-        "journal_achats.csv": _write_journal_csv(
-            _journal_rows_purchases(supplier_invoices, date_fn, dec), sep
-        ),
+        "journal_ventes.csv": _write_journal_csv(_journal_rows_sales(invoices, date_fn, dec), sep),
+        "journal_reglements.csv": _write_journal_csv(_journal_rows_payments(payments, date_fn, dec), sep),
+        "journal_achats.csv": _write_journal_csv(achats_rows, sep),
         "balance_tva.csv": _generic_vat_csv(vat_summary),
     }
 
@@ -244,20 +284,17 @@ def _build_cegid(
     payments: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
     vat_summary: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     sep = "\t"
-    date_fn = lambda iso: iso  # ISO already YYYY-MM-DD
+    date_fn = lambda iso: iso  # noqa: E731 — ISO already YYYY-MM-DD
     dec = ","
+    achats_rows = _journal_rows_purchases(supplier_invoices, date_fn, dec) + \
+                  _journal_rows_supplier_credit_notes(supplier_credit_notes or [], date_fn, dec)
     return {
-        "journal_ventes.csv": _write_journal_csv(
-            _journal_rows_sales(invoices, date_fn, dec), sep
-        ),
-        "journal_reglements.csv": _write_journal_csv(
-            _journal_rows_payments(payments, date_fn, dec), sep
-        ),
-        "journal_achats.csv": _write_journal_csv(
-            _journal_rows_purchases(supplier_invoices, date_fn, dec), sep
-        ),
+        "journal_ventes.csv": _write_journal_csv(_journal_rows_sales(invoices, date_fn, dec), sep),
+        "journal_reglements.csv": _write_journal_csv(_journal_rows_payments(payments, date_fn, dec), sep),
+        "journal_achats.csv": _write_journal_csv(achats_rows, sep),
         "balance_tva.csv": _generic_vat_csv(vat_summary),
     }
 
@@ -267,21 +304,17 @@ def _build_ebp(
     payments: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
     vat_summary: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
-    # EBP uses same semicolon format as Sage but with period decimal separator
     sep = ";"
     date_fn = _date_fr
     dec = ","
+    achats_rows = _journal_rows_purchases(supplier_invoices, date_fn, dec) + \
+                  _journal_rows_supplier_credit_notes(supplier_credit_notes or [], date_fn, dec)
     return {
-        "journal_ventes.csv": _write_journal_csv(
-            _journal_rows_sales(invoices, date_fn, dec), sep
-        ),
-        "journal_reglements.csv": _write_journal_csv(
-            _journal_rows_payments(payments, date_fn, dec), sep
-        ),
-        "journal_achats.csv": _write_journal_csv(
-            _journal_rows_purchases(supplier_invoices, date_fn, dec), sep
-        ),
+        "journal_ventes.csv": _write_journal_csv(_journal_rows_sales(invoices, date_fn, dec), sep),
+        "journal_reglements.csv": _write_journal_csv(_journal_rows_payments(payments, date_fn, dec), sep),
+        "journal_achats.csv": _write_journal_csv(achats_rows, sep),
         "balance_tva.csv": _generic_vat_csv(vat_summary),
     }
 
@@ -291,11 +324,12 @@ def _build_generic_csv(
     payments: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
     vat_summary: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     return {
         "journal_ventes.csv": _generic_sales_csv(invoices),
         "journal_reglements.csv": _generic_payments_csv(payments),
-        "journal_achats.csv": _generic_purchases_csv(supplier_invoices),
+        "journal_achats.csv": _generic_purchases_csv(supplier_invoices, supplier_credit_notes),
         "balance_tva.csv": _generic_vat_csv(vat_summary),
     }
 
@@ -318,10 +352,11 @@ def generate_zip(
     payments: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
     vat_summary: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> bytes:
     """Return a ZIP archive containing the journal CSV files for the given format."""
     builder = _BUILDERS.get(fmt, _build_generic_csv)
-    files = builder(invoices, payments, supplier_invoices, vat_summary)
+    files = builder(invoices, payments, supplier_invoices, vat_summary, supplier_credit_notes)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:

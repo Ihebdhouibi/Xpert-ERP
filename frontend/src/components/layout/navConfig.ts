@@ -13,6 +13,7 @@ import AccountBalanceRoundedIcon from '@mui/icons-material/AccountBalanceRounded
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import ShoppingCartRoundedIcon from '@mui/icons-material/ShoppingCartRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
+import AssignmentReturnRoundedIcon from '@mui/icons-material/AssignmentReturnRounded'
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded'
 import InventoryRoundedIcon from '@mui/icons-material/InventoryRounded'
 import WarehouseRoundedIcon from '@mui/icons-material/WarehouseRounded'
@@ -152,6 +153,18 @@ export const navSections: NavSection[] = [
         path: '/supplier-invoices',
         icon: ReceiptLongRoundedIcon,
         permission: 'supplier_invoice.read',
+      },
+      {
+        label: 'Bons de retour',
+        path: '/bon-retour',
+        icon: AssignmentReturnRoundedIcon,
+        permission: 'bon_de_retour.read',
+      },
+      {
+        label: 'Avoirs fournisseurs',
+        path: '/avoirs-fournisseurs',
+        icon: ReceiptRoundedIcon,
+        permission: 'supplier_credit_note.read',
       },
       {
         label: 'Export comptable',

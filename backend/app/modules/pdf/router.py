@@ -173,6 +173,36 @@ async def download_invoice_pdf(
 
 
 @router.get(
+    "/bon-de-retour/{public_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF document"},
+        404: {"description": "Bon de retour not found"},
+    },
+    dependencies=[require_permission("bon_de_retour.read")],
+)
+async def download_bon_de_retour_pdf(
+    public_id: str,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_bon_de_retour_pdf(
+            db, public_id=public_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Bon de retour not found")
+
+    filename = f"bon-retour-{public_id[:8]}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get(
     "/delivery-notes/{delivery_note_id}",
     response_class=Response,
     responses={

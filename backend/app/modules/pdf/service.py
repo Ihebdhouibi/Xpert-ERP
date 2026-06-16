@@ -307,6 +307,53 @@ async def render_credit_note_pdf(
         raise
 
 
+async def render_bon_de_retour_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch bon de retour, resolve party (supplier or customer), render PDF."""
+    from sqlalchemy import select
+    from app.modules.bon_de_retour.repository import get_by_public_id
+    from app.modules.supplier.models import Supplier
+
+    logger.info("render_bon_de_retour_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        bdr = await get_by_public_id(db, public_id, garage_id)
+        if bdr is None:
+            raise ValueError(f"Bon de retour {public_id} not found")
+
+        party_val = getattr(bdr.party_type, "value", bdr.party_type)
+        customer = None
+        supplier = None
+        if party_val == "client" and bdr.customer_id:
+            customer = await customer_repo.get_by_id(db, garage_id, bdr.customer_id)
+        elif bdr.supplier_id:
+            sup_res = await db.execute(select(Supplier).where(Supplier.id == bdr.supplier_id))
+            supplier = sup_res.scalar_one_or_none()
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": bdr,
+            "customer": customer,
+            "supplier": supplier,
+            "is_supplier": party_val == "supplier",
+            "status_display": getattr(bdr.status, "value", bdr.status),
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("bon_de_retour.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_bon_de_retour_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_bon_de_retour_pdf_error", public_id=public_id, garage_id=garage_id)
+        raise
+
+
 async def render_invoice_pdf(
     db: AsyncSession, *, invoice_id: int, garage_id: int
 ) -> bytes:
