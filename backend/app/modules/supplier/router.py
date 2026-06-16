@@ -58,6 +58,7 @@ class SupplierSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    int_id: int
     name: str
     email: Optional[str]
     phone: Optional[str]
@@ -74,6 +75,7 @@ class SupplierSummary(BaseModel):
     @classmethod
     def _remap_public_id(cls, data: Any) -> Any:
         if hasattr(data, "public_id"):
+            data.__dict__["int_id"] = data.id  # capture integer PK before overwriting
             data.__dict__["id"] = str(data.public_id)
         return data
 
@@ -88,7 +90,7 @@ class SupplierListResponse(BaseModel):
 class SupplierPriceCreateRequest(BaseModel):
     part_public_id: str = Field(..., description="Catalog part public_id (UUID)")
     unit_price_minor: int = Field(..., gt=0)
-    currency: str = Field("MAD", min_length=3, max_length=3)
+    currency: str = Field("EUR", min_length=3, max_length=3)
     effective_from: date
 
 

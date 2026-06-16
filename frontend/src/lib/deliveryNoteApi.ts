@@ -103,6 +103,13 @@ export const deliveryNoteApi = {
     return data
   },
 
+  listAvailableForInvoice: async (customerId: number): Promise<DeliveryNoteListResponse> => {
+    const { data } = await apiClient.get<DeliveryNoteListResponse>('/delivery-notes', {
+      params: { customer_id: customerId, available_for_invoice: true, page_size: 200 },
+    })
+    return data
+  },
+
   get: async (publicId: string): Promise<DeliveryNoteOut> => {
     const { data } = await apiClient.get<DeliveryNoteOut>(`/delivery-notes/${publicId}`)
     return data

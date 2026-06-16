@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -174,6 +175,8 @@ class ROPartLine(Base):
     part_name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_cost_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    remise_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    tva_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

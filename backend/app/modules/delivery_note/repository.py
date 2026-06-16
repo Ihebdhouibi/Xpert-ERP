@@ -53,6 +53,7 @@ async def list_delivery_notes(
     *,
     customer_id: Optional[int] = None,
     status: Optional[DeliveryNoteStatus] = None,
+    available_for_invoice: bool = False,
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[DeliveryNote], int]:
@@ -64,6 +65,11 @@ async def list_delivery_notes(
         base = base.where(DeliveryNote.customer_id == customer_id)
     if status is not None:
         base = base.where(DeliveryNote.status == status)
+    if available_for_invoice:
+        base = base.where(
+            DeliveryNote.status.in_([DeliveryNoteStatus.issued, DeliveryNoteStatus.delivered]),
+            DeliveryNote.invoice_id.is_(None),
+        )
 
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = await db.execute(

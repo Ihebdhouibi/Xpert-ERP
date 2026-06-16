@@ -158,6 +158,7 @@ def create_app() -> FastAPI:
     from app.modules.ocr.router import router as ocr_router
     from app.modules.config.router import router as config_router
     from app.modules.delivery_note.router import router as delivery_note_router
+    from app.modules.bon_de_retour.router import router as bon_de_retour_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
@@ -190,6 +191,7 @@ def create_app() -> FastAPI:
     app.include_router(ocr_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(delivery_note_router, prefix="/api/v1")
+    app.include_router(bon_de_retour_router, prefix="/api/v1")
 
     # ------------------------------------------------------------------
     # Global exception handler — logs ALL unhandled 500s to system.log

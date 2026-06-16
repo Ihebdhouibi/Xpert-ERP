@@ -23,6 +23,8 @@ export interface ROPartLine {
   part_name: string
   quantity: number
   unit_cost_minor: number
+  remise_pct: number
+  tva_pct: number
   amount_minor: number
   created_at: string
 }
@@ -110,6 +112,8 @@ export interface PartLineInput {
   unit_cost_minor: number
   // Public id of the catalogue part — when set, the backend reserves stock.
   part_public_id?: string
+  remise_pct?: number
+  tva_pct?: number
 }
 
 export const STATUS_LABELS: Record<ROStatus, string> = {

@@ -117,6 +117,18 @@ PERMISSIONS: list[dict[str, str]] = [
     {"code": "supplier_invoice.post", "resource": "supplier_invoice", "action": "post", "description": "Post and run three-way match"},
     {"code": "supplier_invoice.approve", "resource": "supplier_invoice", "action": "approve", "description": "Approve supplier invoices"},
     {"code": "supplier_invoice.override", "resource": "supplier_invoice", "action": "override", "description": "Override discrepancies"},
+    # --- Bon de retour (return note) ---
+    {"code": "bon_de_retour.read", "resource": "bon_de_retour", "action": "read", "description": "View bon de retour"},
+    {"code": "bon_de_retour.create", "resource": "bon_de_retour", "action": "create", "description": "Create draft bon de retour"},
+    {"code": "bon_de_retour.update", "resource": "bon_de_retour", "action": "update", "description": "Edit a draft bon de retour"},
+    {"code": "bon_de_retour.confirm", "resource": "bon_de_retour", "action": "confirm", "description": "Confirm bon de retour (assign number, move stock)"},
+    {"code": "bon_de_retour.cancel", "resource": "bon_de_retour", "action": "cancel", "description": "Cancel a draft bon de retour"},
+    {"code": "bon_de_retour.reverse", "resource": "bon_de_retour", "action": "reverse", "description": "Reverse a confirmed bon de retour (undo stock movements)"},
+    # --- Supplier credit note (avoir fournisseur) ---
+    {"code": "supplier_credit_note.read", "resource": "supplier_credit_note", "action": "read", "description": "View supplier credit notes (avoir fournisseur)"},
+    {"code": "supplier_credit_note.create", "resource": "supplier_credit_note", "action": "create", "description": "Create a supplier credit note"},
+    {"code": "supplier_credit_note.issue", "resource": "supplier_credit_note", "action": "issue", "description": "Issue a supplier credit note"},
+    {"code": "supplier_credit_note.void", "resource": "supplier_credit_note", "action": "void", "description": "Void a supplier credit note"},
     # --- Notifications ---
     {"code": "notification.read", "resource": "notification", "action": "read", "description": "View delivery log"},
     {"code": "notification.send", "resource": "notification", "action": "send", "description": "Send manual notification"},

@@ -22,6 +22,18 @@ from app.modules.sequence import service as seq_service
 logger = get_logger("credit_note.service")
 
 
+def _build_cn_out(cn: CreditNote) -> CreditNoteOut:
+    """Validate ORM → schema and populate denormalised invoice fields."""
+    out = CreditNoteOut.model_validate(cn)
+    inv = getattr(cn, "invoice", None)
+    if inv is not None:
+        out.invoice_doc_number = inv.doc_number
+        out.invoice_public_id = inv.public_id
+        out.invoice_total_minor = inv.total_minor
+        out.invoice_paid_amount_minor = inv.paid_amount_minor
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
@@ -91,7 +103,7 @@ async def create_credit_note(
 
     fresh = await repo.get_credit_note_by_id(db, cn.id, garage_id)
     logger.info("credit_note_created", cn_id=cn.id, invoice_id=request.invoice_id)
-    return CreditNoteOut.model_validate(fresh)
+    return _build_cn_out(fresh)
 
 
 async def _auto_create_and_issue_credit_note(
@@ -168,7 +180,7 @@ async def issue_credit_note(
     await db.commit()
     fresh = await repo.get_credit_note_by_id(db, cn.id, garage_id)
     logger.info("credit_note_issued", cn_id=cn_id, doc_number=fresh.doc_number if fresh else None)
-    return CreditNoteOut.model_validate(fresh)
+    return _build_cn_out(fresh)
 
 
 async def void_credit_note(
@@ -211,14 +223,14 @@ async def void_credit_note(
     await db.commit()
     fresh = await repo.get_credit_note_by_id(db, cn.id, garage_id)
     logger.info("credit_note_voided", cn_id=cn_id)
-    return CreditNoteOut.model_validate(fresh)
+    return _build_cn_out(fresh)
 
 
 async def get_credit_note(db: AsyncSession, cn_id: int, garage_id: int) -> CreditNoteOut:
     cn = await repo.get_credit_note_by_id(db, cn_id, garage_id)
     if not cn:
         raise CreditNoteNotFoundError(cn_id)
-    return CreditNoteOut.model_validate(cn)
+    return _build_cn_out(cn)
 
 
 async def list_credit_notes(
@@ -227,10 +239,11 @@ async def list_credit_notes(
     *,
     page: int = 1,
     page_size: int = 25,
+    invoice_id: int | None = None,
 ) -> CreditNoteListResponse:
-    items, total = await repo.list_credit_notes(db, garage_id, page=page, page_size=page_size)
+    items, total = await repo.list_credit_notes(db, garage_id, page=page, page_size=page_size, invoice_id=invoice_id)
     return CreditNoteListResponse(
-        items=[CreditNoteOut.model_validate(i) for i in items],
+        items=[_build_cn_out(i) for i in items],
         total=total,
         page=page,
         page_size=page_size,

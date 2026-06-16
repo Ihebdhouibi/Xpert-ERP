@@ -3,13 +3,7 @@
 {% block content %}
 
 <!-- Document title -->
-{% if doc.status.value == "cancelled" %}
-  <div class="doc-title" style="background-color:#c0392b;">FACTURE — ANNULÉE</div>
-{% elif doc.status.value == "paid" %}
-  <div class="doc-title" style="background-color:#27ae60;">FACTURE — SOLDÉE</div>
-{% else %}
-  <div class="doc-title">FACTURE</div>
-{% endif %}
+<div class="doc-title">FACTURE</div>
 
 <!-- Document meta -->
 <div class="doc-meta">
@@ -134,10 +128,12 @@
       {% endif %}
     {% endfor %}
     {% for rate, amount in vat_by_rate.items() %}
+    {% if amount > 0 %}
     <tr class="vat">
       <td class="t-label">TVA {{ rate }}%</td>
       <td class="t-value">{{ amount | money(currency_symbol) }}</td>
     </tr>
+    {% endif %}
     {% endfor %}
     {% if not vat_by_rate %}
     <tr class="vat">

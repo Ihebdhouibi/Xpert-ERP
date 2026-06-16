@@ -84,6 +84,10 @@ _INVENTORY_MANAGER = {
     "purchase_order.read", "purchase_order.create", "purchase_order.approve",
     "purchase_order.send", "purchase_order.reception.record",
     "supplier_invoice.record",
+    "bon_de_retour.read", "bon_de_retour.create", "bon_de_retour.update",
+    "bon_de_retour.confirm", "bon_de_retour.cancel", "bon_de_retour.reverse",
+    "supplier_credit_note.read", "supplier_credit_note.create",
+    "supplier_credit_note.issue", "supplier_credit_note.void",
     "reporting.dashboard.read", "reporting.inventory.read",
 }
 

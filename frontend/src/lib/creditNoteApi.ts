@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiClient } from './apiClient'
 import type { PaymentMethod } from './paymentApi'
 
@@ -22,6 +23,12 @@ export interface CreditNoteOut {
   created_at: string
   updated_at: string
   created_by: number | null
+  refunds: RefundOut[]
+  // Denormalised invoice fields (always present, populated by backend)
+  invoice_doc_number: string | null
+  invoice_public_id: string | null
+  invoice_total_minor: number
+  invoice_paid_amount_minor: number
 }
 
 export interface CreditNoteListResponse {
@@ -61,7 +68,7 @@ export interface RefundCreateInput {
 }
 
 export const creditNoteApi = {
-  list(params?: { page?: number; page_size?: number }): Promise<CreditNoteListResponse> {
+  list(params?: { page?: number; page_size?: number; invoice_id?: number }): Promise<CreditNoteListResponse> {
     return apiClient.get('/credit-notes', { params }).then(r => r.data)
   },
 
@@ -79,6 +86,16 @@ export const creditNoteApi = {
 
   void(id: number): Promise<CreditNoteOut> {
     return apiClient.post(`/credit-notes/${id}/void`).then(r => r.data)
+  },
+
+  getPdf(id: number): Promise<Blob> {
+    const token = localStorage.getItem('access_token')
+    return axios
+      .get(`/api/v1/pdf/credit-notes/${id}`, {
+        responseType: 'blob',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      .then(r => r.data)
   },
 
   createRefund(input: RefundCreateInput): Promise<RefundOut> {

@@ -9,12 +9,13 @@ log = logging.getLogger(__name__)
 async def seed() -> None:
     conn: asyncpg.Connection | None = None
     try:
+        import os
         conn = await asyncpg.connect(
-            host='127.0.0.1',
-            port=5433,
-            database='xpert_erp',
-            user='xpert',
-            password='xpert_dev_password',
+            host=os.environ.get('DB_HOST', '127.0.0.1'),
+            port=int(os.environ.get('DB_PORT', 5433)),
+            database=os.environ.get('POSTGRES_DB', 'xpert_erp'),
+            user=os.environ.get('POSTGRES_USER', 'xpert'),
+            password=os.environ.get('POSTGRES_PASSWORD', 'rootadmin'),
         )
 
         # Get admin role ID

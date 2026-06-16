@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -15,6 +16,7 @@ import {
   MenuItem,
   Select,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -26,11 +28,13 @@ import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
 import { customerApi } from '../../lib/customerApi'
+import { deliveryNoteApi, type DeliveryNoteOut } from '../../lib/deliveryNoteApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
 import { useToast } from '../../contexts/ToastContext'
 
 function PaymentProgress({ total, paid, currency }: { total: number; paid: number; currency: string }) {
@@ -104,16 +108,11 @@ const buildColumns = (
   {
     id: 'customer',
     label: 'Client',
-    render: row =>
-      row.customer_name ? (
-        <Typography variant="body2" fontWeight={500}>
-          {row.customer_name}
-        </Typography>
-      ) : (
-        <Typography variant="body2" color="text.disabled">
-          Sans client
-        </Typography>
-      ),
+    render: row => (
+      <Typography variant="body2" fontWeight={500}>
+        {row.customer_name ?? `Client #${row.customer_id}`}
+      </Typography>
+    ),
   },
   {
     id: 'actions',
@@ -219,15 +218,146 @@ const buildColumns = (
   },
 ]
 
+function CreateInvoiceDialog({ open, onClose, onCreated }: {
+  open: boolean
+  onClose: () => void
+  onCreated: (publicId: string) => void
+}) {
+  const { error: toastError } = useToast()
+  const [customerId, setCustomerId] = useState<number | null>(null)
+  const [dueAt, setDueAt] = useState('')
+  const [notes, setNotes] = useState('')
+  const [customerError, setCustomerError] = useState(false)
+  const [selectedBls, setSelectedBls] = useState<DeliveryNoteOut[]>([])
+
+  const { data: blsData, isLoading: blsLoading } = useQuery({
+    queryKey: ['delivery-notes', 'available-for-invoice', customerId],
+    queryFn: () => deliveryNoteApi.listAvailableForInvoice(customerId!),
+    enabled: !!customerId,
+  })
+
+  const availableBls = blsData?.items ?? []
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (selectedBls.length > 0) {
+        return invoiceApi.fromDeliveryNotes({
+          customer_id: customerId!,
+          delivery_note_ids: selectedBls.map(bl => bl.public_id),
+          due_at: dueAt ? `${dueAt}T00:00:00` : null,
+          notes: notes || null,
+        })
+      }
+      return invoiceApi.create({
+        customer_id: customerId!,
+        due_at: dueAt ? `${dueAt}T00:00:00` : null,
+        notes: notes || null,
+      })
+    },
+    onSuccess: inv => {
+      onCreated(inv.public_id)
+      setCustomerId(null)
+      setDueAt('')
+      setNotes('')
+      setSelectedBls([])
+    },
+    onError: () => toastError('Erreur lors de la création de la facture.'),
+  })
+
+  function handleCustomerChange(id: number | null) {
+    setCustomerId(id)
+    setCustomerError(false)
+    setSelectedBls([])
+  }
+
+  function handleSubmit() {
+    if (!customerId) { setCustomerError(true); return }
+    setCustomerError(false)
+    mutation.mutate()
+  }
+
+  function handleClose() {
+    setCustomerId(null)
+    setDueAt('')
+    setNotes('')
+    setSelectedBls([])
+    setCustomerError(false)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Nouvelle facture</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} pt={1}>
+          <CustomerAutocomplete
+            value={customerId}
+            onChange={handleCustomerChange}
+            required
+            error={customerError}
+            helperText={customerError ? 'Sélectionnez un client' : undefined}
+          />
+          {customerId && (
+            <Autocomplete
+              multiple
+              options={availableBls}
+              loading={blsLoading}
+              value={selectedBls}
+              onChange={(_, newValue) => setSelectedBls(newValue)}
+              getOptionLabel={bl =>
+                `${bl.doc_number ?? 'Sans numéro'} — ${bl.issued_at ? new Date(bl.issued_at).toLocaleDateString('fr-FR') : ''} — ${formatMinor(bl.total_minor, bl.currency)}`
+              }
+              isOptionEqualToValue={(a, b) => a.public_id === b.public_id}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  label="Bons de livraison (optionnel)"
+                  placeholder={!blsLoading && availableBls.length === 0 ? 'Aucun BL disponible' : 'Sélectionner...'}
+                />
+              )}
+              noOptionsText="Aucun bon de livraison disponible"
+              loadingText="Chargement..."
+            />
+          )}
+          <TextField
+            label="Date d'échéance (optionnel)"
+            type="date"
+            value={dueAt}
+            onChange={e => setDueAt(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            label="Notes (optionnel)"
+            multiline
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            fullWidth
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={handleClose}>Annuler</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={mutation.isPending}>
+          Créer la facture
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 export function InvoicesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const qc = queryClient
   const { success, error: toastError } = useToast()
   const [page, setPage] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
   const [assignTarget, setAssignTarget] = useState<InvoiceOut | null>(null)
   const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
+  const [createOpen, setCreateOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['invoices', { page, pageSize, statusFilter }],
@@ -276,6 +406,14 @@ export function InvoicesPage() {
 
   return (
     <Box>
+      <CreateInvoiceDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={publicId => {
+          void qc.invalidateQueries({ queryKey: ['invoices'] })
+          navigate(`/invoices/${publicId}`)
+        }}
+      />
       <PageHeader
         title="Factures"
         subtitle="Suivi de la facturation client et des encours"
@@ -283,7 +421,7 @@ export function InvoicesPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/invoices/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouvelle facture
           </Button>
@@ -331,7 +469,7 @@ export function InvoicesPage() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={() => navigate('/invoices/new')}
+            onClick={() => setCreateOpen(true)}
           >
             Nouvelle facture
           </Button>

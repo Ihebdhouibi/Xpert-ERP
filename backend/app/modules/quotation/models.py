@@ -5,7 +5,7 @@ import enum
 import uuid as uuid_lib
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -24,6 +24,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 from app.core.types import BigIntPK
+
+if TYPE_CHECKING:
+    from app.modules.customer.models import Customer
 
 
 class QuotationStatus(str, enum.Enum):
@@ -110,6 +113,16 @@ class Quotation(Base):
     lines: Mapped[list[QuotationLine]] = relationship(
         "QuotationLine", back_populates="quotation", cascade="all, delete-orphan", order_by="QuotationLine.id"
     )
+    customer: Mapped[Optional["Customer"]] = relationship(
+        "Customer", foreign_keys=[customer_id], lazy="noload"
+    )
+
+    @property
+    def customer_name(self) -> str:
+        if self.customer is None:
+            return ""
+        c = self.customer
+        return f"{c.full_name} — {c.company_name}" if c.company_name else c.full_name
 
     __table_args__ = (
         Index("ix_quotation_garage_id", "garage_id"),

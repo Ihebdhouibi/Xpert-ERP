@@ -38,7 +38,6 @@ import {
 } from '../../lib/stockApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { MoneyField } from '../../components/ui/MoneyField'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { TableLoadingSkeleton } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
@@ -223,7 +222,7 @@ function MovementDialog({
       stockApi.createMovement(part.id, {
         type,
         quantity: parseInt(quantity),
-        unit_cost_minor: unitCost ? parseInt(unitCost) : undefined,
+        unit_cost_minor: unitCost ? Math.round(parseFloat(unitCost) * 100) : undefined,
         reason: reason || undefined,
       }),
     onSuccess: () => {
@@ -261,11 +260,13 @@ function MovementDialog({
             helperText={type === 'adjustment' ? 'Positif = ajout, négatif = retrait' : undefined}
           />
           {type === 'in' && (
-            <MoneyField
-              label="Coût unitaire"
-              valueMinor={Number(unitCost) || 0}
-              onChangeMinor={(m) => setUnitCost(m ? String(m) : '')}
+            <TextField
+              label="Coût unitaire (€)"
+              type="number"
+              value={unitCost}
+              onChange={(e) => setUnitCost(e.target.value)}
               fullWidth
+              inputProps={{ min: 0, step: '0.01' }}
             />
           )}
           <TextField

@@ -80,6 +80,14 @@ export interface InvoiceCreateInput {
   lines?: InvoiceLineCreateInput[]
 }
 
+export interface InvoiceFromDeliveryNotesInput {
+  customer_id: number
+  delivery_note_ids: string[]
+  currency?: string
+  due_at?: string | null
+  notes?: string | null
+}
+
 export interface InvoiceUpdateInput {
   customer_id?: number | null
   vehicle_id?: number | null
@@ -112,6 +120,10 @@ export const invoiceApi = {
     return apiClient
       .post(`/invoices/from-quotation/${quotationId}`, { due_at: dueAt ?? null })
       .then(r => r.data)
+  },
+
+  fromDeliveryNotes(input: InvoiceFromDeliveryNotesInput): Promise<InvoiceOut> {
+    return apiClient.post('/invoices/from-delivery-notes', input).then(r => r.data)
   },
 
   update(publicId: string, version: number, input: InvoiceUpdateInput): Promise<InvoiceOut> {

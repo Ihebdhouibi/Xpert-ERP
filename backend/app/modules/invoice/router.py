@@ -15,6 +15,7 @@ from app.modules.invoice.models import InvoiceStatus
 from app.modules.invoice.schemas import (
     ConvertQuotationRequest,
     InvoiceCreateRequest,
+    InvoiceFromDeliveryNotesRequest,
     InvoiceLineCreateRequest,
     InvoiceLineUpdateRequest,
     InvoiceListResponse,
@@ -185,6 +186,32 @@ async def convert_quotation(
         if isinstance(exc, InvoiceStateError):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
         raise
+
+
+# ---------------------------------------------------------------------------
+# Create invoice from one or more delivery notes
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/from-delivery-notes",
+    response_model=InvoiceOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("invoice.create")],
+    summary="Create a draft invoice aggregating lines from one or more delivery notes",
+)
+async def create_invoice_from_delivery_notes(
+    user: AuthUser,
+    request: InvoiceFromDeliveryNotesRequest,
+    db: AsyncSession = Depends(get_db),
+) -> InvoiceOut:
+    try:
+        return await service.create_invoice_from_delivery_notes(
+            db, request=request, garage_id=user.garage_id, user_id=user.user_id
+        )
+    except InvoiceStateError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except InvoiceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bon de livraison introuvable.")
 
 
 # ---------------------------------------------------------------------------

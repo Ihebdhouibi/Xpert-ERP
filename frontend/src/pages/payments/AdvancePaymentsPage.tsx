@@ -26,13 +26,13 @@ import { z } from 'zod'
 import { advancePaymentApi, type AdvancePaymentOut, type AdvancePaymentListResponse } from '../../lib/advancePaymentApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { MoneyField } from '../../components/ui/MoneyField'
+import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 
 const schema = z.object({
-  customer_id: z.number({ required_error: 'Requis' }).int().positive(),
-  amount_minor: z.number({ required_error: 'Requis' }).int().positive('Montant invalide'),
+  customer_id: z.number({ required_error: 'Requis' }).int().positive('Sélectionnez un client'),
+  amount_euros: z.number({ required_error: 'Requis' }).positive('Montant invalide'),
   payment_method: z.enum(['cash', 'card', 'bank_transfer', 'cheque', 'other'] as const),
   reference: z.string().optional(),
   notes: z.string().optional(),
@@ -63,7 +63,7 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
             </Box>
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>
-                {ap.customer_name ?? `Client #${ap.customer_id}`}
+                Client #{ap.customer_id}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {new Date(ap.paid_at).toLocaleDateString('fr-FR')} · {PAYMENT_METHOD_LABELS[ap.payment_method]}
@@ -106,17 +106,17 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
 export function AdvancePaymentsPage() {
   const { success, error } = useToast()
   const [open, setOpen] = useState(false)
-  const [customerId, setCustomerId] = useState<number | ''>('')
+  const [lookupCustomerId, setLookupCustomerId] = useState<number | null>(null)
   const [advances, setAdvances] = useState<AdvancePaymentOut[]>([])
 
   const { refetch } = useQuery({
-    queryKey: ['advance-payments', customerId],
-    queryFn: () => advancePaymentApi.listByCustomer(Number(customerId)),
-    enabled: typeof customerId === 'number',
+    queryKey: ['advance-payments', lookupCustomerId],
+    queryFn: () => advancePaymentApi.listByCustomer(Number(lookupCustomerId)),
+    enabled: typeof lookupCustomerId === 'number',
     onSuccess: (data: AdvancePaymentListResponse) => setAdvances(data.items),
   } as Parameters<typeof useQuery>[0])
 
-  const { control, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({
+  const { control, handleSubmit, reset, setValue, formState: { isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { payment_method: 'cash' },
   })
@@ -125,13 +125,13 @@ export function AdvancePaymentsPage() {
     try {
       await advancePaymentApi.create({
         customer_id: values.customer_id,
-        amount_minor: values.amount_minor,
+        amount_minor: Math.round(values.amount_euros * 100),
         payment_method: values.payment_method,
         reference: values.reference || null,
         notes: values.notes || null,
       })
       success('Avance enregistrée avec succès.')
-      reset()
+      reset({ payment_method: 'cash' })
       setOpen(false)
       void refetch()
     } catch {
@@ -152,19 +152,13 @@ export function AdvancePaymentsPage() {
       />
 
       {/* Customer lookup */}
-      <Stack direction="row" spacing={2} mb={3} alignItems="center">
-        <TextField
-          label="ID client"
-          type="number"
-          value={customerId}
-          onChange={e => setCustomerId(e.target.value ? Number(e.target.value) : '')}
-          sx={{ width: 200 }}
-          placeholder="Ex: 42"
+      <Box mb={3} maxWidth={360}>
+        <CustomerAutocomplete
+          value={lookupCustomerId}
+          onChange={id => setLookupCustomerId(id)}
+          label="Filtrer par client"
         />
-        <Typography variant="body2" color="text.secondary">
-          Entrez un ID client pour voir ses avances.
-        </Typography>
-      </Stack>
+      </Box>
 
       {advances.length > 0 ? (
         <Stack spacing={2}>
@@ -178,7 +172,7 @@ export function AdvancePaymentsPage() {
               Aucune avance
             </Typography>
             <Typography variant="body2" color="text.disabled" mt={0.5}>
-              Sélectionnez un client ou enregistrez une nouvelle avance.
+              Sélectionnez un client pour voir ses avances, ou enregistrez-en une nouvelle.
             </Typography>
           </CardContent>
         </Card>
@@ -193,28 +187,28 @@ export function AdvancePaymentsPage() {
               name="customer_id"
               control={control}
               render={({ field, fieldState }) => (
-                <TextField
-                  {...field}
-                  label="ID client"
-                  type="number"
-                  fullWidth
+                <CustomerAutocomplete
+                  value={field.value ?? null}
+                  onChange={id => setValue('customer_id', id ?? 0, { shouldValidate: true })}
+                  required
                   error={!!fieldState.error}
                   helperText={fieldState.error?.message}
-                  onChange={e => field.onChange(Number(e.target.value))}
                 />
               )}
             />
             <Controller
-              name="amount_minor"
+              name="amount_euros"
               control={control}
               render={({ field, fieldState }) => (
-                <MoneyField
-                  label="Montant"
+                <TextField
+                  {...field}
+                  label="Montant (€)"
+                  type="number"
                   fullWidth
-                  valueMinor={Number(field.value) || 0}
-                  onChangeMinor={field.onChange}
+                  inputProps={{ min: 0, step: '0.01' }}
                   error={!!fieldState.error}
-                  helperText={fieldState.error?.message}
+                  helperText={fieldState.error?.message ?? 'Ex: 50.00'}
+                  onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                 />
               )}
             />

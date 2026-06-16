@@ -5,6 +5,7 @@ from typing import Annotated, Any, Optional
 
 from fastapi import Depends, HTTPException, Query
 from fastapi import status as http_status
+from fastapi.responses import Response
 from fastapi.routing import APIRouter
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,11 +43,18 @@ logger = get_logger("supplier_invoice.router")
 
 
 class SILineInput(BaseModel):
-    po_line_id: int
+    po_line_id: Optional[int] = None
+    part_public_id: Optional[str] = None
     description: str = ""
     quantity: int = Field(..., gt=0)
     unit_price_ht: int = Field(..., ge=0)
     vat_rate: float = Field(20.0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def check_line_reference(self) -> "SILineInput":
+        if self.po_line_id is None and not self.part_public_id:
+            raise ValueError("Either po_line_id or part_public_id must be provided")
+        return self
 
 
 class SICreateRequest(BaseModel):
@@ -129,6 +137,159 @@ class SIListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/supplier-invoices/accounting-export-csv",
+    response_class=Response,
+    responses={
+        200: {"content": {"text/csv": {}}, "description": "CSV journal des achats"},
+    },
+    dependencies=[require_permission("supplier_invoice.read")],
+)
+async def export_paid_invoices_csv(
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download a semicolon-separated CSV of all paid supplier invoices journal entries."""
+    import csv
+    import io
+    from fastapi.responses import Response as FastAPIResponse
+    from sqlalchemy import select as sa_select
+    from app.modules.supplier.models import Supplier
+
+    items, _ = await SupplierInvoiceRepository.list(
+        db,
+        garage_id=user.garage_id,
+        status=SupplierInvoiceStatus.paid,
+        page=1,
+        page_size=10_000,
+    )
+
+    supplier_ids = list({si.supplier_id for si in items})
+    suppliers_map: dict[int, str] = {}
+    if supplier_ids:
+        sup_res = await db.execute(sa_select(Supplier).where(Supplier.id.in_(supplier_ids)))
+        suppliers_map = {s.id: s.name for s in sup_res.scalars()}
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["N° Facture", "Date", "Échéance", "Fournisseur", "Compte", "Libellé", "Débit (€)", "Crédit (€)"])
+
+    for si in items:
+        supplier_name = suppliers_map.get(si.supplier_id, "—")
+        date_str = si.received_at.date().isoformat() if si.received_at else ""
+        due_str = si.due_date.isoformat() if si.due_date else ""
+        total_ht = si.total_ht / 100
+        total_ttc = si.total_ttc / 100
+        tva = (si.total_ttc - si.total_ht) / 100
+
+        writer.writerow([si.number, date_str, due_str, supplier_name, "607", "Achats de marchandises", f"{total_ht:.2f}", ""])
+        writer.writerow([si.number, date_str, due_str, supplier_name, "44566", "TVA déductible", f"{tva:.2f}", ""])
+        writer.writerow([si.number, date_str, due_str, supplier_name, "401", "Fournisseurs", "", f"{total_ttc:.2f}"])
+
+    # UTF-8 BOM so Excel opens it correctly without import wizard
+    csv_bytes = "﻿".encode("utf-8") + output.getvalue().encode("utf-8")
+    return FastAPIResponse(
+        content=csv_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="export-comptable-fournisseurs.csv"'},
+    )
+
+
+@router.get(
+    "/supplier-invoices/accounting-export-pdf",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF journal des achats"},
+    },
+    dependencies=[require_permission("supplier_invoice.read")],
+)
+async def export_paid_invoices_pdf(
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download a PDF of all paid supplier invoices journal entries."""
+    import asyncio
+    from datetime import date as _date
+    from pathlib import Path
+    from fastapi.responses import Response as FastAPIResponse
+    from sqlalchemy import select as sa_select
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    from app.modules.supplier.models import Supplier
+    from app.core.config import get_settings
+
+    items, _ = await SupplierInvoiceRepository.list(
+        db,
+        garage_id=user.garage_id,
+        status=SupplierInvoiceStatus.paid,
+        page=1,
+        page_size=10_000,
+    )
+
+    supplier_ids = list({si.supplier_id for si in items})
+    suppliers_map: dict[int, str] = {}
+    if supplier_ids:
+        sup_res = await db.execute(sa_select(Supplier).where(Supplier.id.in_(supplier_ids)))
+        suppliers_map = {s.id: s.name for s in sup_res.scalars()}
+
+    rows = []
+    sum_ht = 0.0
+    sum_tva = 0.0
+    sum_ttc = 0.0
+    invoice_numbers: set[str] = set()
+
+    for si in items:
+        supplier_name = suppliers_map.get(si.supplier_id, "—")
+        date_str = si.received_at.date().strftime("%d/%m/%Y") if si.received_at else "—"
+        due_str = si.due_date.strftime("%d/%m/%Y") if si.due_date else "—"
+        ht = si.total_ht / 100
+        ttc = si.total_ttc / 100
+        tva = (si.total_ttc - si.total_ht) / 100
+        sum_ht += ht
+        sum_tva += tva
+        sum_ttc += ttc
+        invoice_numbers.add(si.number)
+
+        rows.append({"number": si.number, "date": date_str, "due": due_str, "supplier": supplier_name,
+                     "account": "607", "label": "Achats de marchandises", "debit": f"{ht:.2f}", "credit": ""})
+        rows.append({"number": si.number, "date": date_str, "due": due_str, "supplier": supplier_name,
+                     "account": "44566", "label": "TVA déductible", "debit": f"{tva:.2f}", "credit": ""})
+        rows.append({"number": si.number, "date": date_str, "due": due_str, "supplier": supplier_name,
+                     "account": "401", "label": "Fournisseurs", "debit": "", "credit": f"{ttc:.2f}"})
+
+    settings = get_settings()
+    templates_dir = Path(__file__).parent.parent.parent.parent / "templates" / "documents"
+    env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=select_autoescape(["html"]))
+
+    html_string = env.get_template("si_accounting_export.html").render(
+        rows=rows,
+        export_date=_date.today().strftime("%d/%m/%Y"),
+        invoice_count=len(invoice_numbers),
+        total_ht=f"{sum_ht:.2f}",
+        total_tva=f"{sum_tva:.2f}",
+        total_ttc=f"{sum_ttc:.2f}",
+        garage_name=settings.pdf_garage_name,
+        garage_address=getattr(settings, "pdf_garage_address", ""),
+        garage_phone=getattr(settings, "pdf_garage_phone", ""),
+        garage_email=getattr(settings, "pdf_garage_email", ""),
+        garage_logo_path=getattr(settings, "pdf_garage_logo_path", ""),
+        vat_number=getattr(settings, "pdf_vat_number", ""),
+        footer_text=getattr(settings, "pdf_footer_text", ""),
+    )
+
+    def _render() -> bytes:
+        from weasyprint import HTML
+        return HTML(string=html_string, base_url=str(templates_dir) + "/").write_pdf()
+
+    loop = asyncio.get_event_loop()
+    pdf_bytes: bytes = await loop.run_in_executor(None, _render)
+
+    return FastAPIResponse(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="export-comptable-fournisseurs.pdf"'},
+    )
 
 
 @router.get(

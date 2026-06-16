@@ -17,10 +17,13 @@ from app.core.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.modules.credit_note import repository as credit_note_repo
 from app.modules.customer import repository as customer_repo
+from app.modules.delivery_note import repository as delivery_note_repo
 from app.modules.invoice import repository as invoice_repo
 from app.modules.quotation import repository as quotation_repo
 from app.modules.vehicles import repository as vehicle_repo
+from app.modules.purchase_order.repository import PurchaseOrderRepository
 
 logger = get_logger("pdf.service")
 
@@ -138,6 +141,216 @@ async def render_quotation_pdf(
         return pdf_bytes
     except Exception:
         logger.exception("render_quotation_pdf_error", quotation_id=quotation_id, garage_id=garage_id)
+        raise
+
+
+async def render_delivery_note_pdf(
+    db: AsyncSession, *, delivery_note_id: int, garage_id: int
+) -> bytes:
+    """Fetch the delivery note from DB, render HTML template, return PDF bytes."""
+    logger.info("render_delivery_note_pdf_start", delivery_note_id=delivery_note_id, garage_id=garage_id)
+    try:
+        dn = await delivery_note_repo.get_by_id(db, delivery_note_id, garage_id)
+        if dn is None:
+            raise ValueError(f"Delivery note {delivery_note_id} not found")
+
+        customer = await customer_repo.get_by_id(db, garage_id, dn.customer_id)
+        vehicle = None
+        if dn.vehicle_id:
+            vehicle = await vehicle_repo.get_by_id(
+                db, vehicle_id=dn.vehicle_id, garage_id=garage_id
+            )
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": dn,
+            "customer": customer,
+            "vehicle": vehicle,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("delivery_note.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
+        )
+        logger.info("render_delivery_note_pdf_success", delivery_note_id=delivery_note_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_delivery_note_pdf_error", delivery_note_id=delivery_note_id, garage_id=garage_id)
+        raise
+
+
+async def render_purchase_order_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch the purchase order from DB, resolve names, render HTML template, return PDF bytes."""
+    from sqlalchemy import select
+    from app.modules.supplier.models import Supplier
+    from app.modules.parts.models import Part
+
+    logger.info("render_purchase_order_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        po = await PurchaseOrderRepository.get_by_public_id(db, garage_id, public_id)
+        if po is None:
+            raise ValueError(f"Purchase order {public_id} not found")
+
+        supplier_res = await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+        supplier = supplier_res.scalar_one_or_none()
+
+        part_ids = list({line.part_id for line in po.lines})
+        parts_map: dict[int, str] = {}
+        if part_ids:
+            parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
+            parts_map = {p.id: p.name for p in parts_res.scalars()}
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": po,
+            "supplier": supplier,
+            "parts_map": parts_map,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("purchase_order.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_purchase_order_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_purchase_order_pdf_error", public_id=public_id, garage_id=garage_id)
+        raise
+
+
+async def render_supplier_invoice_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch supplier invoice, resolve supplier name, render PDF."""
+    from sqlalchemy import select
+    from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
+    from app.modules.supplier.models import Supplier
+
+    logger.info("render_supplier_invoice_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
+        if si is None:
+            raise ValueError(f"Supplier invoice {public_id} not found")
+
+        supplier_res = await db.execute(select(Supplier).where(Supplier.id == si.supplier_id))
+        supplier = supplier_res.scalar_one_or_none()
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": si,
+            "supplier": supplier,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("supplier_invoice.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_supplier_invoice_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_supplier_invoice_pdf_error", public_id=public_id, garage_id=garage_id)
+        raise
+
+
+async def render_credit_note_pdf(
+    db: AsyncSession, *, credit_note_id: int, garage_id: int
+) -> bytes:
+    """Fetch the credit note and its linked invoice, render HTML template, return PDF bytes."""
+    logger.info("render_credit_note_pdf_start", credit_note_id=credit_note_id, garage_id=garage_id)
+    try:
+        cn = await credit_note_repo.get_credit_note_by_id(db, credit_note_id, garage_id)
+        if cn is None:
+            raise ValueError(f"Credit note {credit_note_id} not found")
+
+        invoice = await invoice_repo.get_by_id(db, cn.invoice_id, garage_id)
+        customer = None
+        if invoice:
+            customer = await customer_repo.get_by_id(db, garage_id, invoice.customer_id)
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": cn,
+            "invoice": invoice,
+            "customer": customer,
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("credit_note.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
+        )
+        logger.info("render_credit_note_pdf_success", credit_note_id=credit_note_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_credit_note_pdf_error", credit_note_id=credit_note_id, garage_id=garage_id)
+        raise
+
+
+async def render_bon_de_retour_pdf(
+    db: AsyncSession, *, public_id: str, garage_id: int
+) -> bytes:
+    """Fetch bon de retour, resolve party (supplier or customer), render PDF."""
+    from sqlalchemy import select
+    from app.modules.bon_de_retour.repository import get_by_public_id
+    from app.modules.supplier.models import Supplier
+
+    logger.info("render_bon_de_retour_pdf_start", public_id=public_id, garage_id=garage_id)
+    try:
+        bdr = await get_by_public_id(db, public_id, garage_id)
+        if bdr is None:
+            raise ValueError(f"Bon de retour {public_id} not found")
+
+        party_val = getattr(bdr.party_type, "value", bdr.party_type)
+        customer = None
+        supplier = None
+        if party_val == "client" and bdr.customer_id:
+            customer = await customer_repo.get_by_id(db, garage_id, bdr.customer_id)
+        elif bdr.supplier_id:
+            sup_res = await db.execute(select(Supplier).where(Supplier.id == bdr.supplier_id))
+            supplier = sup_res.scalar_one_or_none()
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": bdr,
+            "customer": customer,
+            "supplier": supplier,
+            "is_supplier": party_val == "supplier",
+            "status_display": getattr(bdr.status, "value", bdr.status),
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("bon_de_retour.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(None, _render_pdf_sync, html_string, base_url)
+        logger.info("render_bon_de_retour_pdf_success", public_id=public_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_bon_de_retour_pdf_error", public_id=public_id, garage_id=garage_id)
         raise
 
 

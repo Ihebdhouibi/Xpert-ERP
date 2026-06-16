@@ -135,10 +135,27 @@ async def create_supplier_invoice(
     # Validate all referenced po_line_ids exist on the PO
     po_line_map = {ln.id: ln for ln in po.lines}
     for ld in lines_data:
-        if ld["po_line_id"] not in po_line_map:
+        if ld.get("po_line_id") is not None and ld["po_line_id"] not in po_line_map:
             raise SIPOLineMissingError(
                 f"PO line {ld['po_line_id']} not found on PO {po_public_id}"
             )
+
+    # Resolve part objects for extra lines (no po_line_id)
+    extra_part_public_ids = [
+        ld["part_public_id"] for ld in lines_data
+        if ld.get("po_line_id") is None and ld.get("part_public_id")
+    ]
+    extra_parts_map: dict = {}
+    if extra_part_public_ids:
+        from app.modules.parts.models import Part as PartModel
+        from uuid import UUID
+        from sqlalchemy import select as sa_select
+        parts_res = await db.execute(
+            sa_select(PartModel).where(
+                PartModel.public_id.in_([UUID(pid) for pid in extra_part_public_ids])
+            )
+        )
+        extra_parts_map = {str(p.public_id): p for p in parts_res.scalars()}
 
     lines = []
     total_ht = 0
@@ -150,10 +167,10 @@ async def create_supplier_invoice(
         lth, lttc = _compute_line_totals(qty, uph, vat)
         total_ht += lth
         total_ttc += lttc
-        po_line = po_line_map[ld["po_line_id"]]
+        po_line = po_line_map.get(ld["po_line_id"]) if ld.get("po_line_id") is not None else None
         lines.append(
             {
-                "po_line_id": ld["po_line_id"],
+                "po_line_id": ld.get("po_line_id"),
                 "description": ld.get("description", ""),
                 "quantity": qty,
                 "unit_price_ht": uph,
@@ -161,9 +178,9 @@ async def create_supplier_invoice(
                 "line_total_ht": lth,
                 "line_total_ttc": lttc,
                 "match_status": SIMatchStatus.ok.value,
-                "po_quantity_ordered": po_line.quantity_ordered,
-                "po_quantity_received": po_line.quantity_received,
-                "po_unit_price_ht": po_line.unit_price_ht,
+                "po_quantity_ordered": po_line.quantity_ordered if po_line else 0,
+                "po_quantity_received": po_line.quantity_received if po_line else 0,
+                "po_unit_price_ht": po_line.unit_price_ht if po_line else uph,
             }
         )
 
@@ -182,6 +199,32 @@ async def create_supplier_invoice(
         created_by=user_id,
     )
     logger.info("supplier_invoice_created", si_public_id=str(si.public_id), number=number, po_public_id=po_public_id, garage_id=garage_id)
+
+    # Record confirmed prices — prices are only known once the supplier invoice exists
+    from app.modules.supplier.repository import SupplierPartPriceRepository
+
+    today = date.today()
+    for ld in lines_data:
+        part_id = None
+        if ld.get("po_line_id") is not None:
+            po_line = po_line_map.get(ld["po_line_id"])
+            if po_line:
+                part_id = po_line.part_id
+        elif ld.get("part_public_id"):
+            extra_part = extra_parts_map.get(ld["part_public_id"])
+            if extra_part:
+                part_id = extra_part.id
+
+        if part_id is not None:
+            await SupplierPartPriceRepository.add_price(
+                db,
+                supplier_id=supplier_id,
+                part_id=part_id,
+                unit_price_minor=ld["unit_price_ht"],
+                currency="EUR",
+                effective_from=today,
+            )
+
     return si
 
 
@@ -333,17 +376,24 @@ async def post_supplier_invoice(
     from app.modules.purchase_order.models import PurchaseOrderLine
     from sqlalchemy import select as sa_select
 
-    # Fetch current PO line data for match comparison
-    po_line_ids = [ln["po_line_id"] for ln in si.lines]
-    result = await db.execute(
-        sa_select(PurchaseOrderLine).where(PurchaseOrderLine.id.in_(po_line_ids))
-    )
-    po_line_map = {ln.id: ln for ln in result.scalars().all()}
+    # Fetch current PO line data for match comparison (only lines that reference a PO line)
+    po_line_ids = [ln["po_line_id"] for ln in si.lines if ln.get("po_line_id") is not None]
+    po_line_map: dict = {}
+    if po_line_ids:
+        result = await db.execute(
+            sa_select(PurchaseOrderLine).where(PurchaseOrderLine.id.in_(po_line_ids))
+        )
+        po_line_map = {ln.id: ln for ln in result.scalars().all()}
 
     matched_lines = []
     has_discrepancy = False
 
     for line in si.lines:
+        # Extra lines (no PO reference) are always OK
+        if line.get("po_line_id") is None:
+            matched_lines.append({**line, "match_status": SIMatchStatus.ok.value})
+            continue
+
         po_line = po_line_map.get(line["po_line_id"])
         if po_line is None:
             line = {**line, "match_status": SIMatchStatus.qty_mismatch.value}

@@ -22,11 +22,11 @@ GARAGE_ID = 1
 
 # Detect whether running inside Docker (use 'db' host) or locally (127.0.0.1:5433)
 _in_docker = os.path.exists("/.dockerenv")
-DB_HOST = "db" if _in_docker else "127.0.0.1"
-DB_PORT = 5432 if _in_docker else 5433
+DB_HOST = os.environ.get("DB_HOST", "db" if _in_docker else "127.0.0.1")
+DB_PORT = int(os.environ.get("DB_PORT", 5432))
 DB_NAME = os.environ.get("POSTGRES_DB", "xpert_erp")
 DB_USER = os.environ.get("POSTGRES_USER", "xpert")
-DB_PASS = os.environ.get("POSTGRES_PASSWORD", "xpert_dev_password")
+DB_PASS = os.environ.get("POSTGRES_PASSWORD", "rootadmin")
 
 # ---------------------------------------------------------------------------
 # Category definitions
@@ -204,4 +204,7 @@ async def seed() -> None:
 
 
 if __name__ == '__main__':
+    import sys
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(seed())

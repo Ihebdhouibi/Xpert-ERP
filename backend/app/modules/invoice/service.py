@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.modules.delivery_note.models import DeliveryNote
 from app.modules.invoice import repository as repo
 from app.modules.invoice.models import Invoice, InvoiceLine, InvoiceStatus, InvoiceLineKind
 from app.modules.invoice.schemas import (
@@ -226,8 +228,47 @@ async def list_invoices(
         customer_id=customer_id, status=status, quotation_id=quotation_id,
         page=page, page_size=page_size,
     )
+
+    # Batch-load customer names in one query to avoid N+1
+    from sqlalchemy import select as _sa_select
+    from app.modules.customer.models import Customer as _Customer
+    cids = list({i.customer_id for i in items})
+    customer_names: dict[int, str] = {}
+    if cids:
+        rows = await db.execute(
+            _sa_select(_Customer.id, _Customer.full_name, _Customer.company_name)
+            .where(_Customer.id.in_(cids), _Customer.garage_id == garage_id)
+        )
+        for r in rows:
+            customer_names[r.id] = (
+                f"{r.full_name} ({r.company_name})" if r.company_name else r.full_name
+            )
+
+    # Batch-load vehicle labels too (avoid N+1, keep the list-view enrichment)
+    from app.modules.vehicles.models import Vehicle as _Vehicle
+    vids = list({i.vehicle_id for i in items if i.vehicle_id is not None})
+    vehicle_labels: dict[int, str] = {}
+    if vids:
+        vrows = await db.execute(
+            _sa_select(_Vehicle.id, _Vehicle.registration, _Vehicle.make, _Vehicle.model)
+            .where(_Vehicle.id.in_(vids), _Vehicle.garage_id == garage_id)
+        )
+        for r in vrows:
+            make_model = f"{r.make} {r.model}".strip()
+            vehicle_labels[r.id] = (
+                f"{r.registration} — {make_model}" if r.registration else make_model
+            )
+
+    out_items = []
+    for i in items:
+        out = InvoiceOut.model_validate(i)
+        out.customer_name = customer_names.get(i.customer_id)
+        if i.vehicle_id is not None:
+            out.vehicle_label = vehicle_labels.get(i.vehicle_id)
+        out_items.append(out)
+
     return InvoiceListResponse(
-        items=[await _to_out(db, i) for i in items],
+        items=out_items,
         total=total, page=page, page_size=page_size,
     )
 
@@ -284,6 +325,11 @@ async def delete_invoice(
         raise InvoiceNotFoundError(invoice_id)
     if inv.status != InvoiceStatus.draft:
         raise InvoiceStateError("Only draft invoices can be deleted.")
+    await db.execute(
+        update(DeliveryNote)
+        .where(DeliveryNote.invoice_id == inv.id)
+        .values(invoice_id=None)
+    )
     await repo.soft_delete(db, inv, deleted_by=user_id)
     await db.commit()
     logger.info("delete_invoice_success", invoice_id=invoice_id, garage_id=garage_id)
@@ -657,4 +703,94 @@ async def convert_quotation(
         invoice_id=invoice_id,
         garage_id=garage_id,
     )
+    return InvoiceOut.model_validate(fresh)
+
+
+# ---------------------------------------------------------------------------
+# Multiple delivery notes → Invoice conversion
+# ---------------------------------------------------------------------------
+
+async def create_invoice_from_delivery_notes(
+    db: AsyncSession,
+    *,
+    request: "InvoiceFromDeliveryNotesRequest",
+    garage_id: int,
+    user_id: int,
+) -> InvoiceOut:
+    """Aggregate lines from one or more issued/delivered BLs into a single draft invoice."""
+    from app.modules.delivery_note import repository as dn_repo
+    from app.modules.delivery_note.models import DeliveryNoteStatus, DeliveryNoteLineKind
+    from app.modules.invoice.schemas import InvoiceFromDeliveryNotesRequest
+
+    _kind_map = {
+        DeliveryNoteLineKind.part: InvoiceLineKind.part,
+        DeliveryNoteLineKind.accessory: InvoiceLineKind.part,
+        DeliveryNoteLineKind.service: InvoiceLineKind.service,
+        DeliveryNoteLineKind.other: InvoiceLineKind.other,
+    }
+
+    dns = []
+    for dn_public_id in request.delivery_note_ids:
+        dn = await dn_repo.get_by_public_id(db, dn_public_id, garage_id)
+        if not dn:
+            raise InvoiceStateError(f"Bon de livraison '{dn_public_id}' introuvable.")
+        if dn.customer_id != request.customer_id:
+            raise InvoiceStateError(
+                f"Le BL '{dn.doc_number or dn_public_id}' n'appartient pas au client sélectionné."
+            )
+        if dn.status not in (DeliveryNoteStatus.issued, DeliveryNoteStatus.delivered):
+            raise InvoiceStateError(
+                f"Le BL '{dn.doc_number or dn_public_id}' doit être émis ou livré pour être facturé."
+            )
+        if dn.invoice_id is not None:
+            raise InvoiceStateError(
+                f"Le BL '{dn.doc_number or dn_public_id}' est déjà lié à une facture."
+            )
+        dns.append(dn)
+
+    bl_refs = ", ".join(dn.doc_number or dn.public_id for dn in dns)
+    final_notes = request.notes if request.notes else f"Converti depuis BL : {bl_refs}"
+
+    invoice = Invoice(
+        public_id=str(uuid.uuid4()),
+        garage_id=garage_id,
+        customer_id=request.customer_id,
+        currency=request.currency.upper(),
+        due_at=request.due_at,
+        notes=final_notes,
+        status=InvoiceStatus.draft,
+        version=1,
+        created_by=user_id,
+        updated_by=user_id,
+    )
+
+    for dn in dns:
+        for bl_line in dn.lines:
+            invoice.lines.append(InvoiceLine(
+                invoice_id=0,
+                kind=_kind_map.get(bl_line.kind, InvoiceLineKind.other),
+                part_id=bl_line.part_id,
+                description=bl_line.description,
+                quantity=bl_line.quantity,
+                unit_price_minor=bl_line.unit_price_minor,
+                discount_percent=Decimal("0"),
+                vat_rate=bl_line.vat_rate,
+                line_total_minor=bl_line.line_total_minor,
+            ))
+
+    _recalculate_totals(invoice)
+    await repo.create(db, invoice)
+    await db.flush()
+
+    for dn in dns:
+        dn.invoice_id = invoice.id
+        dn.version += 1
+        dn.updated_by = user_id
+    await db.flush()
+
+    invoice_id = invoice.id
+    await db.commit()
+
+    fresh = await repo.get_by_id(db, invoice_id, garage_id)
+    logger.info("invoice_from_delivery_notes", invoice_id=invoice_id, bl_count=len(dns), garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)

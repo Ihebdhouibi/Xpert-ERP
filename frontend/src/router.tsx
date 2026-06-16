@@ -38,6 +38,7 @@ import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AdvancePaymentsPage } from './pages/payments/AdvancePaymentsPage'
 import { CashSessionsPage } from './pages/cash-sessions/CashSessionsPage'
 import { CreditNotesPage } from './pages/credit-notes/CreditNotesPage'
+import { CreditNoteDetailPage } from './pages/credit-notes/CreditNoteDetailPage'
 import { AccountingExportPage } from './pages/accounting/AccountingExportPage'
 import { UsersPage } from './pages/admin/UsersPage'
 import { RolesPage } from './pages/admin/RolesPage'
@@ -48,6 +49,10 @@ import { OcrReviewPage } from './pages/ocr/OcrReviewPage'
 import { DeliveryNoteCreatePage } from './pages/delivery-notes/DeliveryNoteCreatePage'
 import { DeliveryNoteDetailPage } from './pages/delivery-notes/DeliveryNoteDetailPage'
 import { DeliveryNotesListPage } from './pages/delivery-notes/DeliveryNotesListPage'
+import { BonRetourListPage } from './pages/bon-retour/BonRetourListPage'
+import { BonRetourCreatePage } from './pages/bon-retour/BonRetourCreatePage'
+import { BonRetourDetailPage } from './pages/bon-retour/BonRetourDetailPage'
+import { AvoirsFournisseursPage } from './pages/avoirs-fournisseurs/AvoirsFournisseursPage'
 
 export const router = createBrowserRouter(
   [
@@ -118,6 +123,10 @@ export const router = createBrowserRouter(
       { path: 'suppliers', element: <SupplierPage /> },
       { path: 'purchase-orders', element: <PurchaseOrderPage /> },
       { path: 'supplier-invoices', element: <SupplierInvoicePage /> },
+      { path: 'bon-retour', element: <BonRetourListPage /> },
+      { path: 'bon-retour/new', element: <BonRetourCreatePage /> },
+      { path: 'bon-retour/:publicId', element: <BonRetourDetailPage /> },
+      { path: 'avoirs-fournisseurs', element: <AvoirsFournisseursPage /> },
 
       // Notifications
       { path: 'notification-templates', element: <TemplatesPage /> },
@@ -144,6 +153,7 @@ export const router = createBrowserRouter(
       { path: 'advance-payments', element: <AdvancePaymentsPage /> },
       { path: 'cash-sessions', element: <CashSessionsPage /> },
       { path: 'credit-notes', element: <CreditNotesPage /> },
+      { path: 'credit-notes/:id', element: <CreditNoteDetailPage /> },
       { path: 'accounting-export', element: <AccountingExportPage /> },
 
       // Analytics

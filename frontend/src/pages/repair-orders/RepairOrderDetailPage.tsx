@@ -787,6 +787,9 @@ export function RepairOrderDetailPage() {
   const [partSearch, setPartSearch] = useState('')
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [partQty, setPartQty] = useState('')
+  const [partUnitPrice, setPartUnitPrice] = useState('')
+  const [partRemise, setPartRemise] = useState('0')
+  const [partTva, setPartTva] = useState('20')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -856,13 +859,16 @@ export function RepairOrderDetailPage() {
     mutationFn: () => repairOrderApi.addPartLine(publicId, {
       part_name: selectedPart!.name,
       quantity: parseInt(partQty, 10),
-      unit_cost_minor: selectedPart!.selling_price_minor,
+      unit_cost_minor: Math.round(parseFloat(partUnitPrice) * 100),
       part_public_id: selectedPart!.id,
+      remise_pct: parseFloat(partRemise) || 0,
+      tva_pct: parseFloat(partTva) || 0,
     }),
     onSuccess: () => {
       success('Pièce ajoutée.')
       setShowAddPart(false)
       setSelectedPart(null); setPartSearch(''); setPartQty('')
+      setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
@@ -1189,32 +1195,38 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddPart && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="flex-start" flexWrap="wrap">
-                    <Autocomplete
-                      sx={{ flex: 2, minWidth: 0, width: { xs: '100%', sm: 'auto' } }}
-                      size="small"
-                      options={partsResults?.items ?? []}
-                      getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
-                      filterOptions={(x) => x}
-                      inputValue={partSearch}
-                      onInputChange={(_, val) => { setPartSearch(val); setSelectedPart(null) }}
-                      value={selectedPart}
-                      onChange={(_, val) => { setSelectedPart(val); setPartQty('1') }}
-                      noOptionsText={partSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat'}
-                      renderOption={(props, option) => (
-                        <Box component="li" {...props} key={option.int_id}>
-                          <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
-                            <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
-                            <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
-                              Stock : {option.stock_on_hand}
-                            </Typography>
-                          </Stack>
-                        </Box>
-                      )}
-                      renderInput={(params) => (
-                        <TextField {...params} label="Rechercher une pièce" placeholder="SKU ou nom…" />
-                      )}
-                    />
+                  {/* Row 1: part search (full width, separate so dropdown never covers other fields) */}
+                  <Autocomplete
+                    sx={{ mb: 1 }}
+                    size="small"
+                    options={partsResults?.items ?? []}
+                    getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
+                    filterOptions={(x) => x}
+                    inputValue={partSearch}
+                    onInputChange={(_, val) => { setPartSearch(val); setSelectedPart(null) }}
+                    value={selectedPart}
+                    onChange={(_, val) => {
+                      setSelectedPart(val)
+                      setPartQty('1')
+                      setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
+                    }}
+                    noOptionsText={partSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat'}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props} key={option.int_id}>
+                        <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
+                          <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
+                          <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
+                            Stock : {option.stock_on_hand}
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    )}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Rechercher une pièce" placeholder="SKU ou nom…" />
+                    )}
+                  />
+                  {/* Row 2: qty, price, remise, tva — always visible below dropdown */}
+                  <Stack direction="row" spacing={1} mb={1} flexWrap="wrap">
                     <TextField
                       size="small"
                       label="Quantité"
@@ -1222,25 +1234,81 @@ export function RepairOrderDetailPage() {
                       value={partQty}
                       onChange={e => setPartQty(e.target.value)}
                       inputProps={{ min: 1, max: selectedPart?.stock_on_hand ?? undefined, step: 1 }}
-                      sx={{ flexShrink: 0, width: 110 }}
-                      helperText={selectedPart ? `Max : ${selectedPart.stock_on_hand}` : ''}
+                      sx={{ width: 110 }}
+                      helperText={selectedPart ? `Max : ${selectedPart.stock_on_hand}` : ' '}
+                      disabled={!selectedPart}
                     />
                     <TextField
                       size="small"
                       label="Prix unit. (€)"
-                      value={selectedPart ? (selectedPart.selling_price_minor / 100).toFixed(2) : ''}
-                      InputProps={{ readOnly: true }}
-                      sx={{ flexShrink: 0, width: 120 }}
+                      type="number"
+                      value={partUnitPrice}
+                      onChange={e => setPartUnitPrice(e.target.value)}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      sx={{ width: 130 }}
+                      helperText=" "
+                      disabled={!selectedPart}
                     />
+                    <TextField
+                      size="small"
+                      label="Remise (%)"
+                      type="number"
+                      value={partRemise}
+                      onChange={e => setPartRemise(e.target.value)}
+                      inputProps={{ min: 0, max: 100, step: 0.01 }}
+                      sx={{ width: 110 }}
+                      helperText=" "
+                      disabled={!selectedPart}
+                    />
+                    <TextField
+                      size="small"
+                      label="TVA (%)"
+                      type="number"
+                      value={partTva}
+                      InputProps={{ readOnly: true }}
+                      inputProps={{ style: {} }}
+                      sx={{
+                        width: 110,
+                        '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
+                        '& input': { color: 'text.secondary' },
+                      }}
+                      helperText=" "
+                    />
+                    {selectedPart && partQty && partUnitPrice && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', pb: '20px' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Total :&nbsp;
+                        </Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {(
+                            parseInt(partQty, 10) *
+                            parseFloat(partUnitPrice) *
+                            (1 - (parseFloat(partRemise) || 0) / 100) *
+                            (1 + (parseFloat(partTva) || 0) / 100)
+                          ).toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    )}
                   </Stack>
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" onClick={() => { setShowAddPart(false); setSelectedPart(null); setPartSearch(''); setPartQty('') }} sx={{ textTransform: 'none' }}>Annuler</Button>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setShowAddPart(false)
+                        setSelectedPart(null); setPartSearch(''); setPartQty('')
+                        setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
+                      }}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Annuler
+                    </Button>
                     <Button
                       size="small" variant="contained"
                       disabled={
                         addPartMutation.isPending ||
                         !selectedPart ||
                         !partQty ||
+                        !partUnitPrice ||
                         parseInt(partQty, 10) < 1 ||
                         parseInt(partQty, 10) > (selectedPart?.stock_on_hand ?? 0)
                       }
@@ -1264,6 +1332,8 @@ export function RepairOrderDetailPage() {
                       <TableCell>Pièce</TableCell>
                       <TableCell align="right">Qté</TableCell>
                       <TableCell align="right">Prix unit.</TableCell>
+                      <TableCell align="right">Remise</TableCell>
+                      <TableCell align="right">TVA</TableCell>
                       <TableCell align="right">Montant</TableCell>
                     </TableRow>
                   </TableHead>
@@ -1280,12 +1350,22 @@ export function RepairOrderDetailPage() {
                           <Typography variant="body2">{formatMinor(line.unit_cost_minor, currency)}</Typography>
                         </TableCell>
                         <TableCell align="right">
+                          <Typography variant="body2" color={line.remise_pct > 0 ? 'error.main' : 'text.secondary'}>
+                            {line.remise_pct > 0 ? `-${line.remise_pct}%` : '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" color="text.secondary">
+                            {line.tva_pct > 0 ? `${line.tva_pct}%` : '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                      <TableCell colSpan={3}>
+                      <TableCell colSpan={5}>
                         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           Total Pièces
                         </Typography>

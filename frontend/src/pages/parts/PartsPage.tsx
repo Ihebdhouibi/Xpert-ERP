@@ -46,7 +46,6 @@ import {
   type PartCreatePayload,
 } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { MoneyField } from '../../components/ui/MoneyField'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { useToast } from '../../contexts/ToastContext'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
@@ -155,6 +154,12 @@ function PartDialog({
     reorder_quantity: editing?.reorder_quantity ?? undefined,
     status: editing?.status ?? 'active',
   })
+  const [purchaseEuros, setPurchaseEuros] = useState(
+    ((editing?.purchase_price_minor ?? 0) / 100).toFixed(2)
+  )
+  const [sellingEuros, setSellingEuros] = useState(
+    ((editing?.selling_price_minor ?? 0) / 100).toFixed(2)
+  )
   const [error, setError] = useState<string | null>(null)
 
   const field = (key: keyof PartCreatePayload, value: unknown) =>
@@ -237,17 +242,27 @@ function PartDialog({
             fullWidth
           />
           <Stack direction="row" spacing={2}>
-            <MoneyField
-              label="Prix d'achat"
-              valueMinor={form.purchase_price_minor}
-              onChangeMinor={(m) => field('purchase_price_minor', m)}
+            <TextField
+              label="Prix d'achat (€)"
+              type="number"
+              value={purchaseEuros}
+              onChange={(e) => {
+                setPurchaseEuros(e.target.value)
+                field('purchase_price_minor', Math.round((parseFloat(e.target.value) || 0) * 100))
+              }}
               fullWidth
+              inputProps={{ min: 0, step: '0.01' }}
             />
-            <MoneyField
-              label="Prix de vente"
-              valueMinor={form.selling_price_minor}
-              onChangeMinor={(m) => field('selling_price_minor', m)}
+            <TextField
+              label="Prix de vente (€)"
+              type="number"
+              value={sellingEuros}
+              onChange={(e) => {
+                setSellingEuros(e.target.value)
+                field('selling_price_minor', Math.round((parseFloat(e.target.value) || 0) * 100))
+              }}
               fullWidth
+              inputProps={{ min: 0, step: '0.01' }}
             />
           </Stack>
           <Stack direction="row" spacing={2}>

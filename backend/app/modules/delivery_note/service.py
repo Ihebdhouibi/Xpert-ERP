@@ -204,11 +204,13 @@ async def list_delivery_notes(
     *,
     customer_id: Optional[int] = None,
     status: Optional[DeliveryNoteStatus] = None,
+    available_for_invoice: bool = False,
     page: int = 1,
     page_size: int = 25,
 ) -> DeliveryNoteListResponse:
     items, total = await repo.list_delivery_notes(
-        db, garage_id, customer_id=customer_id, status=status, page=page, page_size=page_size
+        db, garage_id, customer_id=customer_id, status=status,
+        available_for_invoice=available_for_invoice, page=page, page_size=page_size
     )
     return DeliveryNoteListResponse(
         items=[DeliveryNoteOut.model_validate(d) for d in items],

@@ -44,7 +44,8 @@ export interface SIListResponse {
 }
 
 export interface SILineInput {
-  po_line_id: number
+  po_line_id?: number | null
+  part_public_id?: string
   description?: string
   quantity: number
   unit_price_ht: number
@@ -158,5 +159,32 @@ export const supplierInvoiceApi = {
 
   accountingExport(id: string): Promise<AccountingExport> {
     return apiClient.get(`/supplier-invoices/${id}/accounting-export`).then((r) => r.data)
+  },
+
+  getPdf(id: string): Promise<string> {
+    return apiClient
+      .get(`/pdf/supplier-invoices/${id}`, { responseType: 'blob' })
+      .then((r) => URL.createObjectURL(r.data as Blob))
+  },
+
+  exportCsv(): Promise<void> {
+    return apiClient
+      .get('/supplier-invoices/accounting-export-csv', { responseType: 'blob' })
+      .then((r) => {
+        const url = URL.createObjectURL(r.data as Blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'export-comptable-fournisseurs.csv'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      })
+  },
+
+  exportPdf(): Promise<string> {
+    return apiClient
+      .get('/supplier-invoices/accounting-export-pdf', { responseType: 'blob' })
+      .then((r) => URL.createObjectURL(r.data as Blob))
   },
 }
