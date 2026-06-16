@@ -125,9 +125,39 @@ async def _gather_supplier_invoices(
     return [dict(row._mapping) for row in result.fetchall()]
 
 
+async def _gather_supplier_credit_notes(
+    db: AsyncSession, garage_id: int, period_start: str, period_end: str
+) -> list[dict[str, Any]]:
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                scn.id,
+                scn.doc_number,
+                DATE(scn.issued_at) AS issued_at,
+                s.name AS supplier_name,
+                scn.total_ht_minor AS total_ht,
+                scn.total_ttc_minor - scn.total_ht_minor AS vat_amount,
+                scn.total_ttc_minor AS total_ttc,
+                scn.is_exported
+            FROM supplier_credit_note scn
+            JOIN supplier s ON s.id = scn.supplier_id
+            WHERE scn.garage_id = :g
+              AND scn.status = 'issued'
+              AND DATE(scn.issued_at) >= :ps
+              AND DATE(scn.issued_at) <= :pe
+            ORDER BY scn.issued_at
+            """
+        ),
+        {"g": garage_id, "ps": period_start, "pe": period_end},
+    )
+    return [dict(row._mapping) for row in result.fetchall()]
+
+
 def _build_vat_summary(
     invoices: list[dict[str, Any]],
     supplier_invoices: list[dict[str, Any]],
+    supplier_credit_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Aggregate VAT by rate from invoices and supplier invoices.
 
@@ -159,6 +189,15 @@ def _build_vat_summary(
         bucket["purchases_base_ht"] += ht
         bucket["vat_deductible"] += vat
 
+    # Subtract supplier credit notes: they reduce deductible purchases
+    for scn in (supplier_credit_notes or []):
+        ht = scn["total_ht"]
+        vat = scn["vat_amount"]
+        rate_key = f"{round(vat / ht * 100, 1):.1f}" if ht > 0 else "0.0"
+        bucket = purchases.setdefault(rate_key, {"purchases_base_ht": 0, "vat_deductible": 0})
+        bucket["purchases_base_ht"] -= ht
+        bucket["vat_deductible"] -= vat
+
     all_rates = sorted(set(sales) | set(purchases))
     return [
         {
@@ -178,6 +217,7 @@ async def _mark_exported(
     invoice_ids: list[int],
     payment_ids: list[int],
     si_ids: list[int],
+    scn_ids: list[int] | None = None,
 ) -> None:
     from sqlalchemy import update as sa_update
     from app.modules.invoice.models import Invoice
@@ -202,6 +242,13 @@ async def _mark_exported(
             .where(SupplierInvoice.garage_id == garage_id, SupplierInvoice.id.in_(si_ids))
             .values(is_exported=True)
         )
+    if scn_ids:
+        from app.modules.bon_de_retour.models import SupplierCreditNote
+        await db.execute(
+            sa_update(SupplierCreditNote)
+            .where(SupplierCreditNote.garage_id == garage_id, SupplierCreditNote.id.in_(scn_ids))
+            .values(is_exported=True)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -220,14 +267,17 @@ async def preview_export(
     invoices = await _gather_invoices(db, garage_id, period_start, period_end)
     payments = await _gather_payments(db, garage_id, period_start, period_end)
     sis = await _gather_supplier_invoices(db, garage_id, period_start, period_end)
+    scns = await _gather_supplier_credit_notes(db, garage_id, period_start, period_end)
 
     return {
         "already_exported_invoices": sum(1 for r in invoices if r["is_exported"]),
         "already_exported_payments": sum(1 for r in payments if r["is_exported"]),
         "already_exported_supplier_invoices": sum(1 for r in sis if r["is_exported"]),
+        "already_exported_supplier_credit_notes": sum(1 for r in scns if r["is_exported"]),
         "pending_invoices": sum(1 for r in invoices if not r["is_exported"]),
         "pending_payments": sum(1 for r in payments if not r["is_exported"]),
         "pending_supplier_invoices": sum(1 for r in sis if not r["is_exported"]),
+        "pending_supplier_credit_notes": sum(1 for r in scns if not r["is_exported"]),
     }
 
 
@@ -265,14 +315,16 @@ async def create_export(
         invoices = await _gather_invoices(db, garage_id, period_start, period_end)
         payments = await _gather_payments(db, garage_id, period_start, period_end)
         sis = await _gather_supplier_invoices(db, garage_id, period_start, period_end)
+        scns = await _gather_supplier_credit_notes(db, garage_id, period_start, period_end)
 
         # Only export records not yet exported
         pending_invoices = [r for r in invoices if not r["is_exported"]]
         pending_payments = [r for r in payments if not r["is_exported"]]
         pending_sis = [r for r in sis if not r["is_exported"]]
+        pending_scns = [r for r in scns if not r["is_exported"]]
 
-        vat_summary = _build_vat_summary(pending_invoices, pending_sis)
-        zip_bytes = generate_zip(resolved_fmt, pending_invoices, pending_payments, pending_sis, vat_summary)
+        vat_summary = _build_vat_summary(pending_invoices, pending_sis, pending_scns)
+        zip_bytes = generate_zip(resolved_fmt, pending_invoices, pending_payments, pending_sis, vat_summary, pending_scns)
 
         # Store to S3
         storage_key = (
@@ -295,6 +347,7 @@ async def create_export(
             invoice_ids=[r["id"] for r in pending_invoices],
             payment_ids=[r["id"] for r in pending_payments],
             si_ids=[r["id"] for r in pending_sis],
+            scn_ids=[r["id"] for r in pending_scns],
         )
 
         export = await AccountingExportRepository.update(
@@ -307,6 +360,7 @@ async def create_export(
                 "invoices": len(pending_invoices),
                 "payments": len(pending_payments),
                 "supplier_invoices": len(pending_sis),
+                "supplier_credit_notes": len(pending_scns),
             },
         )
         await db.commit()

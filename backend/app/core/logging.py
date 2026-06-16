@@ -94,6 +94,9 @@ _GROUP: dict[str, str] = {
     "supplier_invoice":          "procurement",
     "supplier_invoice.router":   "procurement",
     "supplier_invoice.service":  "procurement",
+    "bon_de_retour":             "procurement",
+    "bon_de_retour.router":      "procurement",
+    "bon_de_retour.service":     "procurement",
     # system
     "app":                        "system",
     "health":                     "system",
