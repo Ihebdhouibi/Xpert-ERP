@@ -16,8 +16,8 @@ tests/
 .env.*
 !.env.example
 
-# Logs
-logs/
+# Logs (runtime output dir at repo root only — not source dirs named "logs")
+/logs/
 *.log
 
 # Data / temp

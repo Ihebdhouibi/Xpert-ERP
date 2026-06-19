@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react'
 import { Box, Button, Typography } from '@mui/material'
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded'
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
+import { logger } from '../lib/logger'
 
 interface Props {
   children: ReactNode
@@ -25,6 +26,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     console.error('[ErrorBoundary]', error, info.componentStack)
+    logger.error(
+      'react_error_boundary',
+      { message: error.message, componentStack: info.componentStack },
+      error.stack,
+    )
   }
 
   handleReset = () => {

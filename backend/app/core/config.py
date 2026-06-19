@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     database_url: str  # e.g. postgresql+asyncpg://user:pass@localhost:5432/xpert_erp
     database_pool_size: int = 10
     database_max_overflow: int = 20
-    database_echo: bool = False
+    # Pre-deployment: echo SQL so every query + params lands in
+    # backend-fastapi.log (via the sqlalchemy.engine logger). Turn off for prod.
+    database_echo: bool = True
 
     # -------------------------------------------------------------------------
     # Redis
@@ -75,7 +77,8 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Logging
     # -------------------------------------------------------------------------
-    log_level: str = "INFO"
+    # Pre-deployment: DEBUG captures data-flow everywhere. Raise before prod.
+    log_level: str = "DEBUG"
     log_dir: str = "logs"
     # Accept both LOG_MAX_BYTES and CFG_LOG_MAX_BYTES env-var spellings
     log_max_bytes: int = Field(

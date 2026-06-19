@@ -1,8 +1,18 @@
+# Bounded JSON-file logging for every container. Inspect with
+#   docker compose logs -f [service]
+# and the rotated files live under Docker's data dir (max 50 MB/service).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:15-alpine
     container_name: xpert_erp_db
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-xpert}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xpert_dev_password}
@@ -30,6 +40,7 @@ services:
     image: redis:7-alpine
     container_name: xpert_erp_redis
     restart: unless-stopped
+    logging: *default-logging
     command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
     ports:
       - "6379:6379"
@@ -45,6 +56,7 @@ services:
     image: axllent/mailpit:latest
     container_name: xpert_erp_mailpit
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "1025:1025"   # SMTP
       - "8025:8025"   # Web UI
@@ -55,6 +67,7 @@ services:
     image: minio/minio:latest
     container_name: xpert_erp_minio
     restart: unless-stopped
+    logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio_admin}
@@ -76,6 +89,7 @@ services:
       dockerfile: ../infra/Dockerfile.backend
     container_name: xpert_erp_api
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - ../.env
     environment:
@@ -114,6 +128,7 @@ services:
       dockerfile: Dockerfile.backup
     container_name: xpert_erp_backup
     profiles: ["backup"]
+    logging: *default-logging
     env_file:
       - ../.env
     volumes:

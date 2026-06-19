@@ -2,6 +2,7 @@ import axios, {
   type AxiosError,
   type InternalAxiosRequestConfig,
 } from 'axios'
+import { logger } from './logger'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -86,6 +87,19 @@ apiClient.interceptors.response.use(
         window.location.href = '/login'
         return Promise.reject(error)
       }
+    }
+
+    // Log every API failure that isn't silently recovered (skip the log
+    // ingest endpoint itself to avoid feedback loops).
+    const failedUrl = error.config?.url ?? ''
+    if (!failedUrl.includes('/logs/client')) {
+      logger.error('api_error', {
+        method: error.config?.method,
+        url: failedUrl,
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+      })
     }
 
     return Promise.reject(error)
