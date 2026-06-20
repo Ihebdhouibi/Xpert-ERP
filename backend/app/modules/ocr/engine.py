@@ -146,8 +146,25 @@ class PaddleOcrEngine(OcrEngine):
             try:
                 from paddleocr import PaddleOCR  # type: ignore[import]
 
-                logger.info("PaddleOCR: initialising (lang=%s, version=%s)", lang, version)
-                self._paddle = PaddleOCR(lang=lang, ocr_version=version)
+                logger.info(
+                    "PaddleOCR: initialising (lang=%s, version=%s, doc_ori=%s, "
+                    "unwarp=%s, textline_ori=%s)",
+                    lang,
+                    version,
+                    cfg.cfg_ocr_use_doc_orientation,
+                    cfg.cfg_ocr_use_doc_unwarping,
+                    cfg.cfg_ocr_use_textline_orientation,
+                )
+                self._paddle = PaddleOCR(
+                    lang=lang,
+                    ocr_version=version,
+                    # Skip the auxiliary preprocessing models unless a deployment
+                    # explicitly needs them — they cost RAM, image size and
+                    # latency without helping on flat garage documents.
+                    use_doc_orientation_classify=cfg.cfg_ocr_use_doc_orientation,
+                    use_doc_unwarping=cfg.cfg_ocr_use_doc_unwarping,
+                    use_textline_orientation=cfg.cfg_ocr_use_textline_orientation,
+                )
                 logger.info("PaddleOCR: initialised successfully")
             except Exception as exc:  # ImportError, missing native libs, model download, etc.
                 logger.warning(

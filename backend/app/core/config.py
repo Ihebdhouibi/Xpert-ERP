@@ -133,6 +133,14 @@ class Settings(BaseSettings):
     cfg_ocr_confidence_threshold_date: float = 0.70
     cfg_ocr_confidence_threshold_nom: float = 0.70
     cfg_ocr_confidence_threshold_cin: float = 0.80
+    # Auxiliary preprocessing models, disabled by default. Garage inputs are flat
+    # scans / straight phone photos of cards and invoices, so the document
+    # orientation, document unwarping (UVDoc, ~32 MB) and textline orientation
+    # models add RAM (~70 MB peak), image size (~46 MB) and per-scan latency for
+    # no accuracy gain. Re-enable per deployment if inputs are rotated or warped.
+    cfg_ocr_use_doc_orientation: bool = False
+    cfg_ocr_use_doc_unwarping: bool = False
+    cfg_ocr_use_textline_orientation: bool = False
 
     # -------------------------------------------------------------------------
     # PDF / Document printing

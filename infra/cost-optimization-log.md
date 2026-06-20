@@ -53,7 +53,7 @@ runtime image (removed in Opt 5).
 |-----|--------|----------|--------------|--------|
 | — | Baseline | ~1.1–1.2 GB (2 workers) | ~780 MB OCR stack | measured |
 | 1 | Right-size workers / 1 model instance | ~0.6 GB peak (1× model, was 2×) | — | **done** |
-| 2 | Lightweight mobile models | _tbd_ | _tbd_ | pending |
+| 2 | Disable aux models (doc-ori/unwarp/textline) | 595 → **525 MB** peak (−70 MB) | −46 MB models | **done** |
 | 3 | Idle-unload models | _tbd_ (idle) | — | pending |
 | 4 | ONNX Runtime + INT8 | _tbd_ | _tbd_ | pending |
 | 5 | Slim multi-stage image | — | _tbd_ | pending |
