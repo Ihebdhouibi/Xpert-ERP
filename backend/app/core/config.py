@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     # keeps the heavy model out of the API process. Disable to run OCR in-process.
     cfg_ocr_process_isolation: bool = True
     cfg_ocr_idle_unload_seconds: int = 300
+    # OCR engine backend. "paddle" (default) uses PaddleOCR/paddlepaddle.
+    # "onnx" uses ONNX Runtime (RapidOCR) — ~half the peak RAM (~233 vs ~525 MB)
+    # and a fraction of the disk (~52 vs ~780 MB), with no paddlepaddle dependency.
+    # For French accents under ONNX, point it at the latin PP-OCRv3 ONNX model.
+    cfg_ocr_engine: str = "paddle"  # "paddle" | "onnx"
+    cfg_ocr_onnx_rec_model_path: str = ""  # custom ONNX recognition model (e.g. latin)
+    cfg_ocr_onnx_rec_keys_path: str = ""   # character dictionary for the rec model
 
     # -------------------------------------------------------------------------
     # PDF / Document printing

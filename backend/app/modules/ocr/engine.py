@@ -112,27 +112,84 @@ def _poly_to_box(raw_box) -> Optional[list[int]]:
 
 
 class OcrEngine(ABC):
-    """Abstract base class for OCR engines."""
+    """Abstract base class for OCR engines.
+
+    Subclasses implement the synchronous, CPU-bound primitives
+    (:meth:`_run_sync`, :meth:`ocr_region_sync`). The async wrappers here add
+    optional idle-killed process isolation (see ``process_runner``) uniformly,
+    so every engine benefits from it without duplicating the routing.
+    """
 
     @abstractmethod
-    def _run_sync(self, image_bytes: bytes) -> RawOcrResult:
-        """Synchronous OCR execution (CPU-bound)."""
+    def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
+        """Synchronous full-document OCR (CPU-bound)."""
 
-    async def run_ocr(self, image_bytes: bytes) -> RawOcrResult:
-        """Run OCR in a thread executor to avoid blocking the event loop."""
+    @abstractmethod
+    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        """Synchronous OCR of a rectangular region; returns the joined text."""
+
+    # -- shared, engine-agnostic page rendering ----------------------------
+    def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
+        """Return the document's first page as PNG bytes.
+
+        PDFs are rasterised at PDF_RENDER_DPI (same space as the layout boxes so
+        the highlight overlay aligns); images are re-encoded to PNG. On any
+        failure the original bytes are returned unchanged.
+        """
+        import io as _io
+
+        if _is_pdf(file_bytes):
+            pages = _pdf_to_image_bytes(file_bytes)
+            return pages[0] if pages else b""
+        try:
+            from PIL import Image  # type: ignore[import]
+
+            arr = _bytes_to_numpy(file_bytes)
+            buf = _io.BytesIO()
+            Image.fromarray(arr).save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception:
+            return file_bytes
+
+    # -- async wrappers (optional idle-killed worker process) --------------
+    async def run_ocr(self, file_bytes: bytes) -> RawOcrResult:
+        """Run full-document OCR, optionally in an idle-killed worker process."""
+        from app.modules.ocr.process_runner import get_runner
+
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._run_sync, image_bytes)
+        runner = get_runner()
+        if runner is None:
+            return await loop.run_in_executor(None, self._run_sync, file_bytes)
+        return await loop.run_in_executor(
+            None, runner.submit, _subprocess_run_ocr, file_bytes
+        )
+
+    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        from app.modules.ocr.process_runner import get_runner
+
+        loop = asyncio.get_running_loop()
+        runner = get_runner()
+        if runner is None:
+            return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
+        return await loop.run_in_executor(
+            None, runner.submit, _subprocess_ocr_region, file_bytes, box
+        )
+
+    async def render_first_page_png(self, file_bytes: bytes) -> bytes:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.render_first_page_png_sync, file_bytes)
 
 
 # Module-level entry points executed inside the OCR worker process. They must be
-# importable (picklable) and call the *synchronous* engine methods directly so
-# they never re-enter the async routing below.
+# importable (picklable) and resolve the *configured* engine, so isolation works
+# for whichever engine is active. They call the synchronous methods directly so
+# they never re-enter the async routing above.
 def _subprocess_run_ocr(file_bytes: bytes) -> RawOcrResult:
-    return PaddleOcrEngine.get()._run_sync(file_bytes)
+    return get_ocr_engine()._run_sync(file_bytes)
 
 
 def _subprocess_ocr_region(file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
-    return PaddleOcrEngine.get().ocr_region_sync(file_bytes, box)
+    return get_ocr_engine().ocr_region_sync(file_bytes, box)
 
 
 class PaddleOcrEngine(OcrEngine):
@@ -255,60 +312,6 @@ class PaddleOcrEngine(OcrEngine):
         lines = self._ocr_image(buf.getvalue())[0]
         return " ".join(ln.text for ln in lines).strip()
 
-    async def run_ocr(self, image_bytes: bytes) -> RawOcrResult:
-        """Run OCR, optionally in an idle-killed worker process.
-
-        When process isolation is enabled the model lives in a separate worker
-        whose RAM is reclaimed between scans; otherwise OCR runs in a thread of
-        this process (original behaviour, used in tests/CI).
-        """
-        from app.modules.ocr.process_runner import get_runner
-
-        runner = get_runner()
-        if runner is None:
-            return await super().run_ocr(image_bytes)
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, runner.submit, _subprocess_run_ocr, image_bytes
-        )
-
-    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
-        from app.modules.ocr.process_runner import get_runner
-
-        loop = asyncio.get_running_loop()
-        runner = get_runner()
-        if runner is None:
-            return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
-        return await loop.run_in_executor(
-            None, runner.submit, _subprocess_ocr_region, file_bytes, box
-        )
-
-    def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
-        """Return the document's first page as PNG bytes.
-
-        PDFs are rasterised at PDF_RENDER_DPI (same space as the layout boxes so
-        the highlight overlay aligns); images are re-encoded to PNG. On any
-        failure the original bytes are returned unchanged.
-        """
-        import io as _io
-
-        if _is_pdf(file_bytes):
-            pages = _pdf_to_image_bytes(file_bytes)
-            return pages[0] if pages else b""
-        try:
-            from PIL import Image  # type: ignore[import]
-
-            arr = _bytes_to_numpy(file_bytes)
-            buf = _io.BytesIO()
-            Image.fromarray(arr).save(buf, format="PNG")
-            return buf.getvalue()
-        except Exception:
-            return file_bytes
-
-    async def render_first_page_png(self, file_bytes: bytes) -> bytes:
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.render_first_page_png_sync, file_bytes)
-
     def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
         # PDFs are rasterised page-by-page; images are OCR'd directly.
         width, height = 0, 0
@@ -334,3 +337,133 @@ class _NullPaddle:
 
     def predict(self, _input, **_kwargs):
         return []
+
+
+class OnnxOcrEngine(OcrEngine):
+    """ONNX Runtime engine (RapidOCR / PP-OCR) — no ``paddlepaddle`` dependency.
+
+    Roughly half the peak RAM and a small fraction of the disk of the Paddle
+    engine (measured ~233 MB peak vs ~525 MB; ~52 MB of wheels vs ~780 MB).
+    Selected via ``cfg_ocr_engine='onnx'``.
+
+    NOTE: RapidOCR's default recognition model is PP-OCRv4 (ch/en). For French
+    accents (é, è, à, ç) point it at the latin PP-OCRv3 ONNX model via
+    ``cfg_ocr_onnx_rec_model_path`` / ``cfg_ocr_onnx_rec_keys_path`` and validate
+    on real documents before making this the default engine.
+    """
+
+    _instance: Optional["OnnxOcrEngine"] = None
+    _engine = None  # lazy RapidOCR
+
+    @classmethod
+    def get(cls) -> "OnnxOcrEngine":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def _get_engine(self):
+        if self._engine is None:
+            from app.core.config import get_settings
+
+            cfg = get_settings()
+            try:
+                from rapidocr_onnxruntime import RapidOCR  # type: ignore[import]
+
+                kwargs: dict = {}
+                rec_path = getattr(cfg, "cfg_ocr_onnx_rec_model_path", "") or ""
+                rec_keys = getattr(cfg, "cfg_ocr_onnx_rec_keys_path", "") or ""
+                if rec_path:
+                    kwargs["rec_model_path"] = rec_path
+                if rec_keys:
+                    kwargs["rec_keys_path"] = rec_keys
+                logger.info(
+                    "OnnxOcrEngine: initialising RapidOCR (rec_model=%s)",
+                    rec_path or "default(PP-OCRv4)",
+                )
+                self._engine = RapidOCR(**kwargs)
+                logger.info("OnnxOcrEngine: initialised successfully")
+            except Exception as exc:
+                logger.warning(
+                    "ONNX OCR unavailable — OCR will return empty results. Cause: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+                self._engine = _NullOnnx()
+        return self._engine
+
+    def _ocr_array(self, img_array) -> list[OcrLine]:
+        """Run RapidOCR on a numpy image array → list of OcrLine."""
+        engine = self._get_engine()
+        try:
+            result, _elapsed = engine(img_array)
+        except Exception as exc:
+            logger.error("ONNX OCR execution error: %s", exc)
+            return []
+        lines: list[OcrLine] = []
+        for item in result or []:
+            try:
+                box_pts, text, score = item[0], item[1], item[2]
+            except (IndexError, TypeError):
+                continue
+            lines.append(
+                OcrLine(text=str(text), confidence=float(score), box=_poly_to_box(box_pts))
+            )
+        return lines
+
+    def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
+        width, height = 0, 0
+        lines: list[OcrLine] = []
+        if _is_pdf(file_bytes):
+            for page_idx, page_bytes in enumerate(_pdf_to_image_bytes(file_bytes)):
+                arr = _bytes_to_numpy(page_bytes)
+                if page_idx == 0:
+                    height, width = arr.shape[:2]
+                lines.extend(self._ocr_array(arr))
+        else:
+            arr = _bytes_to_numpy(file_bytes)
+            height, width = arr.shape[:2]
+            lines = self._ocr_array(arr)
+
+        logger.info("OnnxOcrEngine: extracted %d line(s)", len(lines))
+        full_text = "\n".join(line.text for line in lines)
+        return RawOcrResult(lines=lines, full_text=full_text, width=width, height=height)
+
+    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        if _is_pdf(file_bytes):
+            pages = _pdf_to_image_bytes(file_bytes)
+            if not pages:
+                return ""
+            base = _bytes_to_numpy(pages[0])
+        else:
+            base = _bytes_to_numpy(file_bytes)
+
+        h, w = base.shape[:2]
+        pad = 3
+        x1, y1, x2, y2 = (int(box[0]) - pad, int(box[1]) - pad, int(box[2]) + pad, int(box[3]) + pad)
+        x1, x2 = max(0, min(x1, w)), max(0, min(x2, w))
+        y1, y2 = max(0, min(y1, h)), max(0, min(y2, h))
+        if x2 - x1 < 3 or y2 - y1 < 3:
+            return ""
+        crop = base[y1:y2, x1:x2]
+        return " ".join(ln.text for ln in self._ocr_array(crop)).strip()
+
+
+class _NullOnnx:
+    """Fallback used when rapidocr-onnxruntime is not installed."""
+
+    def __call__(self, _img, **_kwargs):
+        return [], None
+
+
+def get_ocr_engine() -> OcrEngine:
+    """Return the configured OCR engine singleton.
+
+    ``cfg_ocr_engine='paddle'`` (default) or ``'onnx'``. Unknown values fall back
+    to Paddle so a typo can never silently disable OCR.
+    """
+    from app.core.config import get_settings
+
+    name = (getattr(get_settings(), "cfg_ocr_engine", "paddle") or "paddle").lower()
+    if name == "onnx":
+        return OnnxOcrEngine.get()
+    return PaddleOcrEngine.get()

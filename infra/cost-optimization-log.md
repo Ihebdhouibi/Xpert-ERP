@@ -55,5 +55,22 @@ runtime image (removed in Opt 5).
 | 1 | Right-size workers / 1 model instance | ~0.6 GB peak (1× model, was 2×) | — | **done** |
 | 2 | Disable aux models (doc-ori/unwarp/textline) | 595 → **525 MB** peak (−70 MB) | −46 MB models | **done** |
 | 3 | Idle-killed OCR subprocess | model RAM fully reclaimed after idle; API process stays ~40 MB + app (model never loaded there) | — | **done** |
-| 4 | ONNX Runtime + INT8 | _tbd_ | _tbd_ | pending |
+| 4 | ONNX Runtime engine (RapidOCR) | **233 MB** peak (vs 525) | **~52 MB** wheels (vs ~780) | **done** (opt-in; default still paddle) |
 | 5 | Slim multi-stage image | — | _tbd_ | pending |
+
+### Opt 4 detail — ONNX (RapidOCR) vs Paddle, measured
+
+| Stage | Paddle (lean) | ONNX |
+|-------|---------------|------|
+| After import | 225 MB | 57 MB |
+| After model load | 373 MB | 92 MB |
+| Peak during predict | 525 MB | **233 MB** |
+| Disk: engine wheels | paddlepaddle 368 + paddlex 10 + opencv 127 ≈ 505 MB | onnxruntime 36 + rapidocr 16 ≈ **52 MB** |
+| Models on disk | ~229 MB cache | bundled (~10 MB) |
+| Synthetic doc (no accents) | 4/4 lines | 4/4 lines |
+
+Engine is selectable via `cfg_ocr_engine` (`paddle` default | `onnx`). Default
+stays **paddle** until French-accent parity (é/è/à/ç) is validated on real
+documents with the latin PP-OCRv3 ONNX model
+(`cfg_ocr_onnx_rec_model_path` / `_rec_keys_path`). With ONNX active, OCR is no
+longer the RAM driver — peak ~233 MB fits comfortably on an 8 GB VM.

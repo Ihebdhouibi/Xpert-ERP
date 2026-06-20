@@ -24,7 +24,7 @@ from app.modules.documents import storage as doc_storage
 from app.modules.documents.models import DocumentCategory, OwnerEntityType
 from app.modules.ocr import extractors
 from app.modules.ocr import repository as ocr_repo
-from app.modules.ocr.engine import PaddleOcrEngine, RawOcrResult
+from app.modules.ocr.engine import RawOcrResult, get_ocr_engine
 from app.modules.ocr.extractors import FieldMap
 from app.modules.ocr.models import OcrExtraction, OcrStatus
 from app.modules.vehicles import repository as vehicle_repo
@@ -140,7 +140,7 @@ async def process_ocr_job(db: AsyncSession, *, extraction_id: int) -> OcrExtract
             bucket=cfg.s3_bucket_documents, key=document.storage_key
         )
 
-        engine = PaddleOcrEngine.get()
+        engine = get_ocr_engine()
         raw_result = await engine.run_ocr(image_bytes)
 
         # Run the category-specific extractor and merge with raw recognised lines.
@@ -423,7 +423,7 @@ async def ocr_region(
     data = await doc_storage.download_object(
         bucket=cfg.s3_bucket_documents, key=document.storage_key
     )
-    engine = PaddleOcrEngine.get()
+    engine = get_ocr_engine()
     return await engine.run_ocr_region(data, box)
 
 
@@ -443,7 +443,7 @@ async def get_page_image(
     data = await doc_storage.download_object(
         bucket=cfg.s3_bucket_documents, key=document.storage_key
     )
-    engine = PaddleOcrEngine.get()
+    engine = get_ocr_engine()
     return await engine.render_first_page_png(data)
 
 

@@ -52,6 +52,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# ONNX Runtime OCR backend (cfg_ocr_engine="onnx"). ~half the peak RAM and a
+# fraction of the disk of paddlepaddle; install this group *instead of* the
+# paddle deps to build the slim image. Kept on numpy<2 for compatibility.
+onnx = [
+    "onnxruntime==1.19.2",
+    "rapidocr-onnxruntime==1.4.4",
+]
 dev = [
     "pytest==8.3.5",
     "pytest-asyncio==0.26.0",
