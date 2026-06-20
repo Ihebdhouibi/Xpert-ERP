@@ -24,4 +24,8 @@ RUN pip install --no-cache-dir -e ".[dev]"
 COPY . .
 
 EXPOSE 8000
-CMD ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
+# Worker count, timeouts and recycling are defined in gunicorn.conf.py and are
+# env-configurable (GUNICORN_WORKERS / WEB_CONCURRENCY). Default is 1 worker,
+# which caps the in-process OCR model to a single instance for single-garage
+# deployments. Bump GUNICORN_WORKERS to scale out.
+CMD ["gunicorn", "app.main:app", "-c", "gunicorn.conf.py"]
