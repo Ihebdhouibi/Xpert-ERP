@@ -152,8 +152,11 @@ class Settings(BaseSettings):
     # and a fraction of the disk (~52 vs ~780 MB), with no paddlepaddle dependency.
     # For French accents under ONNX, point it at the latin PP-OCRv3 ONNX model.
     cfg_ocr_engine: str = "paddle"  # "paddle" | "onnx"
-    cfg_ocr_onnx_rec_model_path: str = ""  # custom ONNX recognition model (e.g. latin)
-    cfg_ocr_onnx_rec_keys_path: str = ""   # character dictionary for the rec model
+    # ONNX recognition model + dictionary. Left empty, the ONNX engine defaults
+    # to the vendored latin PP-OCRv3 model (app/modules/ocr/models/), which
+    # decodes French accents correctly. Override to use a different rec model.
+    cfg_ocr_onnx_rec_model_path: str = ""
+    cfg_ocr_onnx_rec_keys_path: str = ""
 
     # -------------------------------------------------------------------------
     # PDF / Document printing

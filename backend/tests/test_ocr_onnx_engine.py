@@ -110,3 +110,45 @@ def test_onnx_extracts_text_end_to_end():
     text = result.full_text.upper().replace(" ", "")
     assert "AB-123-CD".replace("-", "") in text.replace("-", "")
     assert "WVWZZZ1JZXW000001" in text
+
+
+def test_onnx_latin_model_preserves_french_accents():
+    """The vendored latin model must decode accents, not strip/garble them.
+
+    Guards the conversion: a wrong dict alignment or the default ch/en model
+    would turn 'Société' into 'Societe' or 'SBcitt'.
+    """
+    pytest.importorskip("rapidocr_onnxruntime")
+    import os
+    from pathlib import Path
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    import app.modules.ocr.engine as eng_mod
+
+    model = Path(eng_mod.__file__).parent / "models" / "latin_PP-OCRv3_rec.onnx"
+    if not model.exists():
+        pytest.skip("vendored latin ONNX model not present")
+
+    # Need a TrueType font that actually renders accented glyphs.
+    font = None
+    for cand in (
+        "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "C:/Windows/Fonts/calibri.ttf",
+    ):
+        if os.path.exists(cand):
+            font = ImageFont.truetype(cand, 32)
+            break
+    if font is None:
+        pytest.skip("no TrueType font with accent glyphs available")
+
+    img = Image.new("RGB", (700, 80), "white")
+    ImageDraw.Draw(img).text((20, 20), "Société Générale", fill="black", font=font)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+
+    text = OnnxOcrEngine()._run_sync(buf.getvalue()).full_text
+    assert "é" in text, f"accents were lost: {text!r}"
+    assert "Soci" in text and "rale" in text

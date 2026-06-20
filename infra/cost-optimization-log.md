@@ -89,8 +89,19 @@ deploy host to confirm):
 | Models on disk | ~229 MB cache | bundled (~10 MB) |
 | Synthetic doc (no accents) | 4/4 lines | 4/4 lines |
 
-Engine is selectable via `cfg_ocr_engine` (`paddle` default | `onnx`). Default
-stays **paddle** until French-accent parity (é/è/à/ç) is validated on real
-documents with the latin PP-OCRv3 ONNX model
-(`cfg_ocr_onnx_rec_model_path` / `_rec_keys_path`). With ONNX active, OCR is no
-longer the RAM driver — peak ~233 MB fits comfortably on an 8 GB VM.
+Engine is selectable via `cfg_ocr_engine` (`paddle` default | `onnx`). With ONNX
+active, OCR is no longer the RAM driver — peak ~233 MB fits comfortably on an
+8 GB VM.
+
+### Opt 4b — French latin model for ONNX (done)
+
+The original ONNX gap was French accents: RapidOCR's default model is ch/en and
+turned `Jérôme` into `JBrBme`. Resolved by converting the latin PP-OCRv3
+recognition model to ONNX and vendoring it (+ its dict) under
+`app/modules/ocr/models/`; the ONNX engine now uses it by default. **Validated:
+accent parity with the PaddleOCR latin engine** (`Société Générale`, `véhicule`,
+`Citroën` decode correctly; residual errors match Paddle exactly → model traits,
+not conversion defects). Provenance + reproduction in the models `README.md`.
+
+**ONNX is now functionally ready for French.** Activation is a deployment choice
+(needs the onnx image + `CFG_OCR_ENGINE=onnx`), not a code change.

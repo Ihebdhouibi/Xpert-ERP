@@ -363,22 +363,35 @@ class OnnxOcrEngine(OcrEngine):
 
     def _get_engine(self):
         if self._engine is None:
+            import os
+
             from app.core.config import get_settings
 
             cfg = get_settings()
+            # Default to the vendored latin PP-OCRv3 recognition model so French
+            # accents (é, è, ô, ç…) decode correctly out of the box. RapidOCR's
+            # own bundled model is Chinese/English and mangles accents. A
+            # deployment can still override both paths via config.
+            models_dir = os.path.join(os.path.dirname(__file__), "models")
+            default_rec = os.path.join(models_dir, "latin_PP-OCRv3_rec.onnx")
+            default_keys = os.path.join(models_dir, "latin_dict.txt")
             try:
                 from rapidocr_onnxruntime import RapidOCR  # type: ignore[import]
 
                 kwargs: dict = {}
-                rec_path = getattr(cfg, "cfg_ocr_onnx_rec_model_path", "") or ""
-                rec_keys = getattr(cfg, "cfg_ocr_onnx_rec_keys_path", "") or ""
+                rec_path = getattr(cfg, "cfg_ocr_onnx_rec_model_path", "") or (
+                    default_rec if os.path.exists(default_rec) else ""
+                )
+                rec_keys = getattr(cfg, "cfg_ocr_onnx_rec_keys_path", "") or (
+                    default_keys if os.path.exists(default_keys) else ""
+                )
                 if rec_path:
                     kwargs["rec_model_path"] = rec_path
                 if rec_keys:
                     kwargs["rec_keys_path"] = rec_keys
                 logger.info(
                     "OnnxOcrEngine: initialising RapidOCR (rec_model=%s)",
-                    rec_path or "default(PP-OCRv4)",
+                    rec_path or "default(PP-OCRv4 ch/en)",
                 )
                 self._engine = RapidOCR(**kwargs)
                 logger.info("OnnxOcrEngine: initialised successfully")

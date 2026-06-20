@@ -93,17 +93,20 @@ réinstallation.
 
 ## 6. Option pour aller encore plus loin (gratuite)
 
-Le **nouveau moteur de lecture « ONNX »** (optimisation n°4) est déjà intégré
-mais **pas activé par défaut**. Il divise encore la mémoire par deux et réduit
-fortement l'espace disque.
+Le **nouveau moteur de lecture « ONNX »** (optimisation n°4) est intégré et
+**désormais compatible avec le français**. Il divise encore la mémoire par deux
+et réduit fortement l'espace disque.
 
-**Avant de l'activer**, une vérification simple est nécessaire : confirmer qu'il
-lit aussi bien les **accents français** (é, è, à, ç) sur de **vraies cartes
-grises et factures**. Cette vérification se fait sur quelques documents réels.
-Une fois validé, l'activation est un simple réglage — aucune réinstallation.
+**Vérification des accents : faite.** Le moteur ONNX a d'abord été testé avec un
+modèle anglais/chinois, qui déformait les accents (« Jérôme » devenait
+« JBrBme »). Nous avons donc intégré le **modèle français dédié** (« latin »), le
+même que celui utilisé aujourd'hui. Après ce correctif, les accents (é, è, ô, ç)
+sont lus correctement — au niveau du moteur actuel, parfois mieux.
 
-Tant que cette validation n'est pas faite, le logiciel utilise le moteur actuel,
-déjà éprouvé. **Le serveur de 8 Go convient dans les deux cas.**
+**Pour l'activer en production**, deux conditions techniques (à la charge de
+l'équipe, sans impact pour vous) : utiliser la version allégée du logiciel et
+activer un réglage. **Le serveur de 8 Go convient dans les deux cas** — ONNX
+n'est qu'un gain supplémentaire, pas une nécessité.
 
 ---
 
