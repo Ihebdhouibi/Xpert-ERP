@@ -141,6 +141,12 @@ class Settings(BaseSettings):
     cfg_ocr_use_doc_orientation: bool = False
     cfg_ocr_use_doc_unwarping: bool = False
     cfg_ocr_use_textline_orientation: bool = False
+    # Run OCR in a dedicated worker process that is terminated after an idle
+    # period, returning the model's ~0.4-0.5 GB to the OS between scans (Paddle's
+    # native predictor does not release memory on in-process del). This also
+    # keeps the heavy model out of the API process. Disable to run OCR in-process.
+    cfg_ocr_process_isolation: bool = True
+    cfg_ocr_idle_unload_seconds: int = 300
 
     # -------------------------------------------------------------------------
     # PDF / Document printing

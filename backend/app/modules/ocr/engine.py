@@ -124,6 +124,17 @@ class OcrEngine(ABC):
         return await loop.run_in_executor(None, self._run_sync, image_bytes)
 
 
+# Module-level entry points executed inside the OCR worker process. They must be
+# importable (picklable) and call the *synchronous* engine methods directly so
+# they never re-enter the async routing below.
+def _subprocess_run_ocr(file_bytes: bytes) -> RawOcrResult:
+    return PaddleOcrEngine.get()._run_sync(file_bytes)
+
+
+def _subprocess_ocr_region(file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+    return PaddleOcrEngine.get().ocr_region_sync(file_bytes, box)
+
+
 class PaddleOcrEngine(OcrEngine):
     """PaddleOCR 3.x engine — lazy-loaded singleton per process."""
 
@@ -244,9 +255,33 @@ class PaddleOcrEngine(OcrEngine):
         lines = self._ocr_image(buf.getvalue())[0]
         return " ".join(ln.text for ln in lines).strip()
 
-    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+    async def run_ocr(self, image_bytes: bytes) -> RawOcrResult:
+        """Run OCR, optionally in an idle-killed worker process.
+
+        When process isolation is enabled the model lives in a separate worker
+        whose RAM is reclaimed between scans; otherwise OCR runs in a thread of
+        this process (original behaviour, used in tests/CI).
+        """
+        from app.modules.ocr.process_runner import get_runner
+
+        runner = get_runner()
+        if runner is None:
+            return await super().run_ocr(image_bytes)
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
+        return await loop.run_in_executor(
+            None, runner.submit, _subprocess_run_ocr, image_bytes
+        )
+
+    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+        from app.modules.ocr.process_runner import get_runner
+
+        loop = asyncio.get_running_loop()
+        runner = get_runner()
+        if runner is None:
+            return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
+        return await loop.run_in_executor(
+            None, runner.submit, _subprocess_ocr_region, file_bytes, box
+        )
 
     def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
         """Return the document's first page as PNG bytes.
