@@ -39,27 +39,39 @@ dependencies = [
     "weasyprint==68.0",
     # Form parsing (multipart)
     "python-multipart==0.0.27",
-    # Image processing (EXIF stripping, server-side re-encode)
+    # Image processing (EXIF stripping, server-side re-encode) + OCR array ops
     "Pillow==11.2.1",
+    "numpy==1.24.4",  # used directly by the OCR engine; pinned <2 for both backends
     # Scheduler
     "apscheduler==3.11.0",
-    # OCR
-    "paddlepaddle==3.0.0",
-    "paddleocr==3.0.1",
-    "opencv-python-headless==4.10.0.84",
     # PDF rasterisation for OCR (pure wheels, no system poppler dependency)
     "pymupdf==1.24.10",
+    # NOTE: the OCR backend itself is an optional extra ([paddle] or [onnx]) so a
+    # deployment installs exactly one and the image stays slim. See below.
 ]
 
 [project.optional-dependencies]
+# OCR backends — install exactly ONE. Default deployment uses [paddle]; [onnx]
+# is the slim, paddle-free alternative (~half the RAM, ~1/15th the disk).
+paddle = [
+    "paddlepaddle==3.0.0",
+    "paddleocr==3.0.1",
+    "opencv-python-headless==4.10.0.84",
+]
 # ONNX Runtime OCR backend (cfg_ocr_engine="onnx"). ~half the peak RAM and a
-# fraction of the disk of paddlepaddle; install this group *instead of* the
-# paddle deps to build the slim image. Kept on numpy<2 for compatibility.
+# fraction of the disk of paddlepaddle. Kept on numpy<2 for compatibility.
 onnx = [
     "onnxruntime==1.19.2",
     "rapidocr-onnxruntime==1.4.4",
+    # rapidocr pulls opencv-python unpinned -> latest wants numpy>=2, which
+    # conflicts with the numpy<2 base pin. Pin to the numpy<2-compatible build.
+    "opencv-python==4.10.0.84",
 ]
 dev = [
+    # dev/test installs the paddle backend (default engine) plus tooling
+    "paddlepaddle==3.0.0",
+    "paddleocr==3.0.1",
+    "opencv-python-headless==4.10.0.84",
     "pytest==8.3.5",
     "pytest-asyncio==0.26.0",
     "pytest-cov==6.1.0",

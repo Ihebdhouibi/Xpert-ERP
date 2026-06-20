@@ -56,7 +56,27 @@ runtime image (removed in Opt 5).
 | 2 | Disable aux models (doc-ori/unwarp/textline) | 595 → **525 MB** peak (−70 MB) | −46 MB models | **done** |
 | 3 | Idle-killed OCR subprocess | model RAM fully reclaimed after idle; API process stays ~40 MB + app (model never loaded there) | — | **done** |
 | 4 | ONNX Runtime engine (RapidOCR) | **233 MB** peak (vs 525) | **~52 MB** wheels (vs ~780) | **done** (opt-in; default still paddle) |
-| 5 | Slim multi-stage image | — | _tbd_ | pending |
+| 5 | Slim multi-stage image | — | build tools out of runtime; paddle-free onnx variant | **done** (deps validated; size est. — see note) |
+
+### Opt 5 detail — multi-stage image
+
+- Single-stage → **multi-stage**: `build-essential` + `-dev` headers stay in the
+  builder and are **not** shipped (saves ~250–400 MB of runtime layers).
+- OCR backend is a build arg: `--build-arg OCR_BACKEND=paddle` (default) or
+  `onnx` (paddle-free). `paddle`/`onnx`/`dev` are separate pyproject extras;
+  `dev` keeps paddle so CI is unchanged.
+- Runtime now runs as a **non-root** user; `.dockerignore` keeps `.venv`/logs out
+  of the context.
+
+Estimated image sizes (from measured package footprints — a real build needs a
+running Docker daemon, which was unavailable on the dev box; build on CI / the
+deploy host to confirm):
+
+| Image | Build tools in runtime | OCR stack | Est. size |
+|-------|------------------------|-----------|-----------|
+| Old single-stage (paddle) | yes (~300 MB) | ~780 MB | ~1.6–1.8 GB |
+| New multi-stage `paddle` | no | ~780 MB | ~1.3–1.5 GB |
+| New multi-stage `onnx` | no | ~52 MB | **~0.6–0.7 GB** |
 
 ### Opt 4 detail — ONNX (RapidOCR) vs Paddle, measured
 

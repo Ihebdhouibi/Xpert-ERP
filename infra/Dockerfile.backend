@@ -1,31 +1,67 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
+# Multi-stage build. Build tools live only in the builder stage; the runtime
+# image carries just the virtualenv + app + the shared libraries OCR/PDF need.
+#
+# Select the OCR backend at build time:
+#   docker build --build-arg OCR_BACKEND=paddle ...   (default)
+#   docker build --build-arg OCR_BACKEND=onnx   ...   (slim, paddle-free)
 
-WORKDIR /app
+# ---------- builder ----------------------------------------------------------
+FROM python:3.11-slim AS builder
 
+ARG OCR_BACKEND=paddle
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Compilers and headers needed to build wheels — builder only, never shipped.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libffi-dev \
     libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+COPY . .
+# Install the runtime dependencies plus exactly one OCR backend extra into the
+# venv. The app itself is run from source at runtime (WORKDIR), so the venv only
+# needs to provide its dependencies.
+RUN pip install ".[${OCR_BACKEND}]"
+
+# ---------- runtime ----------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Runtime shared libraries only (no compilers / -dev headers):
+#   cairo/pango/pixbuf + fonts  -> WeasyPrint PDF rendering
+#   libgl1 + libglib2.0-0       -> OpenCV (cv2), pulled by either OCR backend
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libgdk-pixbuf-xlib-2.0-0 \
-    libffi-dev \
     shared-mime-info \
     fonts-liberation \
     fonts-dejavu-core \
-    # Runtime libs required by OpenCV (cv2), pulled in transitively by PaddleOCR
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
+COPY --from=builder /opt/venv /opt/venv
 
+WORKDIR /app
 COPY . .
 
+# Run as a non-root user.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
-# Worker count, timeouts and recycling are defined in gunicorn.conf.py and are
-# env-configurable (GUNICORN_WORKERS / WEB_CONCURRENCY). Default is 1 worker,
-# which caps the in-process OCR model to a single instance for single-garage
-# deployments. Bump GUNICORN_WORKERS to scale out.
+# Worker count / timeouts are env-configurable in gunicorn.conf.py
+# (GUNICORN_WORKERS / WEB_CONCURRENCY); default 1 worker for single-garage.
 CMD ["gunicorn", "app.main:app", "-c", "gunicorn.conf.py"]
