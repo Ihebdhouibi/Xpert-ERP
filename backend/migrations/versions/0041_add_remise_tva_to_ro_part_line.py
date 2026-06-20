@@ -16,16 +16,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "ro_part_line",
-        sa.Column("remise_pct", sa.Numeric(5, 2), nullable=False, server_default="0"),
+    op.execute(
+        "ALTER TABLE ro_part_line ADD COLUMN IF NOT EXISTS"
+        " remise_pct NUMERIC(5, 2) NOT NULL DEFAULT 0"
     )
-    op.add_column(
-        "ro_part_line",
-        sa.Column("tva_pct", sa.Numeric(5, 2), nullable=False, server_default="0"),
+    op.execute(
+        "ALTER TABLE ro_part_line ADD COLUMN IF NOT EXISTS"
+        " tva_pct NUMERIC(5, 2) NOT NULL DEFAULT 0"
     )
 
 
 def downgrade() -> None:
-    op.drop_column("ro_part_line", "tva_pct")
-    op.drop_column("ro_part_line", "remise_pct")
+    op.execute("ALTER TABLE ro_part_line DROP COLUMN IF EXISTS tva_pct")
+    op.execute("ALTER TABLE ro_part_line DROP COLUMN IF EXISTS remise_pct")

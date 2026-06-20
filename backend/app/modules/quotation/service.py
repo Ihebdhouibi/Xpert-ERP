@@ -264,6 +264,7 @@ async def delete_quotation(
 # ---------------------------------------------------------------------------
 
 def _build_line(quotation: Quotation, req: QuotationLineCreateRequest) -> QuotationLine:
+    from app.core.constants import TVA_PCT
     line_total = _compute_line_total(req.unit_price_minor, req.quantity, req.discount_percent)
     return QuotationLine(
         quotation_id=quotation.id or 0,  # FK set by relationship
@@ -273,7 +274,7 @@ def _build_line(quotation: Quotation, req: QuotationLineCreateRequest) -> Quotat
         quantity=req.quantity,
         unit_price_minor=req.unit_price_minor,
         discount_percent=req.discount_percent,
-        vat_rate=req.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=line_total,
     )
 
@@ -296,6 +297,7 @@ async def add_line(
     if quotation.version != expected_version:
         raise QuotationVersionError(f"Version mismatch: expected {expected_version}, got {quotation.version}")
 
+    from app.core.constants import TVA_PCT
     line = QuotationLine(
         quotation_id=quotation.id,
         kind=request.kind,
@@ -304,7 +306,7 @@ async def add_line(
         quantity=request.quantity,
         unit_price_minor=request.unit_price_minor,
         discount_percent=request.discount_percent,
-        vat_rate=request.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=0,
     )
     await repo.add_line(db, line)

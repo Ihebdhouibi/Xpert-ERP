@@ -10,7 +10,7 @@ export type StatusKey =
   | 'open' | 'closed' | 'processing'
   | 'confirmed' | 'invoiced'
   | 'created' | 'diagnosis' | 'in_repair' | 'finished'
-  | 'paused_parts' | 'paused_approval'
+  | 'paused_parts'
   | 'completed' | 'partially_received'
   | 'issued' | 'expired' | 'converted' | 'scrapped'
 
@@ -47,7 +47,6 @@ const labels: Record<StatusKey, string> = {
   in_repair: 'En réparation',
   finished: 'Terminé',
   paused_parts: 'Attente pièces',
-  paused_approval: 'Attente accord',
   completed: 'Complété',
   partially_received: 'Part. reçu',
   issued: 'Émise',
@@ -98,7 +97,6 @@ const styleMap: Record<StatusKey, StatusStyle> = {
   processing:    { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
   in_repair:     { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
   partially_received: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  paused_approval: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
 
   // Blue — informational / sent / active states
   sent:       { dot: '#2563EB', text: '#1D4ED8', bg: '#EFF6FF' },

@@ -340,6 +340,7 @@ async def delete_invoice(
 # ---------------------------------------------------------------------------
 
 def _build_line(invoice: Invoice, req: InvoiceLineCreateRequest) -> InvoiceLine:
+    from app.core.constants import TVA_PCT
     lt = _line_total(req.unit_price_minor, req.quantity, req.discount_percent)
     return InvoiceLine(
         invoice_id=invoice.id or 0,
@@ -349,7 +350,7 @@ def _build_line(invoice: Invoice, req: InvoiceLineCreateRequest) -> InvoiceLine:
         quantity=req.quantity,
         unit_price_minor=req.unit_price_minor,
         discount_percent=req.discount_percent,
-        vat_rate=req.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=lt,
     )
 
@@ -372,6 +373,7 @@ async def add_line(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
+    from app.core.constants import TVA_PCT
     line = InvoiceLine(
         invoice_id=inv.id,
         kind=request.kind,
@@ -380,7 +382,7 @@ async def add_line(
         quantity=request.quantity,
         unit_price_minor=request.unit_price_minor,
         discount_percent=request.discount_percent,
-        vat_rate=request.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=0,
     )
     await repo.add_line(db, line)
@@ -764,6 +766,7 @@ async def create_invoice_from_delivery_notes(
         updated_by=user_id,
     )
 
+    from app.core.constants import TVA_PCT
     for dn in dns:
         for bl_line in dn.lines:
             invoice.lines.append(InvoiceLine(
@@ -774,7 +777,7 @@ async def create_invoice_from_delivery_notes(
                 quantity=bl_line.quantity,
                 unit_price_minor=bl_line.unit_price_minor,
                 discount_percent=Decimal("0"),
-                vat_rate=bl_line.vat_rate,
+                vat_rate=TVA_PCT,
                 line_total_minor=bl_line.line_total_minor,
             ))
 

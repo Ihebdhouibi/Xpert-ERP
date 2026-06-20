@@ -95,13 +95,12 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
 
 // Status accent colors — same palette as Kanban for consistency
 const STATUS_ACCENT_COLOR: Record<string, string> = {
-  created:         '#94A3B8',
-  diagnosis:       '#3B82F6',
-  in_repair:       '#F59E0B',
-  finished:        '#10B981',
-  delivered:       '#6366F1',
-  paused_parts:    '#EF4444',
-  paused_approval: '#F97316',
+  created:      '#94A3B8',
+  diagnosis:    '#3B82F6',
+  in_repair:    '#F59E0B',
+  finished:     '#10B981',
+  delivered:    '#6366F1',
+  paused_parts: '#EF4444',
 }
 
 // ─── Status transition ───────────────────────────────────────────────────────
@@ -784,12 +783,11 @@ export function RepairOrderDetailPage() {
 
   // Add-part inline form state
   const [showAddPart, setShowAddPart] = useState(false)
-  const [partSearch, setPartSearch] = useState('')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [partQty, setPartQty] = useState('')
   const [partUnitPrice, setPartUnitPrice] = useState('')
   const [partRemise, setPartRemise] = useState('0')
-  const [partTva, setPartTva] = useState('20')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -816,10 +814,17 @@ export function RepairOrderDetailPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: partsResults } = useQuery({
-    queryKey: ['parts-search', partSearch],
-    queryFn: () => partsApi.list({ search: partSearch || undefined, page_size: 30, status: 'active' }),
+  const { data: partCategories } = useQuery({
+    queryKey: ['part-categories'],
+    queryFn: () => partsApi.listCategories(),
     enabled: showAddPart,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: partsResults } = useQuery({
+    queryKey: ['parts-by-category', selectedCategoryId],
+    queryFn: () => partsApi.list({ category_id: selectedCategoryId!, page_size: 200, status: 'active' }),
+    enabled: showAddPart && selectedCategoryId !== null,
     staleTime: 30_000,
   })
 
@@ -862,13 +867,12 @@ export function RepairOrderDetailPage() {
       unit_cost_minor: Math.round(parseFloat(partUnitPrice) * 100),
       part_public_id: selectedPart!.id,
       remise_pct: parseFloat(partRemise) || 0,
-      tva_pct: parseFloat(partTva) || 0,
     }),
     onSuccess: () => {
       success('Pièce ajoutée.')
       setShowAddPart(false)
-      setSelectedPart(null); setPartSearch(''); setPartQty('')
-      setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
+      setSelectedPart(null); setSelectedCategoryId(null); setPartQty('')
+      setPartUnitPrice(''); setPartRemise('0')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
@@ -1098,7 +1102,7 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(laborTotal, currency)}
                   </Typography>
-                  {ro.status === 'diagnosis' && (
+                  {(ro.status === 'diagnosis' || ro.status === 'in_repair') && (
                     <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddLabor(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
@@ -1184,7 +1188,7 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(partsTotal, currency)}
                   </Typography>
-                  {ro.status === 'diagnosis' && (
+                  {ro.status === 'paused_parts' && (
                     <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddPart(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
@@ -1195,36 +1199,54 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddPart && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  {/* Row 1: part search (full width, separate so dropdown never covers other fields) */}
-                  <Autocomplete
-                    sx={{ mb: 1 }}
-                    size="small"
-                    options={partsResults?.items ?? []}
-                    getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
-                    filterOptions={(x) => x}
-                    inputValue={partSearch}
-                    onInputChange={(_, val) => { setPartSearch(val); setSelectedPart(null) }}
-                    value={selectedPart}
-                    onChange={(_, val) => {
-                      setSelectedPart(val)
-                      setPartQty('1')
-                      setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
-                    }}
-                    noOptionsText={partSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat'}
-                    renderOption={(props, option) => (
-                      <Box component="li" {...props} key={option.int_id}>
-                        <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
-                          <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
-                          <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
-                            Stock : {option.stock_on_hand}
-                          </Typography>
-                        </Stack>
-                      </Box>
-                    )}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Rechercher une pièce" placeholder="SKU ou nom…" />
-                    )}
-                  />
+                  {/* Step 1 — category */}
+                  <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                    <InputLabel>Catégorie</InputLabel>
+                    <Select
+                      label="Catégorie"
+                      value={selectedCategoryId ?? ''}
+                      onChange={(e) => {
+                        setSelectedCategoryId(e.target.value === '' ? null : Number(e.target.value))
+                        setSelectedPart(null)
+                        setPartQty('')
+                        setPartUnitPrice('')
+                      }}
+                    >
+                      <MenuItem value=""><em>— Sélectionner une catégorie —</em></MenuItem>
+                      {(partCategories ?? []).map(cat => (
+                        <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {/* Step 2 — part (only after category chosen) */}
+                  {selectedCategoryId !== null && (
+                    <Autocomplete
+                      sx={{ mb: 1 }}
+                      size="small"
+                      options={partsResults?.items ?? []}
+                      getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
+                      value={selectedPart}
+                      onChange={(_, val) => {
+                        setSelectedPart(val)
+                        setPartQty('1')
+                        setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
+                      }}
+                      noOptionsText={partsResults ? 'Aucune pièce dans cette catégorie' : 'Chargement…'}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props} key={option.int_id}>
+                          <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
+                            <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
+                            <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
+                              Stock : {option.stock_on_hand}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Pièce" placeholder="Rechercher dans la catégorie…" />
+                      )}
+                    />
+                  )}
                   {/* Row 2: qty, price, remise, tva — always visible below dropdown */}
                   <Stack direction="row" spacing={1} mb={1} flexWrap="wrap">
                     <TextField
@@ -1260,31 +1282,20 @@ export function RepairOrderDetailPage() {
                       helperText=" "
                       disabled={!selectedPart}
                     />
-                    <TextField
-                      size="small"
-                      label="TVA (%)"
-                      type="number"
-                      value={partTva}
-                      InputProps={{ readOnly: true }}
-                      inputProps={{ style: {} }}
-                      sx={{
-                        width: 110,
-                        '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
-                        '& input': { color: 'text.secondary' },
-                      }}
-                      helperText=" "
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', px: 1, pb: '20px', minWidth: 80 }}>
+                      <Typography variant="caption" color="text.secondary">TVA&nbsp;20%</Typography>
+                    </Box>
                     {selectedPart && partQty && partUnitPrice && (
                       <Box sx={{ display: 'flex', alignItems: 'center', pb: '20px' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Total :&nbsp;
+                          Total TTC :&nbsp;
                         </Typography>
                         <Typography variant="body2" fontWeight={700}>
                           {(
                             parseInt(partQty, 10) *
                             parseFloat(partUnitPrice) *
                             (1 - (parseFloat(partRemise) || 0) / 100) *
-                            (1 + (parseFloat(partTva) || 0) / 100)
+                            1.20
                           ).toFixed(2)} €
                         </Typography>
                       </Box>
@@ -1295,8 +1306,8 @@ export function RepairOrderDetailPage() {
                       size="small"
                       onClick={() => {
                         setShowAddPart(false)
-                        setSelectedPart(null); setPartSearch(''); setPartQty('')
-                        setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
+                        setSelectedPart(null); setSelectedCategoryId(null); setPartQty('')
+                        setPartUnitPrice(''); setPartRemise('0')
                       }}
                       sx={{ textTransform: 'none' }}
                     >

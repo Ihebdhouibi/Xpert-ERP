@@ -196,9 +196,9 @@ class RepairOrderService:
         if not can_transition(ro.status, new_status):
             raise InvalidStatusTransitionError(ro.status, new_status)
 
-        # Step preconditions: a diagnosis can only be closed (→ awaiting client
-        # approval) once a mechanic has accepted the job and the diagnosis is done.
-        if ro.status == ROStatus.diagnosis and new_status == ROStatus.paused_approval:
+        # Step preconditions: diagnosis can only move to repair once a mechanic
+        # has accepted the job and the diagnosis form is completed.
+        if ro.status == ROStatus.diagnosis and new_status == ROStatus.in_repair:
             missing: list[str] = []
             if ro.assigned_user_id is None:
                 missing.append("affecter un mécanicien")
@@ -269,14 +269,20 @@ class RepairOrderService:
         rate_minor: int,
     ) -> RepairOrder:
         """Add a labor line and recalculate total cost."""
+        from decimal import Decimal, ROUND_HALF_UP
+        from app.core.constants import TVA_PCT
         logger.info("add_labor_line_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
             raise RepairOrderNotFoundError(f"Repair order {public_id} not found")
 
-        amount_minor = rate_minor
+        amount_minor = int(
+            (Decimal(rate_minor) * (Decimal("1") + TVA_PCT / Decimal("100")))
+            .to_integral_value(rounding=ROUND_HALF_UP)
+        )
         await RepairOrderRepository.add_labor_line(
-            db, ro.id, labor_type, duration_minutes, rate_minor, amount_minor, user_id
+            db, ro.id, labor_type, duration_minutes, rate_minor, amount_minor, user_id,
+            tva_pct=float(TVA_PCT),
         )
 
         # Recalculate actual cost
@@ -312,7 +318,7 @@ class RepairOrderService:
         quantity: int,
         unit_cost_minor: int,
         remise_pct: float = 0,
-        tva_pct: float = 0,
+        tva_pct: float = 0,  # ignored — backend always uses TVA_PCT
         part_public_id: Optional[str] = None,
     ) -> RepairOrder:
         """Add a part line and recalculate total cost.
@@ -321,6 +327,8 @@ class RepairOrderService:
         resolved to an internal part_id and a stock reservation is created
         atomically in the same transaction.
         """
+        from decimal import Decimal, ROUND_HALF_UP
+        from app.core.constants import TVA_PCT
         logger.info("add_part_line_start", public_id=public_id, garage_id=garage_id, user_id=user_id)
         ro = await RepairOrderRepository.get_by_public_id(db, garage_id, public_id)
         if not ro:
@@ -335,12 +343,18 @@ class RepairOrderService:
                 raise RepairOrderNotFoundError(f"Part {part_public_id} not found")
             resolved_part_id = part.id
 
-        amount_minor = round(quantity * unit_cost_minor * (1 - remise_pct / 100) * (1 + tva_pct / 100))
+        effective_tva = float(TVA_PCT)
+        amount_minor = int(
+            (Decimal(quantity) * Decimal(unit_cost_minor)
+             * (Decimal("1") - Decimal(str(remise_pct)) / Decimal("100"))
+             * (Decimal("1") + TVA_PCT / Decimal("100")))
+            .to_integral_value(rounding=ROUND_HALF_UP)
+        )
         await RepairOrderRepository.add_part_line(
             db, ro.id, part_name, quantity, unit_cost_minor, amount_minor, user_id,
             part_id=resolved_part_id,
             remise_pct=remise_pct,
-            tva_pct=tva_pct,
+            tva_pct=effective_tva,
         )
 
         # Reserve stock for catalog-linked parts

@@ -121,26 +121,28 @@ async def create_invoice_from_repair_order(
 
     lines: list[InvoiceLineCreateRequest] = []
 
-    # Labor lines → kind=labor, quantity=1, unit_price=amount_minor
+    from app.core.constants import TVA_PCT
+
+    # Labor lines → HT unit price + 20% VAT
     for ll in ro.labor_lines:
         lines.append(InvoiceLineCreateRequest(
             kind=InvoiceLineKind.labor,
             description=ll.labor_type,
             quantity=Decimal("1.000"),
-            unit_price_minor=ll.amount_minor,
+            unit_price_minor=ll.rate_minor,
             discount_percent=Decimal("0"),
-            vat_rate=Decimal("0"),
+            vat_rate=TVA_PCT,
         ))
 
-    # Part lines → kind=part, quantity=qty, unit_price=unit_cost_minor
+    # Part lines → HT unit price + remise + 20% VAT
     for pl in ro.part_lines:
         lines.append(InvoiceLineCreateRequest(
             kind=InvoiceLineKind.part,
             description=pl.part_name,
             quantity=Decimal(str(pl.quantity)),
             unit_price_minor=pl.unit_cost_minor,
-            discount_percent=Decimal("0"),
-            vat_rate=Decimal("0"),
+            discount_percent=Decimal(str(pl.remise_pct)),
+            vat_rate=TVA_PCT,
         ))
 
     request = InvoiceCreateRequest(

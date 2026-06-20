@@ -7,7 +7,6 @@ export type ROStatus =
   | 'finished'
   | 'delivered'
   | 'paused_parts'
-  | 'paused_approval'
 
 export interface ROLaborLine {
   id: number
@@ -123,18 +122,12 @@ export const STATUS_LABELS: Record<ROStatus, string> = {
   finished: 'Terminé',
   delivered: 'Livré',
   paused_parts: 'En attente de pièces',
-  paused_approval: 'En attente d\'approbation',
 }
 
 export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   created: ['diagnosis'],
-  // After diagnosis + devis, wait for the client to approve the quotation.
-  diagnosis: ['paused_approval'],
-  // Client approved → start the repair.
-  paused_approval: ['in_repair'],
-  // During repair you can pause for parts, or finish.
+  diagnosis: ['in_repair'],
   in_repair: ['paused_parts', 'finished'],
-  // "Waiting for parts" is a sub-state of repair: once parts arrive, resume repair.
   paused_parts: ['in_repair'],
   finished: ['delivered'],
   delivered: [],

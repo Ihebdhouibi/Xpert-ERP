@@ -139,6 +139,7 @@ async def create_quotation_from_repair_order(
 
     # Copy the repair order's labor and part lines into the quotation.
     lines: list[QuotationLineCreateRequest] = []
+    from app.core.constants import TVA_PCT
     for ll in ro.labor_lines:
         label = (
             f"{ll.labor_type} ({ll.duration_minutes} min)"
@@ -150,7 +151,8 @@ async def create_quotation_from_repair_order(
                 kind=LineKind.labor,
                 description=label,
                 quantity=Decimal(1),
-                unit_price_minor=ll.amount_minor,
+                unit_price_minor=ll.rate_minor,
+                vat_rate=TVA_PCT,
             )
         )
     for pl in ro.part_lines:
@@ -161,6 +163,8 @@ async def create_quotation_from_repair_order(
                 description=pl.part_name,
                 quantity=Decimal(pl.quantity),
                 unit_price_minor=pl.unit_cost_minor,
+                discount_percent=Decimal(str(pl.remise_pct)),
+                vat_rate=TVA_PCT,
             )
         )
 

@@ -72,6 +72,7 @@ class ROLaborLineSummary(BaseModel):
     labor_type: str
     duration_minutes: int
     rate_minor: int
+    tva_pct: float = 20.0
     amount_minor: int
     created_at: datetime
 

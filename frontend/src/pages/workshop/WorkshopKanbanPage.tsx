@@ -44,7 +44,6 @@ const STATUS_ORDER: ROStatus[] = [
   'diagnosis',
   'in_repair',
   'paused_parts',
-  'paused_approval',
   'finished',
   'delivered',
 ]
@@ -56,7 +55,6 @@ const STATUS_ACCENT: Record<ROStatus, string> = {
   finished: '#10B981',
   delivered: '#6366F1',
   paused_parts: '#EF4444',
-  paused_approval: '#F97316',
 }
 
 const PRIORITY_LABELS: Record<string, string> = {
