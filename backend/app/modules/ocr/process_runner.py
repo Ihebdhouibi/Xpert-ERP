@@ -39,6 +39,59 @@ def _worker_pid(_payload: Any = None) -> int:
     return os.getpid()
 
 
+def _init_worker_logging() -> None:
+    """Set up logging inside the OCR worker process.
+
+    The worker is a *separate* process that never runs the app's
+    ``configure_logging``, so without this its log records (including the OCR
+    engine's "ONNX OCR unavailable / execution error" messages) would be lost —
+    OCR failures would surface only as silent empty results.
+
+    To avoid multi-process rotation races on the shared app log files, the worker
+    writes to its own dedicated ``ocr-worker.log`` (plus stderr). All OCR engine
+    and runner records propagate to the root logger and land there.
+    """
+    import logging
+    import logging.handlers
+
+    try:
+        from app.core.config import get_settings
+
+        cfg = get_settings()
+        log_dir = cfg.log_dir
+        os.makedirs(log_dir, exist_ok=True)
+        level = getattr(logging, str(cfg.log_level).upper(), logging.INFO)
+
+        root = logging.getLogger()
+        root.setLevel(level)
+        # Idempotent: don't double-attach if the initializer somehow runs twice.
+        if any(getattr(h, "_ocr_worker", False) for h in root.handlers):
+            return
+
+        fmt = logging.Formatter(
+            "%(asctime)s - %(name)-22s - %(levelname)-8s - [ocr-worker] %(message)s"
+        )
+        fh = logging.handlers.RotatingFileHandler(
+            os.path.join(log_dir, "ocr-worker.log"),
+            maxBytes=int(cfg.log_max_bytes),
+            backupCount=int(cfg.log_backup_count),
+            encoding="utf-8",
+        )
+        fh.setFormatter(fmt)
+        fh.setLevel(level)
+        fh._ocr_worker = True  # type: ignore[attr-defined]
+        root.addHandler(fh)
+
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        sh.setLevel(level)
+        sh._ocr_worker = True  # type: ignore[attr-defined]
+        root.addHandler(sh)
+    except Exception:
+        # Logging setup must never break OCR itself.
+        pass
+
+
 class IdleProcessRunner:
     """Run callables in one worker process that is killed after an idle period."""
 
@@ -54,7 +107,11 @@ class IdleProcessRunner:
     def _ensure_executor_locked(self) -> ProcessPoolExecutor:
         if self._executor is None:
             logger.info("ocr_process_runner: spawning worker process")
-            self._executor = ProcessPoolExecutor(max_workers=1)
+            # initializer wires logging in the child so OCR engine errors are
+            # captured (the worker never runs the app's configure_logging).
+            self._executor = ProcessPoolExecutor(
+                max_workers=1, initializer=_init_worker_logging
+            )
         return self._executor
 
     def _cancel_timer_locked(self) -> None:

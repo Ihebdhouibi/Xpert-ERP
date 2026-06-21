@@ -409,8 +409,10 @@ class OnnxOcrEngine(OcrEngine):
         engine = self._get_engine()
         try:
             result, _elapsed = engine(img_array)
-        except Exception as exc:
-            logger.error("ONNX OCR execution error: %s", exc)
+        except Exception:
+            # Full traceback so a real failure (e.g. model/shape mismatch) is
+            # diagnosable instead of surfacing as a silent empty extraction.
+            logger.exception("ONNX OCR execution error")
             return []
         lines: list[OcrLine] = []
         for item in result or []:

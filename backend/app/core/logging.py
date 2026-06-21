@@ -304,7 +304,11 @@ def configure_logging(
                 nl.addHandler(h)
 
     # --- other modules using raw logging.getLogger(__name__) → app stream ---
-    for name in ("app.modules.ocr.engine", "app.modules.notification.adapter"):
+    for name in (
+        "app.modules.ocr.engine",
+        "app.modules.ocr.process_runner",
+        "app.modules.notification.adapter",
+    ):
         nl = logging.getLogger(name)
         nl.setLevel(level)
         nl.propagate = False
