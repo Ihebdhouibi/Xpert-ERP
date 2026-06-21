@@ -54,7 +54,7 @@ runtime image (removed in Opt 5).
 | — | Baseline | ~1.1–1.2 GB (2 workers) | ~780 MB OCR stack | measured |
 | 1 | Right-size workers / 1 model instance | ~0.6 GB peak (1× model, was 2×) | — | **done** |
 | 2 | Disable aux models (doc-ori/unwarp/textline) | 595 → **525 MB** peak (−70 MB) | −46 MB models | **done** |
-| 3 | Idle-killed OCR subprocess | model RAM fully reclaimed after idle; API process stays ~40 MB + app (model never loaded there) | — | **done** |
+| 3 | Idle-killed OCR subprocess | model RAM fully reclaimed after idle; API process stays ~40 MB + app (model never loaded there) | — | **DISABLED by default** — unreliable under uvicorn --reload on Windows; see [dropped-optimization-ocr-subprocess.md](dropped-optimization-ocr-subprocess.md) |
 | 4 | ONNX Runtime engine (RapidOCR) | **233 MB** peak (vs 525) | **~52 MB** wheels (vs ~780) | **done** (opt-in; default still paddle) |
 | 5 | Slim multi-stage image | — | build tools out of runtime; paddle-free onnx variant | **done** (deps validated; size est. — see note) |
 
