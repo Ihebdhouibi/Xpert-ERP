@@ -3,13 +3,13 @@
 # image carries just the virtualenv + app + the shared libraries OCR/PDF need.
 #
 # Select the OCR backend at build time:
-#   docker build --build-arg OCR_BACKEND=paddle ...   (default)
-#   docker build --build-arg OCR_BACKEND=onnx   ...   (slim, paddle-free)
+#   docker build --build-arg OCR_BACKEND=onnx   ...   (default, slim, paddle-free)
+#   docker build --build-arg OCR_BACKEND=paddle ...   (PaddleOCR fallback)
 
 # ---------- builder ----------------------------------------------------------
 FROM python:3.11-slim AS builder
 
-ARG OCR_BACKEND=paddle
+ARG OCR_BACKEND=onnx
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 

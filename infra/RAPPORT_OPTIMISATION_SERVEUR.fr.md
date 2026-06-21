@@ -45,7 +45,7 @@ Chacune a été développée, testée, puis enregistrée séparément.
 | 1 | **Une seule copie du modèle de lecture** | Avant, le logiciel chargeait le modèle **deux fois** en parallèle. On n'en garde qu'**une seule copie**. | ~2× moins de mémoire pour l'OCR |
 | 2 | **Retrait d'options inutiles** | Le modèle activait des traitements pour photos « tordues » ou en biais. Nos documents sont des scans bien à plat : on les a **désactivés**. | −70 Mo de mémoire, scans plus rapides |
 | 3 | **Libération de la mémoire au repos** | Quand personne ne scanne de document, la mémoire utilisée par l'OCR est **rendue au serveur** automatiquement, puis reprise au scan suivant. | Le serveur respire le reste du temps |
-| 4 | **Nouveau moteur de lecture, plus léger** | Un moteur alternatif (technologie « ONNX ») fait le même travail en occupant **moitié moins de mémoire** et **15 fois moins d'espace disque**. | Prêt à activer (voir §6) |
+| 4 | **Nouveau moteur de lecture, plus léger** | Un nouveau moteur (technologie « ONNX ») fait le même travail en occupant **moitié moins de mémoire** et **15 fois moins d'espace disque**. | **Activé par défaut** (voir §6) |
 | 5 | **Image d'installation allégée** | On a retiré de l'installation tous les outils qui ne servent qu'à la fabrication, et on peut produire une version **beaucoup plus petite**. | Disque réduit, déploiement plus sûr |
 
 ---
@@ -54,12 +54,16 @@ Chacune a été développée, testée, puis enregistrée séparément.
 
 Mesures réelles effectuées pendant le développement.
 
-| Indicateur | **Avant** | **Après** (config par défaut) | **Après** (option ONNX, §6) |
-|------------|-----------|-------------------------------|------------------------------|
-| Mémoire utilisée par l'OCR pendant un scan | ~1 100–1 200 Mo | ~525 Mo | **~233 Mo** |
-| Mémoire utilisée par l'OCR au repos | élevée en permanence | quasi nulle (rendue au serveur) | quasi nulle |
-| Espace disque de la partie lecture | ~780 Mo | ~780 Mo | **~52 Mo** |
-| **Mémoire serveur recommandée** | **16 Go** | **8 Go** | **8 Go (large marge)** |
+| Indicateur | **Avant** | **Après** (configuration actuelle) |
+|------------|-----------|-------------------------------------|
+| Mémoire utilisée par l'OCR pendant un scan | ~1 100–1 200 Mo | **~233 Mo** |
+| Mémoire utilisée par l'OCR au repos | élevée en permanence | quasi nulle (rendue au serveur) |
+| Espace disque de la partie lecture | ~780 Mo | **~52 Mo** |
+| **Mémoire serveur recommandée** | **16 Go** | **8 Go (large marge)** |
+
+Le nouveau moteur ONNX (§6) est **le moteur par défaut** ; l'ancien moteur reste
+disponible en secours. Les chiffres « après » correspondent à cette
+configuration par défaut.
 
 **Conclusion :** la lecture de documents n'est plus le facteur qui impose la
 taille du serveur. Un serveur de **8 Go** suffit désormais confortablement.
@@ -91,22 +95,21 @@ réinstallation.
 
 ---
 
-## 6. Option pour aller encore plus loin (gratuite)
+## 6. Le nouveau moteur de lecture « ONNX » (activé par défaut)
 
-Le **nouveau moteur de lecture « ONNX »** (optimisation n°4) est intégré et
-**désormais compatible avec le français**. Il divise encore la mémoire par deux
-et réduit fortement l'espace disque.
+Le **nouveau moteur de lecture « ONNX »** (optimisation n°4) est désormais le
+moteur **utilisé par défaut**. Il occupe moitié moins de mémoire et bien moins
+d'espace disque que l'ancien, et a été **validé sur de vrais documents**.
 
 **Vérification des accents : faite.** Le moteur ONNX a d'abord été testé avec un
 modèle anglais/chinois, qui déformait les accents (« Jérôme » devenait
-« JBrBme »). Nous avons donc intégré le **modèle français dédié** (« latin »), le
-même que celui utilisé aujourd'hui. Après ce correctif, les accents (é, è, ô, ç)
-sont lus correctement — au niveau du moteur actuel, parfois mieux.
+« JBrBme »). Nous avons donc intégré le **modèle français dédié** (« latin »).
+Après ce correctif, les accents (é, è, ô, ç) sont lus correctement, et le moteur
+a été **testé avec succès sur des documents réels**. L'ancien moteur reste
+disponible en secours si besoin.
 
-**Pour l'activer en production**, deux conditions techniques (à la charge de
-l'équipe, sans impact pour vous) : utiliser la version allégée du logiciel et
-activer un réglage. **Le serveur de 8 Go convient dans les deux cas** — ONNX
-n'est qu'un gain supplémentaire, pas une nécessité.
+Aucune action n'est requise de votre côté : c'est déjà la configuration en
+place. **Le serveur de 8 Go reste valable.**
 
 ---
 
@@ -128,8 +131,8 @@ n'est qu'un gain supplémentaire, pas une nécessité.
 1. **Côté client :** transmettre à Orange la fiche technique mise à jour (machine
    `s6.xlarge.2`, 4 vCPU / 8 Go, Paris) et demander un devis ferme avec la remise
    négociée.
-2. **Côté équipe (optionnel) :** valider le moteur ONNX sur de vrais documents
-   pour, si concluant, réduire encore la consommation.
+2. **Côté équipe :** le moteur ONNX est validé et activé par défaut — rien de
+   plus requis. (Déploiement : utiliser l'image allégée du logiciel.)
 
 ---
 

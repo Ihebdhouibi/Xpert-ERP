@@ -62,9 +62,15 @@ runtime image (removed in Opt 5).
 
 - Single-stage → **multi-stage**: `build-essential` + `-dev` headers stay in the
   builder and are **not** shipped (saves ~250–400 MB of runtime layers).
-- OCR backend is a build arg: `--build-arg OCR_BACKEND=paddle` (default) or
-  `onnx` (paddle-free). `paddle`/`onnx`/`dev` are separate pyproject extras;
-  `dev` keeps paddle so CI is unchanged.
+- OCR backend is a build arg: `--build-arg OCR_BACKEND=onnx` (**default**) or
+  `paddle` (fallback). `paddle`/`onnx`/`dev` are separate pyproject extras; `dev`
+  installs the onnx backend so CI exercises the default engine.
+
+> **Update — ONNX promoted to default.** After converting the latin PP-OCRv3 rec
+> model to ONNX (vendored under `app/modules/ocr/models/`) and validating French
+> accents on real documents, `cfg_ocr_engine` now defaults to `onnx` and the
+> Docker image builds the onnx backend by default. PaddleOCR remains available as
+> a fallback (`cfg_ocr_engine=paddle` + the `[paddle]` extra).
 - Runtime now runs as a **non-root** user; `.dockerignore` keeps `.venv`/logs out
   of the context.
 

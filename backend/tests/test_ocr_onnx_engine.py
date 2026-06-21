@@ -16,7 +16,14 @@ from app.modules.ocr.engine import (
 
 # ---- factory selection ------------------------------------------------------
 
-def test_factory_defaults_to_paddle(monkeypatch):
+def test_committed_default_engine_is_onnx():
+    """The committed default engine must be ONNX (the validated, slim backend)."""
+    from app.core.config import Settings
+
+    assert Settings.model_fields["cfg_ocr_engine"].default == "onnx"
+
+
+def test_factory_selects_paddle(monkeypatch):
     from app.core import config
 
     cfg = config.get_settings()

@@ -51,15 +51,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# OCR backends — install exactly ONE. Default deployment uses [paddle]; [onnx]
-# is the slim, paddle-free alternative (~half the RAM, ~1/15th the disk).
-paddle = [
-    "paddlepaddle==3.0.0",
-    "paddleocr==3.0.1",
-    "opencv-python-headless==4.10.0.84",
-]
-# ONNX Runtime OCR backend (cfg_ocr_engine="onnx"). ~half the peak RAM and a
-# fraction of the disk of paddlepaddle. Kept on numpy<2 for compatibility.
+# OCR backends — install exactly ONE. Default deployment uses [onnx] (the slim,
+# paddle-free engine, ~half the RAM, ~1/15th the disk); [paddle] is the fallback.
+# ONNX Runtime OCR backend (cfg_ocr_engine="onnx", the default).
 onnx = [
     "onnxruntime==1.19.2",
     "rapidocr-onnxruntime==1.4.4",
@@ -67,11 +61,18 @@ onnx = [
     # conflicts with the numpy<2 base pin. Pin to the numpy<2-compatible build.
     "opencv-python==4.10.0.84",
 ]
-dev = [
-    # dev/test installs the paddle backend (default engine) plus tooling
+# PaddleOCR fallback backend (cfg_ocr_engine="paddle").
+paddle = [
     "paddlepaddle==3.0.0",
     "paddleocr==3.0.1",
     "opencv-python-headless==4.10.0.84",
+]
+dev = [
+    # dev/test installs the onnx backend (the default engine) plus tooling, so
+    # CI exercises the real default. Add [paddle] separately to test the fallback.
+    "onnxruntime==1.19.2",
+    "rapidocr-onnxruntime==1.4.4",
+    "opencv-python==4.10.0.84",
     "pytest==8.3.5",
     "pytest-asyncio==0.26.0",
     "pytest-cov==6.1.0",
