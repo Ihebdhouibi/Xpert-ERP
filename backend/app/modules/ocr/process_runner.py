@@ -56,9 +56,10 @@ def _init_worker_logging() -> None:
 
     try:
         from app.core.config import get_settings
+        from app.core.logging import resolve_log_dir
 
         cfg = get_settings()
-        log_dir = cfg.log_dir
+        log_dir = resolve_log_dir(cfg.log_dir)
         os.makedirs(log_dir, exist_ok=True)
         level = getattr(logging, str(cfg.log_level).upper(), logging.INFO)
 

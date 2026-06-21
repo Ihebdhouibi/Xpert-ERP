@@ -37,7 +37,26 @@ import logging
 import logging.handlers
 import os
 import sys
+from pathlib import Path
 from typing import Any
+
+# Repo backend root (…/backend), so logs land in ONE place no matter which
+# directory the server was launched from. logging.py lives at
+# backend/app/core/logging.py → parents[2] == backend/.
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_log_dir(log_dir: str) -> str:
+    """Anchor a relative log dir to the backend root (absolute paths pass through).
+
+    Without this, ``log_dir="logs"`` resolved against the current working
+    directory, so logs scattered into ``backend/logs`` or the repo-root ``logs``
+    depending on where uvicorn was started — a real source of "where are my
+    logs?" confusion. Used by both the API process and the OCR worker process so
+    they always write to the same files.
+    """
+    p = Path(log_dir)
+    return str(p if p.is_absolute() else _BACKEND_ROOT / p)
 
 # ---------------------------------------------------------------------------
 # Posture flags (pre-deployment = capture everything)
@@ -234,6 +253,7 @@ def configure_logging(
     """
     level = getattr(logging, log_level.upper(), logging.DEBUG)
 
+    log_dir = resolve_log_dir(log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
     console = logging.StreamHandler(sys.stderr)
