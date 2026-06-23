@@ -41,12 +41,17 @@ async def ingest_client_logs(batch: ClientLogBatch, request: Request) -> None:
         if level not in _LEVELS:
             level = "info"
         emit = getattr(log, "warning" if level == "warn" else level)
-        emit(
-            e.message or "client_log",
-            ts=e.timestamp,
-            url=e.url,
-            ip=client_ip,
-            ua=e.user_agent,
-            stack=e.stack,
-            **(e.context or {}),
+        # Merge into a single dict so context keys (which often include "url",
+        # "ip", "method"…) can't collide with our explicit kwargs and raise
+        # "got multiple values for keyword argument". Our metadata is namespaced
+        # so it never clobbers the caller's context fields.
+        fields = dict(e.context or {})
+        fields.update(
+            client_ts=e.timestamp,
+            client_url=e.url,
+            client_ip=client_ip,
+            user_agent=e.user_agent,
         )
+        if e.stack:
+            fields["stack"] = e.stack
+        emit(e.message or "client_log", **fields)
