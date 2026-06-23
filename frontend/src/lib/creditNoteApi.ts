@@ -29,6 +29,7 @@ export interface CreditNoteOut {
   invoice_public_id: string | null
   invoice_total_minor: number
   invoice_paid_amount_minor: number
+  customer_name: string | null
 }
 
 export interface CreditNoteListResponse {

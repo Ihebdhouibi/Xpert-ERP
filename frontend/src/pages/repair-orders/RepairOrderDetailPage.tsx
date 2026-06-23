@@ -1113,9 +1113,20 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddLabor && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="center">
                     <TextField size="small" label="Désignation" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
-                    <TextField size="small" label="Prix (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
+                    <TextField size="small" label="Prix HT (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
+                      <Typography variant="caption" color="text.secondary">TVA&nbsp;20%</Typography>
+                    </Box>
+                    {laborRate && parseFloat(laborRate) > 0 && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                        <Typography variant="body2" color="text.secondary">Total TTC :&nbsp;</Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {(parseFloat(laborRate) * 1.20).toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    )}
                   </Stack>
                   <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => setShowAddLabor(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
@@ -1140,8 +1151,9 @@ export function RepairOrderDetailPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Désignation</TableCell>
-                      <TableCell align="right">Prix</TableCell>
-                      <TableCell align="right">Montant</TableCell>
+                      <TableCell align="right">Prix HT</TableCell>
+                      <TableCell align="right">TVA</TableCell>
+                      <TableCell align="right">Montant TTC</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1154,12 +1166,15 @@ export function RepairOrderDetailPage() {
                           <Typography variant="body2">{formatMinor(line.rate_minor, currency)}</Typography>
                         </TableCell>
                         <TableCell align="right">
+                          <Typography variant="body2" color="text.secondary">20%</Typography>
+                        </TableCell>
+                        <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                      <TableCell colSpan={2}>
+                      <TableCell colSpan={3}>
                         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           Total MO
                         </Typography>
@@ -1265,9 +1280,8 @@ export function RepairOrderDetailPage() {
                       label="Prix unit. (€)"
                       type="number"
                       value={partUnitPrice}
-                      onChange={e => setPartUnitPrice(e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      sx={{ width: 130 }}
+                      inputProps={{ min: 0, step: 0.01, readOnly: true }}
+                      sx={{ width: 130, '& .MuiInputBase-input': { bgcolor: 'action.hover', cursor: 'default' } }}
                       helperText=" "
                       disabled={!selectedPart}
                     />

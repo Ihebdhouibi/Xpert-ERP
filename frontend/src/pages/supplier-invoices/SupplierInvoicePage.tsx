@@ -1113,6 +1113,13 @@ export function SupplierInvoicePage() {
             ),
           },
           {
+            id: 'supplier',
+            label: 'Fournisseur',
+            render: si => (
+              <Typography variant="body2" fontWeight={500}>{si.supplier_name ?? '—'}</Typography>
+            ),
+          },
+          {
             id: 'status',
             label: 'Statut',
             width: 130,

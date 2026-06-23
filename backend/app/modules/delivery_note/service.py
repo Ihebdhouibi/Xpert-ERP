@@ -208,16 +208,26 @@ async def list_delivery_notes(
     page: int = 1,
     page_size: int = 25,
 ) -> DeliveryNoteListResponse:
+    from sqlalchemy import select as sa_select
+    from app.modules.customer.models import Customer
+
     items, total = await repo.list_delivery_notes(
         db, garage_id, customer_id=customer_id, status=status,
         available_for_invoice=available_for_invoice, page=page, page_size=page_size
     )
-    return DeliveryNoteListResponse(
-        items=[DeliveryNoteOut.model_validate(d) for d in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    cust_ids = list({d.customer_id for d in items})
+    customers_map: dict[int, str] = {}
+    if cust_ids:
+        res = await db.execute(sa_select(Customer).where(Customer.id.in_(cust_ids)))
+        customers_map = {c.id: c.full_name for c in res.scalars()}
+
+    out_items = []
+    for d in items:
+        out = DeliveryNoteOut.model_validate(d)
+        out.customer_name = customers_map.get(d.customer_id)
+        out_items.append(out)
+
+    return DeliveryNoteListResponse(items=out_items, total=total, page=page, page_size=page_size)
 
 
 async def update_delivery_note(

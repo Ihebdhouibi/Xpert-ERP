@@ -62,6 +62,7 @@ export function DeliveryNotesListPage() {
               <TableRow>
                 <TableCell>Date</TableCell>
                 <TableCell>Référence</TableCell>
+                <TableCell>Client</TableCell>
                 <TableCell>Statut</TableCell>
                 <TableCell align="right">Total TTC</TableCell>
               </TableRow>
@@ -81,6 +82,9 @@ export function DeliveryNotesListPage() {
                     <Typography variant="body2" fontFamily="monospace" fontWeight={600}>
                       {dn.doc_number ?? `#${dn.id}`}
                     </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{dn.customer_name ?? '—'}</Typography>
                   </TableCell>
                   <TableCell>
                     <StatusChip status={dn.status as StatusKey} />

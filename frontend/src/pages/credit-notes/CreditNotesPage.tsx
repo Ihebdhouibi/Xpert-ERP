@@ -243,6 +243,15 @@ const columns: Column<CreditNoteOut>[] = [
     },
   },
   {
+    id: 'customer',
+    label: 'Client',
+    render: row => (
+      <Typography variant="body2" fontWeight={500}>
+        {row.customer_name ?? '—'}
+      </Typography>
+    ),
+  },
+  {
     id: 'reason',
     label: 'Motif',
     render: row => (
