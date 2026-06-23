@@ -24,6 +24,8 @@ from app.modules.delivery_note.schemas import (
     DeliveryNoteOut,
     DeliveryNoteUpdateRequest,
 )
+from app.modules.parts.stock_models import StockMovementType
+from app.modules.parts.stock_service import NegativeStockError, record_movement
 from app.modules.sequence import service as seq_service
 
 logger = get_logger("delivery_note.service")
@@ -381,7 +383,7 @@ async def remove_line(
 async def issue_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int, *, user_id: int
 ) -> DeliveryNoteOut:
-    """Assign a document number and lock the delivery note."""
+    """Assign a document number, lock the delivery note, and deduct stock."""
     dn = await repo.get_by_public_id(db, public_id, garage_id)
     if not dn:
         raise DeliveryNoteNotFoundError(public_id)
@@ -395,6 +397,36 @@ async def issue_delivery_note(
     dn.version += 1
     dn.updated_by = user_id
     await db.flush()
+
+    # Deduct stock for every catalogued part line
+    for line in dn.lines:
+        if line.part_id is None:
+            continue
+        if line.kind not in (DeliveryNoteLineKind.part, DeliveryNoteLineKind.accessory):
+            continue
+        qty = int(line.quantity)
+        if qty <= 0:
+            continue
+        try:
+            await record_movement(
+                db,
+                garage_id=garage_id,
+                part_id=line.part_id,
+                movement_type=StockMovementType.out,
+                quantity=qty,
+                ref_type="delivery_note",
+                ref_id=dn.public_id,
+                reason=f"BL émis : {dn.doc_number}",
+                created_by_user_id=user_id,
+                allow_negative=False,
+            )
+        except NegativeStockError as e:
+            await db.rollback()
+            raise DeliveryNoteStateError(
+                f"Stock insuffisant pour « {line.description} » : "
+                f"disponible {e.available}, demandé {e.requested}"
+            )
+
     await db.commit()
     fresh = await repo.get_by_id(db, dn.id, garage_id)
     logger.info("delivery_note_issued", dn_id=dn.id, doc_number=dn.doc_number, garage_id=garage_id)
@@ -425,20 +457,45 @@ async def mark_delivered(
 async def cancel_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int, *, user_id: int
 ) -> DeliveryNoteOut:
-    """Cancel a draft or issued delivery note."""
+    """Cancel a draft or issued delivery note, reversing stock if already issued."""
     dn = await repo.get_by_public_id(db, public_id, garage_id)
     if not dn:
         raise DeliveryNoteNotFoundError(public_id)
     if dn.status not in (DeliveryNoteStatus.draft, DeliveryNoteStatus.issued):
         raise DeliveryNoteStateError("Only draft or issued delivery notes can be cancelled.")
 
+    was_issued = dn.status == DeliveryNoteStatus.issued
+
     dn.status = DeliveryNoteStatus.cancelled
     dn.version += 1
     dn.updated_by = user_id
     await db.flush()
+
+    # Restore stock for every part line whose stock was deducted at issue time
+    if was_issued:
+        for line in dn.lines:
+            if line.part_id is None:
+                continue
+            if line.kind not in (DeliveryNoteLineKind.part, DeliveryNoteLineKind.accessory):
+                continue
+            qty = int(line.quantity)
+            if qty <= 0:
+                continue
+            await record_movement(
+                db,
+                garage_id=garage_id,
+                part_id=line.part_id,
+                movement_type=StockMovementType.in_,
+                quantity=qty,
+                ref_type="delivery_note",
+                ref_id=dn.public_id,
+                reason=f"BL annulé : {dn.doc_number}",
+                created_by_user_id=user_id,
+            )
+
     await db.commit()
     fresh = await repo.get_by_id(db, dn.id, garage_id)
-    logger.info("delivery_note_cancelled", dn_id=dn.id, garage_id=garage_id)
+    logger.info("delivery_note_cancelled", dn_id=dn.id, was_issued=was_issued, garage_id=garage_id)
     return DeliveryNoteOut.model_validate(fresh)
 
 

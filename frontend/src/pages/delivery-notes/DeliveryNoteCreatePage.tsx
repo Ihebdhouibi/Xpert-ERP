@@ -158,6 +158,10 @@ function LineCard({
   const showPriceFields = isPart ? !!line.selectedPart : !!line.description.trim()
   const lineTotal = computeLineTotalMinor(line)
 
+  const availableStock = line.selectedPart?.stock_on_hand ?? Infinity
+  const enteredQty = parseInt(line.quantity) || 0
+  const isOverStock = isPart && !!line.selectedPart && enteredQty > availableStock
+
   return (
     <Card variant="outlined" sx={{ borderRadius: 2 }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -304,7 +308,16 @@ function LineCard({
                     onChange={(e) => onUpdate(line.tempId, { quantity: e.target.value })}
                     size="small"
                     type="number"
-                    inputProps={{ min: 0, step: 1, style: { textAlign: 'right' } }}
+                    error={isOverStock}
+                    helperText={
+                      isPart && line.selectedPart
+                        ? isOverStock
+                          ? `Max : ${availableStock}`
+                          : `Dispo : ${availableStock}`
+                        : undefined
+                    }
+                    FormHelperTextProps={{ sx: { color: isOverStock ? 'error.main' : 'success.main', fontWeight: 600, mt: 0.25 } }}
+                    inputProps={{ min: 1, step: 1, style: { textAlign: 'right' } }}
                     sx={{ width: 100 }}
                   />
                 )}
@@ -509,6 +522,20 @@ export function DeliveryNoteCreatePage() {
     if (!selectedCustomer) errs.customer = 'Client requis'
     setFieldErrors(errs)
     if (Object.keys(errs).length > 0) return
+
+    // Stock guard — reject before hitting the API
+    const overStockLines = lines.filter((l) => {
+      if (l.kind !== 'part' && l.kind !== 'accessory') return false
+      if (!l.selectedPart) return false
+      return (parseInt(l.quantity) || 0) > l.selectedPart.stock_on_hand
+    })
+    if (overStockLines.length > 0) {
+      const msgs = overStockLines.map(
+        (l) => `${l.selectedPart!.name} : demandé ${parseInt(l.quantity)}, disponible ${l.selectedPart!.stock_on_hand}`
+      )
+      setSubmitError(`Stock insuffisant — ${msgs.join(' · ')}`)
+      return
+    }
 
     setIsSubmitting(true)
     setSubmitError(null)

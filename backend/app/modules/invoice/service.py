@@ -483,6 +483,23 @@ async def remove_line(
 # Status transitions
 # ---------------------------------------------------------------------------
 
+async def _stock_managed_externally(db: AsyncSession, inv: Invoice) -> bool:
+    """Return True if stock was already handled by a source document (BL or RO).
+
+    - Invoices from a Repair Order: stock committed at the in_repair transition.
+    - Invoices from a Bon de Livraison: stock deducted when the BL was issued.
+    Both cases must not trigger a second deduction here.
+    """
+    if inv.repair_order_id is not None:
+        return True
+    from sqlalchemy import select as _sa_select
+    from app.modules.delivery_note.models import DeliveryNote as _DN
+    linked = (await db.execute(
+        _sa_select(_DN.id).where(_DN.invoice_id == inv.id).limit(1)
+    )).scalar_one_or_none()
+    return linked is not None
+
+
 async def issue_invoice(
     db: AsyncSession,
     invoice_id: int,
@@ -541,6 +558,36 @@ async def issue_invoice(
         garage_id=garage_id,
     )
 
+    # Deduct stock — only for invoices not already handled by a BL or RO
+    if not await _stock_managed_externally(db, inv):
+        from app.modules.parts.stock_models import StockMovementType
+        from app.modules.parts.stock_service import NegativeStockError, record_movement
+        for line in inv.lines:
+            if line.part_id is None or line.kind != InvoiceLineKind.part:
+                continue
+            qty = int(line.quantity)
+            if qty <= 0:
+                continue
+            try:
+                await record_movement(
+                    db,
+                    garage_id=garage_id,
+                    part_id=line.part_id,
+                    movement_type=StockMovementType.out,
+                    quantity=qty,
+                    ref_type="invoice",
+                    ref_id=str(inv.public_id),
+                    reason=f"Facture émise : {inv.doc_number}",
+                    created_by_user_id=user_id,
+                    allow_negative=False,
+                )
+            except NegativeStockError as e:
+                await db.rollback()
+                raise InvoiceStateError(
+                    f"Stock insuffisant pour « {line.description} » : "
+                    f"disponible {e.available}, demandé {e.requested}"
+                )
+
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
     logger.info("invoice_issued", invoice_id=invoice_id, doc_number=fresh.doc_number if fresh else None)
@@ -576,6 +623,7 @@ async def cancel_invoice(
         InvoiceStatus.issued, InvoiceStatus.partial, InvoiceStatus.paid
     )
     paid_amount = inv.paid_amount_minor or 0
+    external_stock = await _stock_managed_externally(db, inv)
 
     inv.status = InvoiceStatus.cancelled
     inv.version += 1
@@ -609,6 +657,28 @@ async def cancel_invoice(
                 reason="Auto-generated: invoice cancelled after payment.",
                 user_id=user_id,
             )
+
+        # Restore stock — only for invoices that deducted it themselves at issue time
+        if not external_stock:
+            from app.modules.parts.stock_models import StockMovementType
+            from app.modules.parts.stock_service import record_movement
+            for line in inv.lines:
+                if line.part_id is None or line.kind != InvoiceLineKind.part:
+                    continue
+                qty = int(line.quantity)
+                if qty <= 0:
+                    continue
+                await record_movement(
+                    db,
+                    garage_id=garage_id,
+                    part_id=line.part_id,
+                    movement_type=StockMovementType.in_,
+                    quantity=qty,
+                    ref_type="invoice",
+                    ref_id=str(inv.public_id),
+                    reason=f"Facture annulée : {inv.doc_number}",
+                    created_by_user_id=user_id,
+                )
 
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
