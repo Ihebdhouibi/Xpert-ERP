@@ -10,6 +10,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   Grid,
@@ -39,6 +43,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
+import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -55,6 +60,8 @@ import { vehiclesApi } from '../../lib/vehiclesApi'
 import { quotationApi } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { advancePaymentApi } from '../../lib/advancePaymentApi'
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -776,6 +783,12 @@ export function RepairOrderDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
 
+  // Advance payment dialog state
+  const [advanceOpen, setAdvanceOpen] = useState(false)
+  const [advanceAmount, setAdvanceAmount] = useState('')
+  const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>('cash')
+  const [advanceRef, setAdvanceRef] = useState('')
+
   // Add-labor inline form state
   const [showAddLabor, setShowAddLabor] = useState(false)
   const [laborType, setLaborType] = useState('')
@@ -828,6 +841,13 @@ export function RepairOrderDetailPage() {
     staleTime: 30_000,
   })
 
+  const { data: advancesData } = useQuery({
+    queryKey: ['advance-payments', 'customer', roForQueries?.customer_id],
+    queryFn: () => advancePaymentApi.listByCustomer(roForQueries!.customer_id),
+    enabled: !!roForQueries?.customer_id,
+    staleTime: 60_000,
+  })
+
   const createDevisMutation = useMutation({
     mutationFn: () => quotationApi.fromRepairOrder(publicId),
     onSuccess: (quotation) => {
@@ -878,6 +898,24 @@ export function RepairOrderDetailPage() {
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
   })
 
+  const createAdvanceMutation = useMutation({
+    mutationFn: () =>
+      advancePaymentApi.create({
+        customer_id: data!.customer_id,
+        repair_order_id: data!.int_id,
+        amount_minor: Math.round(parseFloat(advanceAmount) * 100),
+        payment_method: advanceMethod,
+        reference: advanceRef || null,
+      }),
+    onSuccess: () => {
+      success('Acompte enregistré avec succès.')
+      setAdvanceOpen(false)
+      setAdvanceAmount(''); setAdvanceMethod('cash'); setAdvanceRef('')
+      queryClient.invalidateQueries({ queryKey: ['advance-payments', 'customer', roForQueries?.customer_id] })
+    },
+    onError: () => toastError("Erreur lors de l'enregistrement de l'acompte."),
+  })
+
   const handleDelete = async () => {
     try {
       await repairOrderApi.remove(publicId)
@@ -919,6 +957,8 @@ export function RepairOrderDetailPage() {
   const currency = ro.estimated_cost_currency ?? 'EUR'
   const laborTotal = ro.labor_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
   const partsTotal = ro.part_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
+  const pendingAdvances = (advancesData?.items ?? []).filter(a => a.applied_to_invoice_id === null)
+  const pendingAdvancesTotal = pendingAdvances.reduce((s, a) => s + a.amount_minor, 0)
 
   return (
     <Box>
@@ -1446,6 +1486,27 @@ export function RepairOrderDetailPage() {
         <Grid item xs={12} md={4}>
           <Stack spacing={3} sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
 
+            {/* Pending advances banner */}
+            {pendingAdvancesTotal > 0 && (
+              <Card sx={{ border: '1px solid #BFDBFE', bgcolor: '#EFF6FF' }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                    <SavingsRoundedIcon sx={{ color: '#2563EB', fontSize: 20, mt: 0.25, flexShrink: 0 }} />
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={700} color="#1D4ED8">
+                        Acomptes disponibles
+                      </Typography>
+                      <Typography variant="body2" color="#1E40AF" mt={0.25}>
+                        Ce client a{' '}
+                        <strong>{formatMinor(pendingAdvancesTotal)}</strong>
+                        {' '}en acomptes non imputés — ils seront automatiquement déduits à l'émission de la facture.
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Status transition */}
             <PermissionGate permission="repair_order.transition">
               <Card>
@@ -1518,6 +1579,26 @@ export function RepairOrderDetailPage() {
               </PermissionGate>
             )}
 
+            {/* Record advance payment — available at any stage */}
+            <PermissionGate permission="deposit.record">
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Acompte
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<SavingsRoundedIcon />}
+                    onClick={() => setAdvanceOpen(true)}
+                    sx={{ textTransform: 'none', fontWeight: 700, borderColor: '#2563EB', color: '#2563EB', '&:hover': { borderColor: '#1D4ED8', bgcolor: '#EFF6FF' } }}
+                  >
+                    Enregistrer un acompte
+                  </Button>
+                </CardContent>
+              </Card>
+            </PermissionGate>
+
             {/* Status timeline */}
             <Card>
               <CardContent sx={{ p: 2.5 }}>
@@ -1531,6 +1612,56 @@ export function RepairOrderDetailPage() {
           </Stack>
         </Grid>
       </Grid>
+
+      {/* Advance payment creation dialog */}
+      <Dialog open={advanceOpen} onClose={() => setAdvanceOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Enregistrer un acompte</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} pt={1}>
+            <TextField
+              label="Montant (€)"
+              type="number"
+              fullWidth
+              value={advanceAmount}
+              onChange={e => setAdvanceAmount(e.target.value)}
+              inputProps={{ min: 0, step: '0.01' }}
+              helperText="Ex: 50.00"
+              autoFocus
+            />
+            <TextField
+              label="Mode de paiement"
+              select
+              fullWidth
+              value={advanceMethod}
+              onChange={e => setAdvanceMethod(e.target.value as PaymentMethod)}
+            >
+              {(Object.entries(PAYMENT_METHOD_LABELS) as [PaymentMethod, string][]).map(([v, l]) => (
+                <MenuItem key={v} value={v}>{l}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Référence (optionnel)"
+              fullWidth
+              value={advanceRef}
+              onChange={e => setAdvanceRef(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setAdvanceOpen(false)}>Annuler</Button>
+          <Button
+            variant="contained"
+            onClick={() => createAdvanceMutation.mutate()}
+            disabled={
+              createAdvanceMutation.isPending ||
+              !advanceAmount ||
+              parseFloat(advanceAmount) <= 0
+            }
+          >
+            {createAdvanceMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmDelete}

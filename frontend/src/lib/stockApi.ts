@@ -19,6 +19,8 @@ export interface StockLevel {
 export interface StockMovement {
   id: number
   part_id: number
+  part_name: string | null
+  sku_code: string | null
   garage_id: number
   type: StockMovementType
   quantity: number
@@ -33,6 +35,8 @@ export interface StockMovement {
 export interface LowStockAlert {
   id: number
   part_id: number
+  part_name: string | null
+  sku_code: string | null
   garage_id: number
   on_hand: number
   threshold: number
@@ -44,6 +48,8 @@ export interface LowStockAlert {
 
 export interface ValuationItem {
   part_id: number
+  part_name: string | null
+  sku_code: string | null
   on_hand: number
   avg_cost_minor: number
   total_value_minor: number

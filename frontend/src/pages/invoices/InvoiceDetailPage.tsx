@@ -55,6 +55,7 @@ import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPane
 import { AddInvoiceLineDialog } from '../../components/invoice/AddInvoiceLineDialog'
 import { CreateCreditNoteDialog } from '../../components/credit-note/CreateCreditNoteDialog'
 import { CreditNotesPanel } from '../../components/credit-note/CreditNotesPanel'
+import { advancePaymentApi } from '../../lib/advancePaymentApi'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -146,6 +147,12 @@ export function InvoiceDetailPage() {
     queryKey: ['invoice', publicId],
     queryFn: () => invoiceApi.get(publicId!),
     enabled: !!publicId,
+  })
+
+  const { data: appliedAdvances } = useQuery({
+    queryKey: ['advance-payments', 'invoice', invoice?.id],
+    queryFn: () => advancePaymentApi.listByInvoice(invoice!.id),
+    enabled: !!invoice?.id && invoice?.status !== 'draft',
   })
 
   const issueMutation = useMutation({
@@ -633,6 +640,19 @@ export function InvoiceDetailPage() {
                   {invoice.status !== 'draft' && (
                     <>
                       <Divider sx={{ my: 1 }} />
+                      {(appliedAdvances?.items ?? []).length > 0 && (
+                        <>
+                          {appliedAdvances!.items.map(adv => (
+                            <TotalRow
+                              key={adv.id}
+                              label={`Acompte${adv.reference ? ` (${adv.reference})` : ''}`}
+                              value={`− ${formatMinor(adv.applied_amount_minor ?? adv.amount_minor, invoice.currency)}`}
+                              color="primary.main"
+                            />
+                          ))}
+                          <Divider sx={{ my: 1 }} />
+                        </>
+                      )}
                       <TotalRow
                         label="Payé"
                         value={formatMinor(invoice.paid_amount_minor, invoice.currency)}

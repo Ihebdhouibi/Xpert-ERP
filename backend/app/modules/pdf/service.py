@@ -354,6 +354,53 @@ async def render_bon_de_retour_pdf(
         raise
 
 
+async def render_advance_payment_pdf(
+    db: AsyncSession, *, advance_id: int, garage_id: int
+) -> bytes:
+    """Fetch the advance payment from DB, render HTML receipt template, return PDF bytes."""
+    from app.modules.advance_payment import repository as advance_repo
+    from app.modules.payment.models import PaymentMethod
+
+    _PAYMENT_METHOD_LABELS: dict[PaymentMethod, str] = {
+        PaymentMethod.cash: "Espèces",
+        PaymentMethod.card: "Carte bancaire",
+        PaymentMethod.bank_transfer: "Virement bancaire",
+        PaymentMethod.cheque: "Chèque",
+        PaymentMethod.other: "Autre",
+    }
+
+    logger.info("render_advance_payment_pdf_start", advance_id=advance_id, garage_id=garage_id)
+    try:
+        advance = await advance_repo.get_by_id(db, advance_id, garage_id)
+        if advance is None:
+            raise ValueError(f"Advance payment {advance_id} not found")
+
+        customer = await customer_repo.get_by_id(db, garage_id, advance.customer_id)
+
+        settings = get_settings()
+        ctx: dict[str, Any] = {
+            **_garage_context(),
+            "doc": advance,
+            "customer": customer,
+            "payment_method_label": _PAYMENT_METHOD_LABELS.get(advance.payment_method, advance.payment_method.value),
+            "currency_symbol": settings.pdf_currency_symbol,
+        }
+
+        env = _get_jinja_env()
+        html_string = env.get_template("advance_payment.html").render(**ctx)
+        base_url = str(_TEMPLATES_DIR) + "/"
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes: bytes = await loop.run_in_executor(
+            None, _render_pdf_sync, html_string, base_url
+        )
+        logger.info("render_advance_payment_pdf_success", advance_id=advance_id, size_bytes=len(pdf_bytes))
+        return pdf_bytes
+    except Exception:
+        logger.exception("render_advance_payment_pdf_error", advance_id=advance_id, garage_id=garage_id)
+        raise
+
+
 async def render_invoice_pdf(
     db: AsyncSession, *, invoice_id: int, garage_id: int
 ) -> bytes:

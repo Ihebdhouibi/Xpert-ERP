@@ -117,6 +117,7 @@ class RepairOrderSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str  # public_id
+    int_id: int  # integer PK — for internal references (e.g. advance payment repair_order_id)
     customer_id: int
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
@@ -136,6 +137,7 @@ class RepairOrderSummary(BaseModel):
         if hasattr(data, "public_id"):
             return {
                 "id": str(data.public_id),
+                "int_id": data.id,
                 "customer_id": data.customer_id,
                 "vehicle_id": data.vehicle_id,
                 "description": data.description,
@@ -179,6 +181,7 @@ class RepairOrderDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: str  # public_id
+    int_id: int  # integer PK — for internal references (e.g. advance payment repair_order_id)
     customer_id: int
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
@@ -209,6 +212,7 @@ class RepairOrderDetail(BaseModel):
         if hasattr(data, "public_id"):
             return {
                 "id": str(data.public_id),
+                "int_id": data.id,
                 "customer_id": data.customer_id,
                 "vehicle_id": data.vehicle_id,
                 "description": data.description,
