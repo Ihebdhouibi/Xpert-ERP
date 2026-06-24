@@ -89,12 +89,19 @@ services:
       dockerfile: ../infra/Dockerfile.backend
     container_name: xpert_erp_api
     restart: unless-stopped
+    # Dev only: the image runs as non-root (uid 10001), but this compose mounts
+    # host dirs (../backend, ../logs) the host user owns, so the non-root user
+    # can't write logs/.pyc. Run the dev container as root. Production uses the
+    # image directly (no host mounts) and keeps the non-root user.
+    user: root
     logging: *default-logging
     env_file:
       - ../.env
     environment:
-      # Point to native host PostgreSQL; Redis stays in Docker
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-xpert}:${POSTGRES_PASSWORD:-rootadmin}@host.docker.internal:5432/${POSTGRES_DB:-xpert_erp}"
+      # Connect to the bundled db container on the compose network — that's where
+      # the data lives (host-mapped on 5433). host.docker.internal:5432 was wrong
+      # (no native Postgres there), which made the container crash on startup.
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-xpert}:${POSTGRES_PASSWORD:-xpert_dev_password}@db:5432/${POSTGRES_DB:-xpert_erp}"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0"
       # MinIO is reachable via the compose service name, not localhost, inside the container
       S3_ENDPOINT_URL: "http://minio:9000"
@@ -114,6 +121,8 @@ services:
       - ../backend:/app
       - ../logs:/app/logs
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       minio:
