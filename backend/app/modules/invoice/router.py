@@ -403,7 +403,20 @@ async def issue_invoice(
     except CreditLimitExceededError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Limite de crédit dépassée pour ce client. Solde actuel : {e.outstanding // 100} €, montant de la facture : {e.additional // 100} €, limite : {e.limit // 100} €.",
+            detail={
+                "error_code": "credit_limit_exceeded",
+                "customer_public_id": e.customer_public_id,
+                "doc_type": "invoice",
+                "outstanding": e.outstanding,
+                "limit": e.limit,
+                "additional": e.additional,
+                "message": (
+                    f"Limite de crédit dépassée. "
+                    f"Encours : {e.outstanding / 100:.2f} €, "
+                    f"Facture : {e.additional / 100:.2f} €, "
+                    f"Limite : {e.limit / 100:.2f} €."
+                ),
+            },
         )
 
 

@@ -56,6 +56,8 @@ import { AddInvoiceLineDialog } from '../../components/invoice/AddInvoiceLineDia
 import { CreateCreditNoteDialog } from '../../components/credit-note/CreateCreditNoteDialog'
 import { CreditNotesPanel } from '../../components/credit-note/CreditNotesPanel'
 import { advancePaymentApi } from '../../lib/advancePaymentApi'
+import { parseCreditLimitError, type CreditLimitExceededDetail } from '../../lib/creditOverrideApi'
+import { CreditLimitExceededDialog } from '../../components/credit/CreditLimitExceededDialog'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -120,6 +122,7 @@ export function InvoiceDetailPage() {
   const [lineDialogOpen, setLineDialogOpen] = useState(false)
   const [editLine, setEditLine] = useState<InvoiceLineOut | null>(null)
   const [deleteLineId, setDeleteLineId] = useState<number | null>(null)
+  const [creditLimitDetail, setCreditLimitDetail] = useState<CreditLimitExceededDetail | null>(null)
 
   const handlePdfPreview = async () => {
     if (!invoice) return
@@ -163,6 +166,11 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
     onError: (err: unknown) => {
+      const creditError = parseCreditLimitError(err)
+      if (creditError) {
+        setCreditLimitDetail(creditError)
+        return
+      }
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toastError(typeof detail === 'string' ? detail : 'Impossible d\'émettre la facture.')
     },
@@ -808,6 +816,13 @@ export function InvoiceDetailPage() {
           onSaved={handleLineSaved}
         />
       )}
+
+      <CreditLimitExceededDialog
+        open={creditLimitDetail !== null}
+        detail={creditLimitDetail}
+        documentPublicId={publicId ?? ''}
+        onClose={() => setCreditLimitDetail(null)}
+      />
     </Box>
   )
 }

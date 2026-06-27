@@ -53,6 +53,7 @@ import { BonRetourListPage } from './pages/bon-retour/BonRetourListPage'
 import { BonRetourCreatePage } from './pages/bon-retour/BonRetourCreatePage'
 import { BonRetourDetailPage } from './pages/bon-retour/BonRetourDetailPage'
 import { AvoirsFournisseursPage } from './pages/avoirs-fournisseurs/AvoirsFournisseursPage'
+import { CreditOverrideRequestsPage } from './pages/credit-overrides/CreditOverrideRequestsPage'
 
 export const router = createBrowserRouter(
   [
@@ -171,6 +172,7 @@ export const router = createBrowserRouter(
       { path: 'roles', element: <RolesPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
+      { path: 'credit-override-requests', element: <CreditOverrideRequestsPage /> },
 
       // Documents & OCR
       { path: 'documents', element: <DocumentsPage /> },

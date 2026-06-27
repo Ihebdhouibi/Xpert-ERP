@@ -21,6 +21,7 @@ from app.modules.delivery_note.schemas import (
     DeliveryNoteOut,
     DeliveryNoteUpdateRequest,
 )
+from app.modules.customer.credit_service import CreditLimitExceededError
 from app.modules.delivery_note.service import (
     DeliveryNoteNotFoundError,
     DeliveryNoteLineNotFoundError,
@@ -269,6 +270,24 @@ async def issue_delivery_note(
         raise HTTPException(status.HTTP_404_NOT_FOUND, _NOT_FOUND)
     except DeliveryNoteStateError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except CreditLimitExceededError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "credit_limit_exceeded",
+                "customer_public_id": e.customer_public_id,
+                "doc_type": "delivery_note",
+                "outstanding": e.outstanding,
+                "limit": e.limit,
+                "additional": e.additional,
+                "message": (
+                    f"Limite de crédit dépassée. "
+                    f"Encours : {e.outstanding / 100:.2f} €, "
+                    f"BL : {e.additional / 100:.2f} €, "
+                    f"Limite : {e.limit / 100:.2f} €."
+                ),
+            },
+        )
 
 
 @router.post(

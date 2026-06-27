@@ -22,6 +22,7 @@ import GroupRoundedIcon from '@mui/icons-material/GroupRounded'
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded'
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
+import CreditScoreRoundedIcon from '@mui/icons-material/CreditScoreRounded'
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
 import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded'
 import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
@@ -251,6 +252,12 @@ export const navSections: NavSection[] = [
         path: '/audit-logs',
         icon: HistoryRoundedIcon,
         permission: 'audit.read',
+      },
+      {
+        label: 'Dérogations de crédit',
+        path: '/credit-override-requests',
+        icon: CreditScoreRoundedIcon,
+        permission: 'credit.override.manage',
       },
     ],
   },

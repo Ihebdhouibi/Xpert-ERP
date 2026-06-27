@@ -24,6 +24,8 @@ import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import { deliveryNoteApi, DELIVERY_NOTE_STATUS_LABELS, DELIVERY_NOTE_LINE_KIND_LABELS } from '../../lib/deliveryNoteApi'
+import { parseCreditLimitError, type CreditLimitExceededDetail } from '../../lib/creditOverrideApi'
+import { CreditLimitExceededDialog } from '../../components/credit/CreditLimitExceededDialog'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -42,6 +44,7 @@ export function DeliveryNoteDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [creditLimitDetail, setCreditLimitDetail] = useState<CreditLimitExceededDetail | null>(null)
 
   const { data: dn, isLoading, isError } = useQuery({
     queryKey: ['delivery-note', publicId],
@@ -55,8 +58,16 @@ export function DeliveryNoteDetailPage() {
       await deliveryNoteApi.issue(publicId)
       await queryClient.invalidateQueries({ queryKey: ['delivery-note', publicId] })
       success('Bon de livraison émis')
-    } catch { toastError('Erreur lors de l\'émission.') }
-    finally { setActionLoading(false) }
+    } catch (err) {
+      const creditError = parseCreditLimitError(err)
+      if (creditError) {
+        setCreditLimitDetail(creditError)
+      } else {
+        toastError('Erreur lors de l\'émission.')
+      }
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const handleMarkDelivered = async () => {
@@ -368,6 +379,13 @@ export function DeliveryNoteDetailPage() {
         loading={actionLoading}
         onConfirm={handleCancel}
         onCancel={() => setConfirmCancel(false)}
+      />
+
+      <CreditLimitExceededDialog
+        open={creditLimitDetail !== null}
+        detail={creditLimitDetail}
+        documentPublicId={publicId}
+        onClose={() => setCreditLimitDetail(null)}
       />
     </Box>
   )

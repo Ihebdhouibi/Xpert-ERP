@@ -390,10 +390,26 @@ async def issue_delivery_note(
     if dn.status != DeliveryNoteStatus.draft:
         raise DeliveryNoteStateError("Only draft delivery notes can be issued.")
 
+    # Credit limit check (raises CreditLimitExceededError in block mode).
+    # Returns True when an admin override was consumed — we record this on the BL so
+    # the resulting invoice can skip its own credit check (same transaction, already approved).
+    issued_under_override = False
+    if dn.customer_id is not None:
+        from app.modules.customer.credit_service import check_credit_limit, CreditLimitExceededError
+        issued_under_override = await check_credit_limit(
+            db,
+            customer_id=dn.customer_id,
+            garage_id=garage_id,
+            additional_amount_minor=dn.total_minor,
+            doc_type="delivery_note",
+            source_document_public_id=dn.public_id,
+        )
+
     seq = await seq_service.next(db, garage_id=garage_id, doc_type="BL")
     dn.doc_number = seq.formatted
     dn.status = DeliveryNoteStatus.issued
     dn.issued_at = datetime.now(tz=timezone.utc)
+    dn.issued_under_override = issued_under_override
     dn.version += 1
     dn.updated_by = user_id
     await db.flush()

@@ -520,13 +520,29 @@ async def issue_invoice(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
-    # Credit limit check before issuing (raises CreditLimitExceededError in block mode)
+    # Credit limit check before issuing (raises CreditLimitExceededError in block mode).
+    # Skip if this invoice was converted from a BL that was already issued under an
+    # approved override — the admin's approval covers the full transaction.
     from app.modules.customer.credit_service import check_credit_limit, post_balance_event
     from app.core.config import get_settings
-    await check_credit_limit(
-        db, customer_id=inv.customer_id, garage_id=garage_id,
-        additional_amount_minor=inv.total_minor,
-    )
+    from sqlalchemy import select as _sa_select
+    from app.modules.delivery_note.models import DeliveryNote as _DN
+    _source_dn = (await db.execute(
+        _sa_select(_DN).where(_DN.invoice_id == inv.id).limit(1)
+    )).scalars().first()
+    if _source_dn and _source_dn.issued_under_override:
+        logger.info(
+            "credit_check_skipped_dn_override",
+            invoice_id=invoice_id,
+            source_dn_id=_source_dn.id,
+        )
+    else:
+        await check_credit_limit(
+            db, customer_id=inv.customer_id, garage_id=garage_id,
+            additional_amount_minor=inv.total_minor,
+            doc_type="invoice",
+            source_document_public_id=str(inv.public_id),
+        )
 
     seq = await seq_service.next(db, garage_id=garage_id, doc_type="INV")
     inv.doc_number = seq.formatted

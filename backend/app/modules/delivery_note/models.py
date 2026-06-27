@@ -77,6 +77,7 @@ class DeliveryNote(Base):
 
     issued_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    issued_under_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     # Totals in minor currency units (cents)
     subtotal_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
