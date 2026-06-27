@@ -166,7 +166,7 @@ async def list_mechanics(
 
     open_statuses = [
         ROStatus.created, ROStatus.diagnosis, ROStatus.in_repair,
-        ROStatus.paused_parts, ROStatus.paused_approval,
+        ROStatus.paused_parts,
     ]
     result: list[MechanicSummary] = []
     for uid, name in mechanics:

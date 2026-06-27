@@ -51,6 +51,7 @@ export interface DeliveryNoteOut {
   created_at: string
   updated_at: string
   lines: DeliveryNoteLineOut[]
+  customer_name: string | null
 }
 
 export interface DeliveryNoteListResponse {

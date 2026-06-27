@@ -481,7 +481,6 @@ interface SILineForm {
 
 function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSIDialogProps) {
   const { success } = useToast()
-  const [invoiceNumber, setInvoiceNumber] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
   const [linesForms, setLinesForms] = useState<SILineForm[]>([])
@@ -489,7 +488,6 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
 
   useEffect(() => {
     if (po && open) {
-      setInvoiceNumber('')
       setDueDate('')
       setNotes('')
       setFormError('')
@@ -512,7 +510,6 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
       return supplierInvoiceApi.create({
         supplier_public_id: po.supplier_public_id!,
         po_public_id: po.id,
-        number: invoiceNumber.trim(),
         due_date: dueDate || null,
         notes: notes.trim() || null,
         lines: linesForms.map((l) => ({
@@ -534,7 +531,6 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
 
   function handleSubmit() {
     setFormError('')
-    if (!invoiceNumber.trim()) { setFormError('Le numéro de facture est obligatoire.'); return }
     if (linesForms.length === 0) { setFormError('Aucune ligne à facturer (quantités reçues nulles).'); return }
     createMutation.mutate()
   }
@@ -548,13 +544,6 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
         <Stack spacing={2} mt={1}>
           {formError && <Alert severity="error">{formError}</Alert>}
           <Stack direction="row" spacing={2}>
-            <TextField
-              label="N° facture fournisseur"
-              value={invoiceNumber}
-              onChange={(e) => setInvoiceNumber(e.target.value)}
-              required
-              fullWidth
-            />
             <TextField
               label="Date d'échéance"
               value={dueDate}

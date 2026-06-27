@@ -340,6 +340,7 @@ async def delete_invoice(
 # ---------------------------------------------------------------------------
 
 def _build_line(invoice: Invoice, req: InvoiceLineCreateRequest) -> InvoiceLine:
+    from app.core.constants import TVA_PCT
     lt = _line_total(req.unit_price_minor, req.quantity, req.discount_percent)
     return InvoiceLine(
         invoice_id=invoice.id or 0,
@@ -349,7 +350,7 @@ def _build_line(invoice: Invoice, req: InvoiceLineCreateRequest) -> InvoiceLine:
         quantity=req.quantity,
         unit_price_minor=req.unit_price_minor,
         discount_percent=req.discount_percent,
-        vat_rate=req.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=lt,
     )
 
@@ -372,6 +373,7 @@ async def add_line(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
+    from app.core.constants import TVA_PCT
     line = InvoiceLine(
         invoice_id=inv.id,
         kind=request.kind,
@@ -380,7 +382,7 @@ async def add_line(
         quantity=request.quantity,
         unit_price_minor=request.unit_price_minor,
         discount_percent=request.discount_percent,
-        vat_rate=request.vat_rate,
+        vat_rate=TVA_PCT,
         line_total_minor=0,
     )
     await repo.add_line(db, line)
@@ -481,6 +483,23 @@ async def remove_line(
 # Status transitions
 # ---------------------------------------------------------------------------
 
+async def _stock_managed_externally(db: AsyncSession, inv: Invoice) -> bool:
+    """Return True if stock was already handled by a source document (BL or RO).
+
+    - Invoices from a Repair Order: stock committed at the in_repair transition.
+    - Invoices from a Bon de Livraison: stock deducted when the BL was issued.
+    Both cases must not trigger a second deduction here.
+    """
+    if inv.repair_order_id is not None:
+        return True
+    from sqlalchemy import select as _sa_select
+    from app.modules.delivery_note.models import DeliveryNote as _DN
+    linked = (await db.execute(
+        _sa_select(_DN.id).where(_DN.invoice_id == inv.id).limit(1)
+    )).scalar_one_or_none()
+    return linked is not None
+
+
 async def issue_invoice(
     db: AsyncSession,
     invoice_id: int,
@@ -501,13 +520,29 @@ async def issue_invoice(
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
-    # Credit limit check before issuing (raises CreditLimitExceededError in block mode)
+    # Credit limit check before issuing (raises CreditLimitExceededError in block mode).
+    # Skip if this invoice was converted from a BL that was already issued under an
+    # approved override — the admin's approval covers the full transaction.
     from app.modules.customer.credit_service import check_credit_limit, post_balance_event
     from app.core.config import get_settings
-    await check_credit_limit(
-        db, customer_id=inv.customer_id, garage_id=garage_id,
-        additional_amount_minor=inv.total_minor,
-    )
+    from sqlalchemy import select as _sa_select
+    from app.modules.delivery_note.models import DeliveryNote as _DN
+    _source_dn = (await db.execute(
+        _sa_select(_DN).where(_DN.invoice_id == inv.id).limit(1)
+    )).scalars().first()
+    if _source_dn and _source_dn.issued_under_override:
+        logger.info(
+            "credit_check_skipped_dn_override",
+            invoice_id=invoice_id,
+            source_dn_id=_source_dn.id,
+        )
+    else:
+        await check_credit_limit(
+            db, customer_id=inv.customer_id, garage_id=garage_id,
+            additional_amount_minor=inv.total_minor,
+            doc_type="invoice",
+            source_document_public_id=str(inv.public_id),
+        )
 
     seq = await seq_service.next(db, garage_id=garage_id, doc_type="INV")
     inv.doc_number = seq.formatted
@@ -538,6 +573,36 @@ async def issue_invoice(
         customer_id=inv.customer_id,
         garage_id=garage_id,
     )
+
+    # Deduct stock — only for invoices not already handled by a BL or RO
+    if not await _stock_managed_externally(db, inv):
+        from app.modules.parts.stock_models import StockMovementType
+        from app.modules.parts.stock_service import NegativeStockError, record_movement
+        for line in inv.lines:
+            if line.part_id is None or line.kind != InvoiceLineKind.part:
+                continue
+            qty = int(line.quantity)
+            if qty <= 0:
+                continue
+            try:
+                await record_movement(
+                    db,
+                    garage_id=garage_id,
+                    part_id=line.part_id,
+                    movement_type=StockMovementType.out,
+                    quantity=qty,
+                    ref_type="invoice",
+                    ref_id=str(inv.public_id),
+                    reason=f"Facture émise : {inv.doc_number}",
+                    created_by_user_id=user_id,
+                    allow_negative=False,
+                )
+            except NegativeStockError as e:
+                await db.rollback()
+                raise InvoiceStateError(
+                    f"Stock insuffisant pour « {line.description} » : "
+                    f"disponible {e.available}, demandé {e.requested}"
+                )
 
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
@@ -574,6 +639,7 @@ async def cancel_invoice(
         InvoiceStatus.issued, InvoiceStatus.partial, InvoiceStatus.paid
     )
     paid_amount = inv.paid_amount_minor or 0
+    external_stock = await _stock_managed_externally(db, inv)
 
     inv.status = InvoiceStatus.cancelled
     inv.version += 1
@@ -607,6 +673,28 @@ async def cancel_invoice(
                 reason="Auto-generated: invoice cancelled after payment.",
                 user_id=user_id,
             )
+
+        # Restore stock — only for invoices that deducted it themselves at issue time
+        if not external_stock:
+            from app.modules.parts.stock_models import StockMovementType
+            from app.modules.parts.stock_service import record_movement
+            for line in inv.lines:
+                if line.part_id is None or line.kind != InvoiceLineKind.part:
+                    continue
+                qty = int(line.quantity)
+                if qty <= 0:
+                    continue
+                await record_movement(
+                    db,
+                    garage_id=garage_id,
+                    part_id=line.part_id,
+                    movement_type=StockMovementType.in_,
+                    quantity=qty,
+                    ref_type="invoice",
+                    ref_id=str(inv.public_id),
+                    reason=f"Facture annulée : {inv.doc_number}",
+                    created_by_user_id=user_id,
+                )
 
     await db.commit()
     fresh = await repo.get_by_id(db, inv.id, garage_id)
@@ -764,6 +852,7 @@ async def create_invoice_from_delivery_notes(
         updated_by=user_id,
     )
 
+    from app.core.constants import TVA_PCT
     for dn in dns:
         for bl_line in dn.lines:
             invoice.lines.append(InvoiceLine(
@@ -774,7 +863,7 @@ async def create_invoice_from_delivery_notes(
                 quantity=bl_line.quantity,
                 unit_price_minor=bl_line.unit_price_minor,
                 discount_percent=Decimal("0"),
-                vat_rate=bl_line.vat_rate,
+                vat_rate=TVA_PCT,
                 line_total_minor=bl_line.line_total_minor,
             ))
 

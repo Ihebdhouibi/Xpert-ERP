@@ -99,6 +99,7 @@ class DeliveryNoteOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     lines: list[DeliveryNoteLineOut] = []
+    customer_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

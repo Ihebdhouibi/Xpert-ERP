@@ -1,7 +1,9 @@
 """Advance payment router."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.database import get_db
 from app.modules.rbac.dependencies import AuthUser, require_permission
@@ -15,6 +17,24 @@ from app.core.logging import get_logger
 
 router = APIRouter(tags=["advance-payments"])
 logger = get_logger("advance_payment.router")
+
+
+@router.get(
+    "/advance-payments",
+    response_model=AdvancePaymentListResponse,
+    dependencies=[require_permission("invoice.read")],
+)
+async def list_all_advance_payments(
+    current_user: AuthUser,
+    db=Depends(get_db),
+    status_filter: Optional[str] = Query(None, alias="status", pattern="^(pending|applied)$"),
+) -> AdvancePaymentListResponse:
+    """List all advance payments for the garage. Filter with ?status=pending or ?status=applied."""
+    return await service.list_all_advances(
+        db,
+        garage_id=current_user.garage_id,
+        status=status_filter,
+    )
 
 
 @router.post(
@@ -54,5 +74,23 @@ async def list_customer_advances(
     return await service.list_advances(
         db,
         customer_id=customer_id,
+        garage_id=current_user.garage_id,
+    )
+
+
+@router.get(
+    "/advance-payments/invoices/{invoice_id}",
+    response_model=AdvancePaymentListResponse,
+    dependencies=[require_permission("invoice.read")],
+)
+async def list_invoice_advances(
+    invoice_id: int,
+    current_user: AuthUser,
+    db=Depends(get_db),
+):
+    """List advance payments that were applied to a specific invoice."""
+    return await service.list_advances_by_invoice(
+        db,
+        invoice_id=invoice_id,
         garage_id=current_user.garage_id,
     )

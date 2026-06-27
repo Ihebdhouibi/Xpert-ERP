@@ -139,6 +139,21 @@ export const customerApi = {
     return data
   },
 
+  updateCreditLimit: async (
+    publicId: string,
+    creditLimitMinor: number,
+  ): Promise<CustomerDetail> => {
+    const { data } = await apiClient.post<CustomerDetail>(
+      `/customers/${publicId}/credit-limit`,
+      {
+        credit_limit_minor: creditLimitMinor,
+        credit_currency: 'EUR',
+        reason: 'Modification via la fiche client',
+      },
+    )
+    return data
+  },
+
   remove: async (publicId: string, reason?: string): Promise<void> => {
     await apiClient.delete(`/customers/${publicId}`, {
       params: reason ? { reason } : undefined,

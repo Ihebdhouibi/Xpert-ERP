@@ -21,7 +21,7 @@ class InvoiceLineCreateRequest(BaseModel):
     quantity: Decimal = Field(..., gt=0, decimal_places=3)
     unit_price_minor: int = Field(..., ge=0)
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100, decimal_places=2)
-    vat_rate: Decimal = Field(default=Decimal("0"), ge=0, le=100, decimal_places=2)
+    vat_rate: Decimal = Field(default=Decimal("20"), ge=0, le=100, decimal_places=2)
 
 
 class InvoiceLineUpdateRequest(BaseModel):

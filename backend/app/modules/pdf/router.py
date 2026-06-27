@@ -81,6 +81,36 @@ async def download_supplier_invoice_pdf(
 
 
 @router.get(
+    "/advance-payments/{advance_id}",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/pdf": {}}, "description": "PDF receipt"},
+        404: {"description": "Advance payment not found"},
+    },
+    dependencies=[require_permission("invoice.read")],
+)
+async def download_advance_payment_pdf(
+    advance_id: int,
+    current_user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        pdf_bytes = await pdf_service.render_advance_payment_pdf(
+            db, advance_id=advance_id, garage_id=current_user.garage_id
+        )
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Advance payment not found")
+
+    filename = f"recu-acompte-{advance_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get(
     "/credit-notes/{credit_note_id}",
     response_class=Response,
     responses={

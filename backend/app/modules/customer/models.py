@@ -90,6 +90,11 @@ class Customer(Base):
         Integer, nullable=False, default=0, server_default="0"
     )
 
+    # Tracks which credit threshold (80 or 90) was last notified to avoid spam.
+    last_notified_threshold: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )
+
     last_visit_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -208,4 +213,66 @@ class CustomerBalanceEvent(Base):
 
     __table_args__ = (
         Index("ix_customer_balance_event_customer_occurred", "customer_id", "occurred_at"),
+    )
+
+
+class OverrideStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class CreditOverrideRequest(Base):
+    """One override request per (customer, doc_type) attempt.
+
+    When a user tries to issue a document for a customer over their credit limit,
+    a request is created here. An admin then approves or rejects it.
+    Approval grants a time-limited window (expires_at) during which the user
+    may issue one document of doc_type for that customer.
+    """
+
+    __tablename__ = "credit_override_request"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    customer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requested_by_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    doc_type: Mapped[str] = mapped_column(String(30), nullable=False)  # "invoice" | "delivery_note"
+    source_document_public_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+
+    status: Mapped[OverrideStatus] = mapped_column(
+        Enum(OverrideStatus, name="override_status_enum"),
+        nullable=False,
+        default=OverrideStatus.pending,
+        server_default="pending",
+    )
+
+    approved_by_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    customer: Mapped[Customer] = relationship("Customer")
+
+    __table_args__ = (
+        Index("ix_credit_override_garage_customer", "garage_id", "customer_id"),
+        Index("ix_credit_override_garage_status", "garage_id", "status"),
     )

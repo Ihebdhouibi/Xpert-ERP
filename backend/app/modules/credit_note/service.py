@@ -241,13 +241,26 @@ async def list_credit_notes(
     page_size: int = 25,
     invoice_id: int | None = None,
 ) -> CreditNoteListResponse:
+    from sqlalchemy import select as sa_select
+    from app.modules.customer.models import Customer
+
     items, total = await repo.list_credit_notes(db, garage_id, page=page, page_size=page_size, invoice_id=invoice_id)
-    return CreditNoteListResponse(
-        items=[_build_cn_out(i) for i in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+
+    cust_ids = list({cn.invoice.customer_id for cn in items if getattr(cn, "invoice", None) and cn.invoice.customer_id})
+    customers_map: dict[int, str] = {}
+    if cust_ids:
+        res = await db.execute(sa_select(Customer).where(Customer.id.in_(cust_ids)))
+        customers_map = {c.id: c.full_name for c in res.scalars()}
+
+    out_items = []
+    for cn in items:
+        out = _build_cn_out(cn)
+        inv = getattr(cn, "invoice", None)
+        if inv and inv.customer_id:
+            out.customer_name = customers_map.get(inv.customer_id)
+        out_items.append(out)
+
+    return CreditNoteListResponse(items=out_items, total=total, page=page, page_size=page_size)
 
 
 # ---------------------------------------------------------------------------

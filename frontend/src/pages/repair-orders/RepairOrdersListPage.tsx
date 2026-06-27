@@ -137,7 +137,6 @@ const STATUS_FILTER_OPTIONS: Array<{ value: ROStatus | ''; label: string }> = [
   { value: 'diagnosis', label: 'Diagnostic' },
   { value: 'in_repair', label: 'En réparation' },
   { value: 'paused_parts', label: 'Attente pièces' },
-  { value: 'paused_approval', label: 'Attente accord' },
   { value: 'finished', label: 'Terminé' },
   { value: 'delivered', label: 'Livré' },
 ]

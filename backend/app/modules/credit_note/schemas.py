@@ -70,6 +70,7 @@ class CreditNoteOut(BaseModel):
     invoice_public_id: Optional[str] = None
     invoice_total_minor: int = 0
     invoice_paid_amount_minor: int = 0
+    customer_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

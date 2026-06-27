@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.modules.parts.models import Part
 from app.modules.purchase_order.models import PurchaseOrderStatus
 from app.modules.purchase_order.repository import PurchaseOrderRepository
 from app.modules.purchase_order.service import (
@@ -33,6 +34,16 @@ from app.core.logging import get_logger
 
 router = APIRouter(tags=["purchase-orders"])
 logger = get_logger("purchase_order.router")
+
+
+async def _enrich_part_names(db: AsyncSession, summary: "POSummary", po: Any) -> None:
+    part_ids = list({line.part_id for line in po.lines})
+    if not part_ids:
+        return
+    parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
+    parts_map = {p.id: p.name for p in parts_res.scalars()}
+    for line_resp, line_orm in zip(summary.lines, po.lines):
+        line_resp.part_name = parts_map.get(line_orm.part_id)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +218,9 @@ async def create_purchase_order(
         )
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except SupplierNotFoundForPOError:
         raise HTTPException(status_code=404, detail="Supplier not found")
     except PartNotFoundForPOError as e:
@@ -273,7 +286,9 @@ async def update_purchase_order(
         )
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except PONotFoundError:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     except POVersionConflictError as e:
@@ -306,7 +321,9 @@ async def send_purchase_order(
         po = await send_po(db, user.garage_id, public_id, body.version)
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except PONotFoundError:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     except POVersionConflictError as e:
@@ -340,7 +357,9 @@ async def receive_purchase_order(
         )
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except PONotFoundError:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     except POVersionConflictError as e:
@@ -369,7 +388,9 @@ async def cancel_purchase_order(
         po = await cancel_po(db, user.garage_id, public_id, body.version)
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except PONotFoundError:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     except POVersionConflictError as e:
@@ -432,7 +453,9 @@ async def create_po_from_low_stock_alert(
         )
         await db.commit()
         await db.refresh(po, ["lines"])
-        return POSummary.model_validate(po)
+        summary = POSummary.model_validate(po)
+        await _enrich_part_names(db, summary, po)
+        return summary
     except PONotFoundError:
         raise HTTPException(status_code=404, detail="Alert not found")
     except SupplierNotFoundForPOError:

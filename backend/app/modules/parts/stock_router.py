@@ -86,6 +86,8 @@ class StockLevelResponse(BaseModel):
 class StockMovementResponse(BaseModel):
     id: int
     part_id: int
+    part_name: Optional[str] = None
+    sku_code: Optional[str] = None
     garage_id: int
     type: str
     quantity: int
@@ -97,10 +99,12 @@ class StockMovementResponse(BaseModel):
     created_at: str
 
     @classmethod
-    def from_orm(cls, mv: StockMovement) -> StockMovementResponse:
+    def from_orm(cls, mv: StockMovement, part: Optional[Part] = None) -> StockMovementResponse:
         return cls(
             id=mv.id,
             part_id=mv.part_id,
+            part_name=part.name if part else None,
+            sku_code=part.sku_code if part else None,
             garage_id=mv.garage_id,
             type=mv.type.value,
             quantity=mv.quantity,
@@ -116,6 +120,8 @@ class StockMovementResponse(BaseModel):
 class LowStockAlertResponse(BaseModel):
     id: int
     part_id: int
+    part_name: Optional[str] = None
+    sku_code: Optional[str] = None
     garage_id: int
     on_hand: int
     threshold: int
@@ -125,10 +131,12 @@ class LowStockAlertResponse(BaseModel):
     created_at: str
 
     @classmethod
-    def from_orm(cls, alert: LowStockAlert) -> LowStockAlertResponse:
+    def from_orm(cls, alert: LowStockAlert, part: Optional[Part] = None) -> LowStockAlertResponse:
         return cls(
             id=alert.id,
             part_id=alert.part_id,
+            part_name=part.name if part else None,
+            sku_code=part.sku_code if part else None,
             garage_id=alert.garage_id,
             on_hand=alert.on_hand,
             threshold=alert.threshold,
@@ -141,6 +149,8 @@ class LowStockAlertResponse(BaseModel):
 
 class ValuationItemResponse(BaseModel):
     part_id: int
+    part_name: Optional[str] = None
+    sku_code: Optional[str] = None
     on_hand: int
     avg_cost_minor: int
     total_value_minor: int
@@ -365,6 +375,7 @@ async def list_all_movements(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[StockMovementResponse]:
+    from sqlalchemy import select
     movements = await StockRepository.list_movements(
         db, user.garage_id,
         ref_type=ref_type,
@@ -372,7 +383,15 @@ async def list_all_movements(
         limit=limit,
         offset=offset,
     )
-    return [StockMovementResponse.from_orm(m) for m in movements]
+    part_ids = list({m.part_id for m in movements})
+    parts_map: dict[int, Part] = {}
+    if part_ids:
+        result = await db.execute(
+            select(Part).where(Part.id.in_(part_ids), Part.garage_id == user.garage_id)
+        )
+        for p in result.scalars().all():
+            parts_map[p.id] = p
+    return [StockMovementResponse.from_orm(m, parts_map.get(m.part_id)) for m in movements]
 
 
 @router.get(
@@ -386,10 +405,19 @@ async def list_alerts(
     status: Optional[str] = None,
     include_resolved: bool = False,
 ) -> list[LowStockAlertResponse]:
+    from sqlalchemy import select
     alerts = await StockRepository.list_alerts(
         db, user.garage_id, status=status, include_resolved=include_resolved
     )
-    return [LowStockAlertResponse.from_orm(a) for a in alerts]
+    part_ids = list({a.part_id for a in alerts})
+    parts_map: dict[int, Part] = {}
+    if part_ids:
+        result = await db.execute(
+            select(Part).where(Part.id.in_(part_ids), Part.garage_id == user.garage_id)
+        )
+        for p in result.scalars().all():
+            parts_map[p.id] = p
+    return [LowStockAlertResponse.from_orm(a, parts_map.get(a.part_id)) for a in alerts]
 
 
 @router.post(
@@ -440,10 +468,21 @@ async def get_stock_valuation(
     db: AsyncSession = Depends(get_db),
 ) -> ValuationReportResponse:
     """Return current inventory valuation: per-part on_hand × avg_cost."""
+    from sqlalchemy import select
     levels = await StockRepository.list_levels(db, user.garage_id)
+    part_ids = [l.part_id for l in levels]
+    parts_map: dict[int, Part] = {}
+    if part_ids:
+        result = await db.execute(
+            select(Part).where(Part.id.in_(part_ids), Part.garage_id == user.garage_id)
+        )
+        for p in result.scalars().all():
+            parts_map[p.id] = p
     items = [
         ValuationItemResponse(
             part_id=level.part_id,
+            part_name=parts_map[level.part_id].name if level.part_id in parts_map else None,
+            sku_code=parts_map[level.part_id].sku_code if level.part_id in parts_map else None,
             on_hand=level.on_hand,
             avg_cost_minor=level.avg_cost_minor,
             total_value_minor=level.on_hand * level.avg_cost_minor,

@@ -26,7 +26,6 @@ STATUS_LABELS_FR = {
     "finished": "Terminé",
     "delivered": "Livré",
     "paused_parts": "En attente de pièces",
-    "paused_approval": "En attente d'approbation",
 }
 
 _TEMPLATE_DIR = Path(__file__).parent

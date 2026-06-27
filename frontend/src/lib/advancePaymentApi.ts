@@ -13,6 +13,7 @@ export interface AdvancePaymentOut {
   reference: string | null
   notes: string | null
   applied_to_invoice_id: number | null
+  applied_invoice_public_id: string | null
   applied_at: string | null
   applied_amount_minor: number | null
   created_by: number | null
@@ -41,5 +42,13 @@ export const advancePaymentApi = {
 
   listByCustomer(customerId: number): Promise<AdvancePaymentListResponse> {
     return apiClient.get(`/advance-payments/customers/${customerId}`).then(r => r.data)
+  },
+
+  listAll(params?: { status?: 'pending' | 'applied' }): Promise<AdvancePaymentListResponse> {
+    return apiClient.get('/advance-payments', { params }).then(r => r.data)
+  },
+
+  listByInvoice(invoiceId: number): Promise<AdvancePaymentListResponse> {
+    return apiClient.get(`/advance-payments/invoices/${invoiceId}`).then(r => r.data)
   },
 }

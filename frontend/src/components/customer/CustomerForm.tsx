@@ -72,6 +72,7 @@ interface CustomerFormProps {
   mode: 'create' | 'edit'
   initial?: CustomerDetail
   submitting?: boolean
+  creditLimitEditable?: boolean
   onSubmit: (
     payload: CustomerCreateInput & { status?: CustomerStatus },
   ) => Promise<void> | void
@@ -99,6 +100,7 @@ export function CustomerForm({
   mode,
   initial,
   submitting,
+  creditLimitEditable = true,
   onSubmit,
   onCancel,
 }: CustomerFormProps) {
@@ -263,7 +265,12 @@ export function CustomerForm({
             inputProps={{ min: 0, step: 1 }}
             {...register('credit_limit_eur', { valueAsNumber: true })}
             error={!!errors.credit_limit_eur}
-            helperText={errors.credit_limit_eur?.message}
+            helperText={
+              !creditLimitEditable
+                ? 'Seul un administrateur peut modifier la limite de crédit.'
+                : errors.credit_limit_eur?.message
+            }
+            disabled={!creditLimitEditable}
           />
         </Grid>
 

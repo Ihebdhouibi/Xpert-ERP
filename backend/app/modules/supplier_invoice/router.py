@@ -60,7 +60,7 @@ class SILineInput(BaseModel):
 class SICreateRequest(BaseModel):
     supplier_public_id: str
     po_public_id: str
-    number: str = Field(..., min_length=1)
+    number: Optional[str] = None
     lines: list[SILineInput] = Field(..., min_length=1)
     received_at: Optional[datetime] = None
     due_date: Optional[date] = None
@@ -118,6 +118,7 @@ class SISummary(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    supplier_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -305,6 +306,9 @@ async def list_supplier_invoices(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> SIListResponse:
+    from sqlalchemy import select as sa_select
+    from app.modules.supplier.models import Supplier
+
     items, total = await SupplierInvoiceRepository.list(
         db,
         garage_id=user.garage_id,
@@ -313,12 +317,19 @@ async def list_supplier_invoices(
         page=page,
         page_size=page_size,
     )
-    return SIListResponse(
-        items=[SISummary.model_validate(si) for si in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    supplier_ids = list({si.supplier_id for si in items if si.supplier_id})
+    suppliers_map: dict[int, str] = {}
+    if supplier_ids:
+        sup_res = await db.execute(sa_select(Supplier).where(Supplier.id.in_(supplier_ids)))
+        suppliers_map = {s.id: s.name for s in sup_res.scalars()}
+
+    summaries = []
+    for si in items:
+        s = SISummary.model_validate(si)
+        s.supplier_name = suppliers_map.get(si.supplier_id) if si.supplier_id else None
+        summaries.append(s)
+
+    return SIListResponse(items=summaries, total=total, page=page, page_size=page_size)
 
 
 @router.post(

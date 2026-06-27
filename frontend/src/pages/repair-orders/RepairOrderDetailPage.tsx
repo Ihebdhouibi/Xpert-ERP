@@ -10,6 +10,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   Grid,
@@ -39,6 +43,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
+import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
 import {
   repairOrderApi,
@@ -55,6 +60,8 @@ import { vehiclesApi } from '../../lib/vehiclesApi'
 import { quotationApi } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { advancePaymentApi } from '../../lib/advancePaymentApi'
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -95,13 +102,12 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
 
 // Status accent colors — same palette as Kanban for consistency
 const STATUS_ACCENT_COLOR: Record<string, string> = {
-  created:         '#94A3B8',
-  diagnosis:       '#3B82F6',
-  in_repair:       '#F59E0B',
-  finished:        '#10B981',
-  delivered:       '#6366F1',
-  paused_parts:    '#EF4444',
-  paused_approval: '#F97316',
+  created:      '#94A3B8',
+  diagnosis:    '#3B82F6',
+  in_repair:    '#F59E0B',
+  finished:     '#10B981',
+  delivered:    '#6366F1',
+  paused_parts: '#EF4444',
 }
 
 // ─── Status transition ───────────────────────────────────────────────────────
@@ -141,7 +147,7 @@ function StatusTransitionPanel({
 
   // Step preconditions that must be met before moving forward.
   const blockReason = (target: ROStatus): string | null => {
-    if (ro.status === 'diagnosis' && target === 'paused_approval') {
+    if (ro.status === 'diagnosis' && target === 'in_repair') {
       if (!ro.assigned_user_id) return "Affectez d'abord un mécanicien."
       if (!ro.assignment_accepted_at) return "L'affectation doit être acceptée."
       if (!ro.diagnosis_completed_at) return 'Terminez le diagnostic.'
@@ -777,6 +783,12 @@ export function RepairOrderDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
 
+  // Advance payment dialog state
+  const [advanceOpen, setAdvanceOpen] = useState(false)
+  const [advanceAmount, setAdvanceAmount] = useState('')
+  const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>('cash')
+  const [advanceRef, setAdvanceRef] = useState('')
+
   // Add-labor inline form state
   const [showAddLabor, setShowAddLabor] = useState(false)
   const [laborType, setLaborType] = useState('')
@@ -784,12 +796,11 @@ export function RepairOrderDetailPage() {
 
   // Add-part inline form state
   const [showAddPart, setShowAddPart] = useState(false)
-  const [partSearch, setPartSearch] = useState('')
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [partQty, setPartQty] = useState('')
   const [partUnitPrice, setPartUnitPrice] = useState('')
   const [partRemise, setPartRemise] = useState('0')
-  const [partTva, setPartTva] = useState('20')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -816,11 +827,25 @@ export function RepairOrderDetailPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: partsResults } = useQuery({
-    queryKey: ['parts-search', partSearch],
-    queryFn: () => partsApi.list({ search: partSearch || undefined, page_size: 30, status: 'active' }),
+  const { data: partCategories } = useQuery({
+    queryKey: ['part-categories'],
+    queryFn: () => partsApi.listCategories(),
     enabled: showAddPart,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: partsResults } = useQuery({
+    queryKey: ['parts-by-category', selectedCategoryId],
+    queryFn: () => partsApi.list({ category_id: selectedCategoryId!, page_size: 200, status: 'active' }),
+    enabled: showAddPart && selectedCategoryId !== null,
     staleTime: 30_000,
+  })
+
+  const { data: advancesData } = useQuery({
+    queryKey: ['advance-payments', 'customer', roForQueries?.customer_id],
+    queryFn: () => advancePaymentApi.listByCustomer(roForQueries!.customer_id),
+    enabled: !!roForQueries?.customer_id,
+    staleTime: 60_000,
   })
 
   const createDevisMutation = useMutation({
@@ -862,16 +887,33 @@ export function RepairOrderDetailPage() {
       unit_cost_minor: Math.round(parseFloat(partUnitPrice) * 100),
       part_public_id: selectedPart!.id,
       remise_pct: parseFloat(partRemise) || 0,
-      tva_pct: parseFloat(partTva) || 0,
     }),
     onSuccess: () => {
       success('Pièce ajoutée.')
       setShowAddPart(false)
-      setSelectedPart(null); setPartSearch(''); setPartQty('')
-      setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
+      setSelectedPart(null); setSelectedCategoryId(null); setPartQty('')
+      setPartUnitPrice(''); setPartRemise('0')
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
+  })
+
+  const createAdvanceMutation = useMutation({
+    mutationFn: () =>
+      advancePaymentApi.create({
+        customer_id: data!.customer_id,
+        repair_order_id: data!.int_id,
+        amount_minor: Math.round(parseFloat(advanceAmount) * 100),
+        payment_method: advanceMethod,
+        reference: advanceRef || null,
+      }),
+    onSuccess: () => {
+      success('Acompte enregistré avec succès.')
+      setAdvanceOpen(false)
+      setAdvanceAmount(''); setAdvanceMethod('cash'); setAdvanceRef('')
+      queryClient.invalidateQueries({ queryKey: ['advance-payments', 'customer', roForQueries?.customer_id] })
+    },
+    onError: () => toastError("Erreur lors de l'enregistrement de l'acompte."),
   })
 
   const handleDelete = async () => {
@@ -915,6 +957,8 @@ export function RepairOrderDetailPage() {
   const currency = ro.estimated_cost_currency ?? 'EUR'
   const laborTotal = ro.labor_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
   const partsTotal = ro.part_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
+  const pendingAdvances = (advancesData?.items ?? []).filter(a => a.applied_to_invoice_id === null)
+  const pendingAdvancesTotal = pendingAdvances.reduce((s, a) => s + a.amount_minor, 0)
 
   return (
     <Box>
@@ -1098,7 +1142,7 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={laborTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(laborTotal, currency)}
                   </Typography>
-                  {ro.status === 'diagnosis' && (
+                  {(ro.status === 'diagnosis' || ro.status === 'in_repair') && (
                     <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddLabor(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
@@ -1109,9 +1153,20 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddLabor && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1} alignItems="center">
                     <TextField size="small" label="Désignation" value={laborType} onChange={e => setLaborType(e.target.value)} sx={{ flex: 2 }} />
-                    <TextField size="small" label="Prix (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
+                    <TextField size="small" label="Prix HT (€)" type="number" value={laborRate} onChange={e => setLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ flex: 1 }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
+                      <Typography variant="caption" color="text.secondary">TVA&nbsp;20%</Typography>
+                    </Box>
+                    {laborRate && parseFloat(laborRate) > 0 && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                        <Typography variant="body2" color="text.secondary">Total TTC :&nbsp;</Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {(parseFloat(laborRate) * 1.20).toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    )}
                   </Stack>
                   <Stack direction="row" spacing={1}>
                     <Button size="small" onClick={() => setShowAddLabor(false)} sx={{ textTransform: 'none' }}>Annuler</Button>
@@ -1136,8 +1191,9 @@ export function RepairOrderDetailPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Désignation</TableCell>
-                      <TableCell align="right">Prix</TableCell>
-                      <TableCell align="right">Montant</TableCell>
+                      <TableCell align="right">Prix HT</TableCell>
+                      <TableCell align="right">TVA</TableCell>
+                      <TableCell align="right">Montant TTC</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1150,12 +1206,15 @@ export function RepairOrderDetailPage() {
                           <Typography variant="body2">{formatMinor(line.rate_minor, currency)}</Typography>
                         </TableCell>
                         <TableCell align="right">
+                          <Typography variant="body2" color="text.secondary">20%</Typography>
+                        </TableCell>
+                        <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
-                      <TableCell colSpan={2}>
+                      <TableCell colSpan={3}>
                         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           Total MO
                         </Typography>
@@ -1184,7 +1243,7 @@ export function RepairOrderDetailPage() {
                   <Typography variant="body2" fontWeight={700} color={partsTotal > 0 ? 'text.primary' : 'text.disabled'}>
                     {formatMinor(partsTotal, currency)}
                   </Typography>
-                  {ro.status === 'diagnosis' && (
+                  {ro.status === 'paused_parts' && (
                     <PermissionGate permission="repair_order.transition">
                       <Button size="small" variant="outlined" startIcon={<AddRoundedIcon />} onClick={() => setShowAddPart(v => !v)} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}>
                         Ajouter
@@ -1195,36 +1254,54 @@ export function RepairOrderDetailPage() {
               </Stack>
               {showAddPart && (
                 <Box sx={{ px: 3, pb: 2 }}>
-                  {/* Row 1: part search (full width, separate so dropdown never covers other fields) */}
-                  <Autocomplete
-                    sx={{ mb: 1 }}
-                    size="small"
-                    options={partsResults?.items ?? []}
-                    getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
-                    filterOptions={(x) => x}
-                    inputValue={partSearch}
-                    onInputChange={(_, val) => { setPartSearch(val); setSelectedPart(null) }}
-                    value={selectedPart}
-                    onChange={(_, val) => {
-                      setSelectedPart(val)
-                      setPartQty('1')
-                      setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
-                    }}
-                    noOptionsText={partSearch.length < 1 ? 'Tapez pour rechercher…' : 'Aucun résultat'}
-                    renderOption={(props, option) => (
-                      <Box component="li" {...props} key={option.int_id}>
-                        <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
-                          <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
-                          <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
-                            Stock : {option.stock_on_hand}
-                          </Typography>
-                        </Stack>
-                      </Box>
-                    )}
-                    renderInput={(params) => (
-                      <TextField {...params} label="Rechercher une pièce" placeholder="SKU ou nom…" />
-                    )}
-                  />
+                  {/* Step 1 — category */}
+                  <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                    <InputLabel>Catégorie</InputLabel>
+                    <Select
+                      label="Catégorie"
+                      value={selectedCategoryId ?? ''}
+                      onChange={(e) => {
+                        setSelectedCategoryId(e.target.value === '' ? null : Number(e.target.value))
+                        setSelectedPart(null)
+                        setPartQty('')
+                        setPartUnitPrice('')
+                      }}
+                    >
+                      <MenuItem value=""><em>— Sélectionner une catégorie —</em></MenuItem>
+                      {(partCategories ?? []).map(cat => (
+                        <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {/* Step 2 — part (only after category chosen) */}
+                  {selectedCategoryId !== null && (
+                    <Autocomplete
+                      sx={{ mb: 1 }}
+                      size="small"
+                      options={partsResults?.items ?? []}
+                      getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
+                      value={selectedPart}
+                      onChange={(_, val) => {
+                        setSelectedPart(val)
+                        setPartQty('1')
+                        setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
+                      }}
+                      noOptionsText={partsResults ? 'Aucune pièce dans cette catégorie' : 'Chargement…'}
+                      renderOption={(props, option) => (
+                        <Box component="li" {...props} key={option.int_id}>
+                          <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
+                            <Typography variant="body2">{option.sku_code} — {option.name}</Typography>
+                            <Typography variant="caption" color={option.stock_on_hand > 0 ? 'success.main' : 'error.main'}>
+                              Stock : {option.stock_on_hand}
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Pièce" placeholder="Rechercher dans la catégorie…" />
+                      )}
+                    />
+                  )}
                   {/* Row 2: qty, price, remise, tva — always visible below dropdown */}
                   <Stack direction="row" spacing={1} mb={1} flexWrap="wrap">
                     <TextField
@@ -1243,9 +1320,8 @@ export function RepairOrderDetailPage() {
                       label="Prix unit. (€)"
                       type="number"
                       value={partUnitPrice}
-                      onChange={e => setPartUnitPrice(e.target.value)}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      sx={{ width: 130 }}
+                      inputProps={{ min: 0, step: 0.01, readOnly: true }}
+                      sx={{ width: 130, '& .MuiInputBase-input': { bgcolor: 'action.hover', cursor: 'default' } }}
                       helperText=" "
                       disabled={!selectedPart}
                     />
@@ -1260,31 +1336,20 @@ export function RepairOrderDetailPage() {
                       helperText=" "
                       disabled={!selectedPart}
                     />
-                    <TextField
-                      size="small"
-                      label="TVA (%)"
-                      type="number"
-                      value={partTva}
-                      InputProps={{ readOnly: true }}
-                      inputProps={{ style: {} }}
-                      sx={{
-                        width: 110,
-                        '& .MuiInputBase-root': { bgcolor: 'action.hover', cursor: 'default' },
-                        '& input': { color: 'text.secondary' },
-                      }}
-                      helperText=" "
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', px: 1, pb: '20px', minWidth: 80 }}>
+                      <Typography variant="caption" color="text.secondary">TVA&nbsp;20%</Typography>
+                    </Box>
                     {selectedPart && partQty && partUnitPrice && (
                       <Box sx={{ display: 'flex', alignItems: 'center', pb: '20px' }}>
                         <Typography variant="body2" color="text.secondary">
-                          Total :&nbsp;
+                          Total TTC :&nbsp;
                         </Typography>
                         <Typography variant="body2" fontWeight={700}>
                           {(
                             parseInt(partQty, 10) *
                             parseFloat(partUnitPrice) *
                             (1 - (parseFloat(partRemise) || 0) / 100) *
-                            (1 + (parseFloat(partTva) || 0) / 100)
+                            1.20
                           ).toFixed(2)} €
                         </Typography>
                       </Box>
@@ -1295,8 +1360,8 @@ export function RepairOrderDetailPage() {
                       size="small"
                       onClick={() => {
                         setShowAddPart(false)
-                        setSelectedPart(null); setPartSearch(''); setPartQty('')
-                        setPartUnitPrice(''); setPartRemise('0'); setPartTva('20')
+                        setSelectedPart(null); setSelectedCategoryId(null); setPartQty('')
+                        setPartUnitPrice(''); setPartRemise('0')
                       }}
                       sx={{ textTransform: 'none' }}
                     >
@@ -1421,6 +1486,27 @@ export function RepairOrderDetailPage() {
         <Grid item xs={12} md={4}>
           <Stack spacing={3} sx={{ position: { md: 'sticky' }, top: { md: 24 } }}>
 
+            {/* Pending advances banner */}
+            {pendingAdvancesTotal > 0 && (
+              <Card sx={{ border: '1px solid #BFDBFE', bgcolor: '#EFF6FF' }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                    <SavingsRoundedIcon sx={{ color: '#2563EB', fontSize: 20, mt: 0.25, flexShrink: 0 }} />
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight={700} color="#1D4ED8">
+                        Acomptes disponibles
+                      </Typography>
+                      <Typography variant="body2" color="#1E40AF" mt={0.25}>
+                        Ce client a{' '}
+                        <strong>{formatMinor(pendingAdvancesTotal)}</strong>
+                        {' '}en acomptes non imputés — ils seront automatiquement déduits à l'émission de la facture.
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Status transition */}
             <PermissionGate permission="repair_order.transition">
               <Card>
@@ -1493,6 +1579,26 @@ export function RepairOrderDetailPage() {
               </PermissionGate>
             )}
 
+            {/* Record advance payment — available at any stage */}
+            <PermissionGate permission="deposit.record">
+              <Card>
+                <CardContent sx={{ p: 2.5 }}>
+                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Acompte
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<SavingsRoundedIcon />}
+                    onClick={() => setAdvanceOpen(true)}
+                    sx={{ textTransform: 'none', fontWeight: 700, borderColor: '#2563EB', color: '#2563EB', '&:hover': { borderColor: '#1D4ED8', bgcolor: '#EFF6FF' } }}
+                  >
+                    Enregistrer un acompte
+                  </Button>
+                </CardContent>
+              </Card>
+            </PermissionGate>
+
             {/* Status timeline */}
             <Card>
               <CardContent sx={{ p: 2.5 }}>
@@ -1506,6 +1612,56 @@ export function RepairOrderDetailPage() {
           </Stack>
         </Grid>
       </Grid>
+
+      {/* Advance payment creation dialog */}
+      <Dialog open={advanceOpen} onClose={() => setAdvanceOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Enregistrer un acompte</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} pt={1}>
+            <TextField
+              label="Montant (€)"
+              type="number"
+              fullWidth
+              value={advanceAmount}
+              onChange={e => setAdvanceAmount(e.target.value)}
+              inputProps={{ min: 0, step: '0.01' }}
+              helperText="Ex: 50.00"
+              autoFocus
+            />
+            <TextField
+              label="Mode de paiement"
+              select
+              fullWidth
+              value={advanceMethod}
+              onChange={e => setAdvanceMethod(e.target.value as PaymentMethod)}
+            >
+              {(Object.entries(PAYMENT_METHOD_LABELS) as [PaymentMethod, string][]).map(([v, l]) => (
+                <MenuItem key={v} value={v}>{l}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Référence (optionnel)"
+              fullWidth
+              value={advanceRef}
+              onChange={e => setAdvanceRef(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="outlined" onClick={() => setAdvanceOpen(false)}>Annuler</Button>
+          <Button
+            variant="contained"
+            onClick={() => createAdvanceMutation.mutate()}
+            disabled={
+              createAdvanceMutation.isPending ||
+              !advanceAmount ||
+              parseFloat(advanceAmount) <= 0
+            }
+          >
+            {createAdvanceMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmDelete}

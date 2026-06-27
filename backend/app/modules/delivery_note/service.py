@@ -24,6 +24,8 @@ from app.modules.delivery_note.schemas import (
     DeliveryNoteOut,
     DeliveryNoteUpdateRequest,
 )
+from app.modules.parts.stock_models import StockMovementType
+from app.modules.parts.stock_service import NegativeStockError, record_movement
 from app.modules.sequence import service as seq_service
 
 logger = get_logger("delivery_note.service")
@@ -208,16 +210,26 @@ async def list_delivery_notes(
     page: int = 1,
     page_size: int = 25,
 ) -> DeliveryNoteListResponse:
+    from sqlalchemy import select as sa_select
+    from app.modules.customer.models import Customer
+
     items, total = await repo.list_delivery_notes(
         db, garage_id, customer_id=customer_id, status=status,
         available_for_invoice=available_for_invoice, page=page, page_size=page_size
     )
-    return DeliveryNoteListResponse(
-        items=[DeliveryNoteOut.model_validate(d) for d in items],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    cust_ids = list({d.customer_id for d in items})
+    customers_map: dict[int, str] = {}
+    if cust_ids:
+        res = await db.execute(sa_select(Customer).where(Customer.id.in_(cust_ids)))
+        customers_map = {c.id: c.full_name for c in res.scalars()}
+
+    out_items = []
+    for d in items:
+        out = DeliveryNoteOut.model_validate(d)
+        out.customer_name = customers_map.get(d.customer_id)
+        out_items.append(out)
+
+    return DeliveryNoteListResponse(items=out_items, total=total, page=page, page_size=page_size)
 
 
 async def update_delivery_note(
@@ -371,20 +383,66 @@ async def remove_line(
 async def issue_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int, *, user_id: int
 ) -> DeliveryNoteOut:
-    """Assign a document number and lock the delivery note."""
+    """Assign a document number, lock the delivery note, and deduct stock."""
     dn = await repo.get_by_public_id(db, public_id, garage_id)
     if not dn:
         raise DeliveryNoteNotFoundError(public_id)
     if dn.status != DeliveryNoteStatus.draft:
         raise DeliveryNoteStateError("Only draft delivery notes can be issued.")
 
+    # Credit limit check (raises CreditLimitExceededError in block mode).
+    # Returns True when an admin override was consumed — we record this on the BL so
+    # the resulting invoice can skip its own credit check (same transaction, already approved).
+    issued_under_override = False
+    if dn.customer_id is not None:
+        from app.modules.customer.credit_service import check_credit_limit, CreditLimitExceededError
+        issued_under_override = await check_credit_limit(
+            db,
+            customer_id=dn.customer_id,
+            garage_id=garage_id,
+            additional_amount_minor=dn.total_minor,
+            doc_type="delivery_note",
+            source_document_public_id=dn.public_id,
+        )
+
     seq = await seq_service.next(db, garage_id=garage_id, doc_type="BL")
     dn.doc_number = seq.formatted
     dn.status = DeliveryNoteStatus.issued
     dn.issued_at = datetime.now(tz=timezone.utc)
+    dn.issued_under_override = issued_under_override
     dn.version += 1
     dn.updated_by = user_id
     await db.flush()
+
+    # Deduct stock for every catalogued part line
+    for line in dn.lines:
+        if line.part_id is None:
+            continue
+        if line.kind not in (DeliveryNoteLineKind.part, DeliveryNoteLineKind.accessory):
+            continue
+        qty = int(line.quantity)
+        if qty <= 0:
+            continue
+        try:
+            await record_movement(
+                db,
+                garage_id=garage_id,
+                part_id=line.part_id,
+                movement_type=StockMovementType.out,
+                quantity=qty,
+                ref_type="delivery_note",
+                ref_id=dn.public_id,
+                reason=f"BL émis : {dn.doc_number}",
+                created_by_user_id=user_id,
+                allow_negative=False,
+            )
+        except NegativeStockError as e:
+            await db.rollback()
+            raise DeliveryNoteStateError(
+                f"Stock insuffisant pour « {line.description} » : "
+                f"disponible {e.available}, demandé {e.requested}"
+            )
+
     await db.commit()
     fresh = await repo.get_by_id(db, dn.id, garage_id)
     logger.info("delivery_note_issued", dn_id=dn.id, doc_number=dn.doc_number, garage_id=garage_id)
@@ -415,20 +473,45 @@ async def mark_delivered(
 async def cancel_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int, *, user_id: int
 ) -> DeliveryNoteOut:
-    """Cancel a draft or issued delivery note."""
+    """Cancel a draft or issued delivery note, reversing stock if already issued."""
     dn = await repo.get_by_public_id(db, public_id, garage_id)
     if not dn:
         raise DeliveryNoteNotFoundError(public_id)
     if dn.status not in (DeliveryNoteStatus.draft, DeliveryNoteStatus.issued):
         raise DeliveryNoteStateError("Only draft or issued delivery notes can be cancelled.")
 
+    was_issued = dn.status == DeliveryNoteStatus.issued
+
     dn.status = DeliveryNoteStatus.cancelled
     dn.version += 1
     dn.updated_by = user_id
     await db.flush()
+
+    # Restore stock for every part line whose stock was deducted at issue time
+    if was_issued:
+        for line in dn.lines:
+            if line.part_id is None:
+                continue
+            if line.kind not in (DeliveryNoteLineKind.part, DeliveryNoteLineKind.accessory):
+                continue
+            qty = int(line.quantity)
+            if qty <= 0:
+                continue
+            await record_movement(
+                db,
+                garage_id=garage_id,
+                part_id=line.part_id,
+                movement_type=StockMovementType.in_,
+                quantity=qty,
+                ref_type="delivery_note",
+                ref_id=dn.public_id,
+                reason=f"BL annulé : {dn.doc_number}",
+                created_by_user_id=user_id,
+            )
+
     await db.commit()
     fresh = await repo.get_by_id(db, dn.id, garage_id)
-    logger.info("delivery_note_cancelled", dn_id=dn.id, garage_id=garage_id)
+    logger.info("delivery_note_cancelled", dn_id=dn.id, was_issued=was_issued, garage_id=garage_id)
     return DeliveryNoteOut.model_validate(fresh)
 
 

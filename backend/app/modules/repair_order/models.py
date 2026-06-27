@@ -33,18 +33,16 @@ class ROStatus(str, enum.Enum):
     finished = "finished"
     delivered = "delivered"
     paused_parts = "paused_parts"
-    paused_approval = "paused_approval"
 
 
 # State machine: allowed transitions from each status
 ALLOWED_TRANSITIONS: dict[ROStatus, set[ROStatus]] = {
-    ROStatus.created: {ROStatus.diagnosis, ROStatus.paused_approval},
-    ROStatus.diagnosis: {ROStatus.in_repair, ROStatus.paused_parts, ROStatus.paused_approval, ROStatus.created},
-    ROStatus.in_repair: {ROStatus.finished, ROStatus.paused_parts, ROStatus.paused_approval, ROStatus.diagnosis},
-    ROStatus.finished: {ROStatus.delivered, ROStatus.paused_approval, ROStatus.in_repair},
+    ROStatus.created: {ROStatus.diagnosis},
+    ROStatus.diagnosis: {ROStatus.in_repair, ROStatus.paused_parts, ROStatus.created},
+    ROStatus.in_repair: {ROStatus.finished, ROStatus.paused_parts, ROStatus.diagnosis},
+    ROStatus.finished: {ROStatus.delivered, ROStatus.in_repair},
     ROStatus.delivered: set(),
-    ROStatus.paused_parts: {ROStatus.in_repair, ROStatus.diagnosis, ROStatus.paused_approval},
-    ROStatus.paused_approval: {ROStatus.finished, ROStatus.in_repair},
+    ROStatus.paused_parts: {ROStatus.in_repair, ROStatus.diagnosis},
 }
 
 
@@ -142,6 +140,7 @@ class ROLaborLine(Base):
     labor_type: Mapped[str] = mapped_column(String(100), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     rate_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tva_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=20.0)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

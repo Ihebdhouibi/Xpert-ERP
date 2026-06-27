@@ -33,6 +33,7 @@ class AdvancePaymentOut(BaseModel):
     reference: Optional[str]
     notes: Optional[str]
     applied_to_invoice_id: Optional[int]
+    applied_invoice_public_id: Optional[str] = None
     applied_at: Optional[datetime]
     applied_amount_minor: Optional[int]
     created_by: Optional[int]

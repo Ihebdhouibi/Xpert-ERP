@@ -20,6 +20,7 @@ export interface SILine {
 export interface SupplierInvoice {
   id: string
   supplier_id: number
+  supplier_name: string | null
   purchase_order_id: number
   number: string
   status: SIStatus
@@ -55,7 +56,7 @@ export interface SILineInput {
 export interface SICreatePayload {
   supplier_public_id: string
   po_public_id: string
-  number: string
+  number?: string
   lines: SILineInput[]
   received_at?: string | null
   due_date?: string | null

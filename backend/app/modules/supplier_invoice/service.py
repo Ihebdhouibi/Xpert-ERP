@@ -113,18 +113,33 @@ async def _resolve_po(db: AsyncSession, garage_id: int, po_public_id: str):  # t
 # ---------------------------------------------------------------------------
 
 
+async def _generate_si_number(db: AsyncSession, garage_id: int) -> str:
+    from sqlalchemy import func as sa_func, extract, select as sa_select
+    year = datetime.now(timezone.utc).year
+    count_res = await db.execute(
+        sa_select(sa_func.count(SupplierInvoice.id)).where(
+            SupplierInvoice.garage_id == garage_id,
+            extract("year", SupplierInvoice.created_at) == year,
+        )
+    )
+    seq = (count_res.scalar() or 0) + 1
+    return f"FAC-{year}-{seq:05d}"
+
+
 async def create_supplier_invoice(
     db: AsyncSession,
     garage_id: int,
     supplier_public_id: str,
     po_public_id: str,
-    number: str,
+    number: Optional[str],
     lines_data: list[dict],
     received_at: Optional[datetime] = None,
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
     user_id: Optional[int] = None,
 ) -> SupplierInvoice:
+    if not number:
+        number = await _generate_si_number(db, garage_id)
     logger.info("create_supplier_invoice_start", po_public_id=po_public_id, garage_id=garage_id)
     if not lines_data:
         raise SIInvalidTransitionError("A supplier invoice must have at least one line")

@@ -140,24 +140,76 @@ async def apply_advances_to_invoice(
     return total_applied
 
 
+async def _enrich_advances(
+    db: AsyncSession,
+    advances: list,
+    garage_id: int,
+) -> list[AdvancePaymentOut]:
+    """Resolve customer names and invoice public_ids for a list of advance ORM objects."""
+    from sqlalchemy import select as sa_select
+    from app.modules.customer.models import Customer
+    from app.modules.invoice.models import Invoice
+
+    items = [AdvancePaymentOut.model_validate(a) for a in advances]
+
+    # Batch-fetch distinct customers
+    customer_ids = list({a.customer_id for a in advances})
+    if customer_ids:
+        cust_result = await db.execute(
+            sa_select(Customer.id, Customer.full_name, Customer.company_name)
+            .where(Customer.id.in_(customer_ids), Customer.garage_id == garage_id)
+        )
+        cust_map: dict[int, str] = {}
+        for cid, full_name, company_name in cust_result:
+            cust_map[cid] = f"{full_name} ({company_name})" if company_name else full_name
+        for it in items:
+            it.customer_name = cust_map.get(it.customer_id)
+
+    # Batch-fetch invoice public_ids for applied advances
+    invoice_ids = list({a.applied_to_invoice_id for a in advances if a.applied_to_invoice_id})
+    if invoice_ids:
+        inv_result = await db.execute(
+            sa_select(Invoice.id, Invoice.public_id)
+            .where(Invoice.id.in_(invoice_ids), Invoice.garage_id == garage_id)
+        )
+        inv_map: dict[int, str] = {iid: pub for iid, pub in inv_result}
+        for it in items:
+            if it.applied_to_invoice_id:
+                it.applied_invoice_public_id = inv_map.get(it.applied_to_invoice_id)
+
+    return items
+
+
 async def list_advances(
     db: AsyncSession,
     *,
     customer_id: int,
     garage_id: int,
 ) -> AdvancePaymentListResponse:
-    from app.modules.customer import repository as customer_repo
-
     advances = await repo.list_by_customer(db, customer_id, garage_id)
-    items = [AdvancePaymentOut.model_validate(a) for a in advances]
-    # All advances belong to the same customer — resolve the display name once.
-    customer = await customer_repo.get_by_id(db, garage_id, customer_id)
-    if customer:
-        name = (
-            f"{customer.full_name} ({customer.company_name})"
-            if customer.company_name
-            else customer.full_name
-        )
-        for it in items:
-            it.customer_name = name
+    items = await _enrich_advances(db, advances, garage_id)
+    return AdvancePaymentListResponse(items=items, total=len(items))
+
+
+async def list_all_advances(
+    db: AsyncSession,
+    *,
+    garage_id: int,
+    status: str | None = None,
+) -> AdvancePaymentListResponse:
+    """List all advance payments for the garage with optional status filter."""
+    advances = await repo.list_all_by_garage(db, garage_id, status=status)
+    items = await _enrich_advances(db, advances, garage_id)
+    return AdvancePaymentListResponse(items=items, total=len(items))
+
+
+async def list_advances_by_invoice(
+    db: AsyncSession,
+    *,
+    invoice_id: int,
+    garage_id: int,
+) -> AdvancePaymentListResponse:
+    """List advances applied to a specific invoice."""
+    advances = await repo.list_by_invoice(db, invoice_id, garage_id)
+    items = await _enrich_advances(db, advances, garage_id)
     return AdvancePaymentListResponse(items=items, total=len(items))

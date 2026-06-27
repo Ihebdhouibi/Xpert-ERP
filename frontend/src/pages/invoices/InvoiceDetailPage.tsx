@@ -55,6 +55,9 @@ import { PaymentHistoryPanel } from '../../components/invoice/PaymentHistoryPane
 import { AddInvoiceLineDialog } from '../../components/invoice/AddInvoiceLineDialog'
 import { CreateCreditNoteDialog } from '../../components/credit-note/CreateCreditNoteDialog'
 import { CreditNotesPanel } from '../../components/credit-note/CreditNotesPanel'
+import { advancePaymentApi } from '../../lib/advancePaymentApi'
+import { parseCreditLimitError, type CreditLimitExceededDetail } from '../../lib/creditOverrideApi'
+import { CreditLimitExceededDialog } from '../../components/credit/CreditLimitExceededDialog'
 
 const LINE_KIND_LABELS: Record<InvoiceLineKind, string> = {
   labor: "Main d'œuvre",
@@ -119,6 +122,7 @@ export function InvoiceDetailPage() {
   const [lineDialogOpen, setLineDialogOpen] = useState(false)
   const [editLine, setEditLine] = useState<InvoiceLineOut | null>(null)
   const [deleteLineId, setDeleteLineId] = useState<number | null>(null)
+  const [creditLimitDetail, setCreditLimitDetail] = useState<CreditLimitExceededDetail | null>(null)
 
   const handlePdfPreview = async () => {
     if (!invoice) return
@@ -148,6 +152,12 @@ export function InvoiceDetailPage() {
     enabled: !!publicId,
   })
 
+  const { data: appliedAdvances } = useQuery({
+    queryKey: ['advance-payments', 'invoice', invoice?.id],
+    queryFn: () => advancePaymentApi.listByInvoice(invoice!.id),
+    enabled: !!invoice?.id && invoice?.status !== 'draft',
+  })
+
   const issueMutation = useMutation({
     mutationFn: () => invoiceApi.issue(publicId!, invoice!.version),
     onSuccess: () => {
@@ -156,6 +166,11 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
     onError: (err: unknown) => {
+      const creditError = parseCreditLimitError(err)
+      if (creditError) {
+        setCreditLimitDetail(creditError)
+        return
+      }
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toastError(typeof detail === 'string' ? detail : 'Impossible d\'émettre la facture.')
     },
@@ -633,6 +648,19 @@ export function InvoiceDetailPage() {
                   {invoice.status !== 'draft' && (
                     <>
                       <Divider sx={{ my: 1 }} />
+                      {(appliedAdvances?.items ?? []).length > 0 && (
+                        <>
+                          {appliedAdvances!.items.map(adv => (
+                            <TotalRow
+                              key={adv.id}
+                              label={`Acompte${adv.reference ? ` (${adv.reference})` : ''}`}
+                              value={`− ${formatMinor(adv.applied_amount_minor ?? adv.amount_minor, invoice.currency)}`}
+                              color="primary.main"
+                            />
+                          ))}
+                          <Divider sx={{ my: 1 }} />
+                        </>
+                      )}
                       <TotalRow
                         label="Payé"
                         value={formatMinor(invoice.paid_amount_minor, invoice.currency)}
@@ -788,6 +816,13 @@ export function InvoiceDetailPage() {
           onSaved={handleLineSaved}
         />
       )}
+
+      <CreditLimitExceededDialog
+        open={creditLimitDetail !== null}
+        detail={creditLimitDetail}
+        documentPublicId={publicId ?? ''}
+        onClose={() => setCreditLimitDetail(null)}
+      />
     </Box>
   )
 }

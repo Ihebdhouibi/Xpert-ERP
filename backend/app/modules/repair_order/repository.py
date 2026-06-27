@@ -151,6 +151,7 @@ class RepairOrderRepository:
         rate_minor: int,
         amount_minor: int,
         created_by_user_id: int | None = None,
+        tva_pct: float = 20.0,
     ) -> ROLaborLine:
         """Add a labor line to a repair order."""
         line = ROLaborLine(
@@ -158,6 +159,7 @@ class RepairOrderRepository:
             labor_type=labor_type,
             duration_minutes=duration_minutes,
             rate_minor=rate_minor,
+            tva_pct=tva_pct,
             amount_minor=amount_minor,
             created_by_user_id=created_by_user_id,
         )

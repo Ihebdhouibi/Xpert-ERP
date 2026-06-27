@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
   Button,
@@ -14,15 +15,21 @@ import {
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import CreditCardRoundedIcon from '@mui/icons-material/CreditCardRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import PendingRoundedIcon from '@mui/icons-material/PendingRounded'
+import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import axios from 'axios'
 import { advancePaymentApi, type AdvancePaymentOut, type AdvancePaymentListResponse } from '../../lib/advancePaymentApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -39,8 +46,35 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
+type StatusFilter = 'all' | 'pending' | 'applied'
+
 function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
+  const navigate = useNavigate()
   const applied = ap.applied_to_invoice_id != null
+  const { error: toastError } = useToast()
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const handlePdf = async () => {
+    setPdfLoading(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      const response = await axios.get(
+        `/api/v1/pdf/advance-payments/${ap.id}`,
+        {
+          responseType: 'blob',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      )
+      const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      toastError('Impossible de générer le reçu PDF.')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   return (
     <Card>
       <CardContent sx={{ p: 2.5 }}>
@@ -63,7 +97,7 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
             </Box>
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>
-                Client #{ap.customer_id}
+                {ap.customer_name ?? `Client #${ap.customer_id}`}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {new Date(ap.paid_at).toLocaleDateString('fr-FR')} · {PAYMENT_METHOD_LABELS[ap.payment_method]}
@@ -93,11 +127,39 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
         {applied && ap.applied_amount_minor != null && (
           <>
             <Divider sx={{ my: 1 }} />
-            <Typography variant="caption" color="text.secondary">
-              Imputé sur facture #{ap.applied_to_invoice_id} — {formatMinor(ap.applied_amount_minor)}
-            </Typography>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="caption" color="text.secondary">
+                Imputé — {formatMinor(ap.applied_amount_minor)}
+              </Typography>
+              {ap.applied_invoice_public_id && (
+                <Button
+                  size="small"
+                  variant="text"
+                  endIcon={<OpenInNewRoundedIcon sx={{ fontSize: 13 }} />}
+                  onClick={() => navigate(`/invoices/${ap.applied_invoice_public_id}`)}
+                  sx={{ p: 0, minWidth: 0, fontWeight: 600, fontSize: '0.75rem', color: 'primary.main' }}
+                >
+                  Voir la facture
+                </Button>
+              )}
+            </Stack>
           </>
         )}
+        <Divider sx={{ my: 1 }} />
+        <Stack direction="row" justifyContent="flex-end">
+          <Tooltip title="Reçu PDF">
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<PictureAsPdfRoundedIcon sx={{ fontSize: 14 }} />}
+              onClick={handlePdf}
+              disabled={pdfLoading}
+              sx={{ fontSize: '0.75rem', py: 0.25 }}
+            >
+              {pdfLoading ? 'Génération…' : 'Reçu'}
+            </Button>
+          </Tooltip>
+        </Stack>
       </CardContent>
     </Card>
   )
@@ -105,39 +167,61 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
 
 export function AdvancePaymentsPage() {
   const { success, error } = useToast()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const [lookupCustomerId, setLookupCustomerId] = useState<number | null>(null)
-  const [advances, setAdvances] = useState<AdvancePaymentOut[]>([])
+  const [filterCustomerId, setFilterCustomerId] = useState<number | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
 
-  const { refetch } = useQuery({
-    queryKey: ['advance-payments', lookupCustomerId],
-    queryFn: () => advancePaymentApi.listByCustomer(Number(lookupCustomerId)),
-    enabled: typeof lookupCustomerId === 'number',
-    onSuccess: (data: AdvancePaymentListResponse) => setAdvances(data.items),
+  // Global list (all garage advances by default)
+  const { data: allData } = useQuery({
+    queryKey: ['advance-payments', 'all', statusFilter],
+    queryFn: () => advancePaymentApi.listAll(statusFilter !== 'all' ? { status: statusFilter } : undefined),
+    enabled: filterCustomerId === null,
+  })
+
+  // Customer-scoped list when customer filter is active
+  const { data: customerData } = useQuery({
+    queryKey: ['advance-payments', 'customer', filterCustomerId],
+    queryFn: () => advancePaymentApi.listByCustomer(Number(filterCustomerId)),
+    enabled: filterCustomerId !== null,
   } as Parameters<typeof useQuery>[0])
+
+  const advances: AdvancePaymentOut[] = filterCustomerId !== null
+    ? (customerData as AdvancePaymentListResponse | undefined)?.items ?? []
+    : (allData as AdvancePaymentListResponse | undefined)?.items ?? []
+
+  const filteredAdvances = filterCustomerId !== null && statusFilter !== 'all'
+    ? advances.filter(a =>
+        statusFilter === 'pending'
+          ? a.applied_to_invoice_id === null
+          : a.applied_to_invoice_id !== null
+      )
+    : advances
 
   const { control, handleSubmit, reset, setValue, formState: { isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { payment_method: 'cash' },
   })
 
-  const onSubmit = async (values: FormValues) => {
-    try {
-      await advancePaymentApi.create({
+  const createMutation = useMutation({
+    mutationFn: (values: FormValues) =>
+      advancePaymentApi.create({
         customer_id: values.customer_id,
         amount_minor: Math.round(values.amount_euros * 100),
         payment_method: values.payment_method,
         reference: values.reference || null,
         notes: values.notes || null,
-      })
+      }),
+    onSuccess: () => {
       success('Avance enregistrée avec succès.')
       reset({ payment_method: 'cash' })
       setOpen(false)
-      void refetch()
-    } catch {
-      error('Erreur lors de l\'enregistrement de l\'avance.')
-    }
-  }
+      queryClient.invalidateQueries({ queryKey: ['advance-payments'] })
+    },
+    onError: () => error("Erreur lors de l'enregistrement de l'avance."),
+  })
+
+  const pendingCount = (allData as AdvancePaymentListResponse | undefined)?.items.filter(a => !a.applied_to_invoice_id).length ?? 0
 
   return (
     <Box>
@@ -151,18 +235,36 @@ export function AdvancePaymentsPage() {
         }
       />
 
-      {/* Customer lookup */}
-      <Box mb={3} maxWidth={360}>
-        <CustomerAutocomplete
-          value={lookupCustomerId}
-          onChange={id => setLookupCustomerId(id)}
-          label="Filtrer par client"
-        />
-      </Box>
+      {/* Filters bar */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3} alignItems={{ sm: 'center' }}>
+        <Box sx={{ maxWidth: 320, flex: 1 }}>
+          <CustomerAutocomplete
+            value={filterCustomerId}
+            onChange={id => setFilterCustomerId(id)}
+            label="Filtrer par client"
+          />
+        </Box>
+        <ToggleButtonGroup
+          size="small"
+          value={statusFilter}
+          exclusive
+          onChange={(_, v) => { if (v) setStatusFilter(v) }}
+        >
+          <ToggleButton value="all" sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}>
+            Tous
+          </ToggleButton>
+          <ToggleButton value="pending" sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}>
+            Disponibles{pendingCount > 0 && ` (${pendingCount})`}
+          </ToggleButton>
+          <ToggleButton value="applied" sx={{ textTransform: 'none', fontWeight: 600, px: 2 }}>
+            Imputés
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
 
-      {advances.length > 0 ? (
+      {filteredAdvances.length > 0 ? (
         <Stack spacing={2}>
-          {advances.map(ap => <AdvanceCard key={ap.id} ap={ap} />)}
+          {filteredAdvances.map(ap => <AdvanceCard key={ap.id} ap={ap} />)}
         </Stack>
       ) : (
         <Card>
@@ -172,7 +274,9 @@ export function AdvancePaymentsPage() {
               Aucune avance
             </Typography>
             <Typography variant="body2" color="text.disabled" mt={0.5}>
-              Sélectionnez un client pour voir ses avances, ou enregistrez-en une nouvelle.
+              {filterCustomerId
+                ? 'Ce client n\'a aucune avance pour ce filtre.'
+                : 'Enregistrez une nouvelle avance client.'}
             </Typography>
           </CardContent>
         </Card>
@@ -234,7 +338,11 @@ export function AdvancePaymentsPage() {
         </DialogContent>
         <DialogActions>
           <Button variant="outlined" onClick={() => setOpen(false)}>Annuler</Button>
-          <Button variant="contained" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+          <Button
+            variant="contained"
+            onClick={handleSubmit(v => createMutation.mutate(v))}
+            disabled={isSubmitting || createMutation.isPending}
+          >
             Enregistrer
           </Button>
         </DialogActions>

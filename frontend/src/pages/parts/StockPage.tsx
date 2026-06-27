@@ -414,7 +414,7 @@ function MovementsTab() {
   }
 
   if (movQ.isLoading) {
-    return <Table size="small"><TableHead><TableRow>{['Date','Type','Part ID','Qté','Coût unit.','Réf.','Raison'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={6} /></TableBody></Table>
+    return <Table size="small"><TableHead><TableRow>{['Date','Type','Pièce','Qté','Coût unit.','Réf.','Raison'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={6} /></TableBody></Table>
   }
 
   return (
@@ -423,7 +423,7 @@ function MovementsTab() {
         <TableRow>
           <TableCell>Date</TableCell>
           <TableCell>Type</TableCell>
-          <TableCell>Part ID</TableCell>
+          <TableCell>Pièce</TableCell>
           <TableCell align="right">Qté</TableCell>
           <TableCell align="right">Coût unit.</TableCell>
           <TableCell>Réf.</TableCell>
@@ -445,7 +445,10 @@ function MovementsTab() {
                 color={TYPE_COLOR[m.type]}
               />
             </TableCell>
-            <TableCell>#{m.part_id}</TableCell>
+            <TableCell>
+              <Typography variant="body2" fontWeight={500}>{m.part_name ?? `#${m.part_id}`}</Typography>
+              {m.sku_code && <Typography variant="caption" color="text.secondary">{m.sku_code}</Typography>}
+            </TableCell>
             <TableCell align="right">
               {m.type === 'out' || m.type === 'release' ? '-' : '+'}
               {Math.abs(m.quantity)}
@@ -497,7 +500,7 @@ function AlertsTab() {
   const alerts = alertsQ.data ?? []
 
   if (alertsQ.isLoading) {
-    return <Table size="small"><TableHead><TableRow>{['Date','Part ID','Stock','Seuil','Réappro.','Statut','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={4} /></TableBody></Table>
+    return <Table size="small"><TableHead><TableRow>{['Date','Pièce','Stock','Seuil','Réappro.','Statut','Actions'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={7} rows={4} /></TableBody></Table>
   }
 
   return (
@@ -512,7 +515,7 @@ function AlertsTab() {
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
-              <TableCell>Part ID</TableCell>
+              <TableCell>Pièce</TableCell>
               <TableCell align="right">Stock</TableCell>
               <TableCell align="right">Seuil</TableCell>
               <TableCell align="right">Réappro. suggéré</TableCell>
@@ -528,7 +531,10 @@ function AlertsTab() {
                     {new Date(a.created_at).toLocaleString('fr-FR')}
                   </Typography>
                 </TableCell>
-                <TableCell>#{a.part_id}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={500}>{a.part_name ?? `#${a.part_id}`}</Typography>
+                  {a.sku_code && <Typography variant="caption" color="text.secondary">{a.sku_code}</Typography>}
+                </TableCell>
                 <TableCell align="right">
                   <Typography variant="body2" color="error" fontWeight={700}>
                     {a.on_hand}
@@ -592,7 +598,7 @@ function ValuationTab() {
   })
 
   if (valQ.isLoading) {
-    return <Table size="small"><TableHead><TableRow>{['Part ID','En stock','Coût moyen','Valeur totale'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={4} rows={5} /></TableBody></Table>
+    return <Table size="small"><TableHead><TableRow>{['Pièce','En stock','Coût moyen','Valeur totale'].map(h => <TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody><TableLoadingSkeleton cols={4} rows={5} /></TableBody></Table>
   }
 
   const data = valQ.data
@@ -611,7 +617,7 @@ function ValuationTab() {
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>Part ID</TableCell>
+            <TableCell>Pièce</TableCell>
             <TableCell align="right">En stock</TableCell>
             <TableCell align="right">Coût moyen</TableCell>
             <TableCell align="right">Valeur totale</TableCell>
@@ -627,7 +633,10 @@ function ValuationTab() {
           ) : (
             data.items.map((item) => (
               <TableRow key={item.part_id} hover>
-                <TableCell>#{item.part_id}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={500}>{item.part_name ?? `#${item.part_id}`}</Typography>
+                  {item.sku_code && <Typography variant="caption" color="text.secondary">{item.sku_code}</Typography>}
+                </TableCell>
                 <TableCell align="right">{item.on_hand}</TableCell>
                 <TableCell align="right">{money(item.avg_cost_minor)}</TableCell>
                 <TableCell align="right">

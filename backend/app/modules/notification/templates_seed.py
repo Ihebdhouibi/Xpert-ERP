@@ -69,6 +69,41 @@ TRIGGER_CATALOG: list[dict] = [
         "type": "event",
         "channels": ["email", "sms"],
     },
+    {
+        "code": "credit_limit_80",
+        "label": "Encours 80 %",
+        "description": "Notification interne quand l'encours client atteint 80 % de la limite de crédit.",
+        "type": "event",
+        "channels": ["in_app"],
+    },
+    {
+        "code": "credit_limit_90",
+        "label": "Encours 90 %",
+        "description": "Notification interne quand l'encours client atteint 90 % de la limite de crédit.",
+        "type": "event",
+        "channels": ["in_app"],
+    },
+    {
+        "code": "credit_override_requested",
+        "label": "Dérogation crédit demandée",
+        "description": "Notification admin quand un utilisateur demande une dérogation de limite de crédit.",
+        "type": "event",
+        "channels": ["in_app"],
+    },
+    {
+        "code": "credit_override_approved",
+        "label": "Dérogation crédit approuvée",
+        "description": "Notification utilisateur quand l'admin approuve sa demande de dérogation.",
+        "type": "event",
+        "channels": ["in_app"],
+    },
+    {
+        "code": "credit_override_rejected",
+        "label": "Dérogation crédit refusée",
+        "description": "Notification utilisateur quand l'admin refuse sa demande de dérogation.",
+        "type": "event",
+        "channels": ["in_app"],
+    },
 ]
 
 # ---------------------------------------------------------------------------

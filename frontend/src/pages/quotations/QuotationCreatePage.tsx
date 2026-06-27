@@ -505,6 +505,8 @@ export function QuotationCreatePage() {
                     const lineVat = parseFloat(String(line.vat_rate ?? 0)) || 0
                     const lineBase = lineUnitMinor * lineQty * (1 - lineDisc / 100)
                     const lineTotal = lineBase * (1 + lineVat / 100)
+                    const partStock = isPart ? (line._selectedPart?.stock_on_hand ?? null) : null
+                    const isOverPartStock = partStock !== null && lineQty > partStock
 
                     return (
                       <Box
@@ -583,6 +585,8 @@ export function QuotationCreatePage() {
                                 onChange={e => updateLine(line._key, { quantity: parseInt(e.target.value, 10) || 1 })}
                                 sx={{ width: 90 }}
                                 inputProps={{ min: 1, step: 1 }}
+                                helperText={partStock !== null ? `Dispo : ${partStock}` : undefined}
+                                FormHelperTextProps={{ sx: { color: isOverPartStock ? 'warning.main' : 'success.main', fontWeight: 600, mt: 0.25 } }}
                               />
                             )}
                             <TextField
