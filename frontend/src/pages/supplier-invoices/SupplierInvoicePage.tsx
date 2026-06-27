@@ -55,6 +55,7 @@ import {
   SICreatePayload,
   STATUS_LABELS,
   MATCH_STATUS_LABELS,
+  AccountingExport,
 } from '../../lib/supplierInvoiceApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
@@ -252,8 +253,8 @@ function CreateDialog({ open, onClose, onCreated, prefill }: CreateDialogProps) 
       setDueDate('')
       setNotes('')
       setLines([])
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Erreur lors de la création')
+    } catch (e: unknown) {
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur lors de la création')
     } finally {
       setSaving(false)
     }
@@ -511,8 +512,8 @@ function OverrideDialog({ open, si, onClose, onDone }: OverrideDialogProps) {
         reason: reason.trim(),
       })
       onDone(updated)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Erreur')
+    } catch (e: unknown) {
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur')
     } finally {
       setSaving(false)
     }
@@ -567,7 +568,7 @@ interface AccountingExportDialogProps {
 }
 
 function AccountingExportDialog({ open, si, onClose }: AccountingExportDialogProps) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AccountingExport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -614,7 +615,7 @@ function AccountingExportDialog({ open, si, onClose }: AccountingExportDialogPro
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.entries.map((e: any, i: number) => (
+                {data.entries.map((e, i) => (
                   <TableRow key={i}>
                     <TableCell>{e.account}</TableCell>
                     <TableCell>{e.label}</TableCell>
@@ -667,8 +668,8 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
       const updated = await fn()
       onUpdated(updated)
       showSnack(successMsg)
-    } catch (e: any) {
-      showSnack(e?.response?.data?.detail ?? 'Erreur', 'error')
+    } catch (e: unknown) {
+      showSnack((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur', 'error')
     } finally {
       setActing(false)
     }
@@ -725,8 +726,8 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       showSnack('PDF joint avec succès')
-    } catch (e: any) {
-      showSnack(e?.response?.data?.detail ?? 'Erreur lors du chargement', 'error')
+    } catch (e: unknown) {
+      showSnack((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur lors du chargement', 'error')
     } finally {
       setUploading(false)
       e.target.value = ''

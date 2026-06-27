@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import axios from 'axios'
 import {
   Autocomplete,
@@ -146,7 +146,7 @@ export function RepairOrderCreatePage() {
   const { data: customersData, isFetching: customersLoading } = useQuery({
     queryKey: ['customers', 'for-ro', debouncedCustomerSearch],
     queryFn: () => customerApi.list({ status: 'active', q: debouncedCustomerSearch || undefined, page_size: 50 }),
-    placeholderData: (prev: typeof customersData) => prev,
+    placeholderData: keepPreviousData,
   })
   const customers = customersData?.items ?? []
 
@@ -159,7 +159,7 @@ export function RepairOrderCreatePage() {
         customer_id: selectedCustomer?.int_id,
         page_size: 50,
       }),
-    placeholderData: (prev: typeof vehiclesData) => prev,
+    placeholderData: keepPreviousData,
   })
   const vehicles = vehiclesData?.items ?? []
 
@@ -403,4 +403,3 @@ export function RepairOrderCreatePage() {
     </Box>
   )
 }
-

@@ -50,12 +50,6 @@ import { StatusChip } from '../../components/ui/StatusChip'
 import { useToast } from '../../contexts/ToastContext'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
-const STATUS_COLORS: Record<PartStatus, 'success' | 'default' | 'error'> = {
-  active: 'success',
-  discontinued: 'default',
-  out_of_stock: 'error',
-}
-
 function money(minor: number) {
   return formatMinor(minor, 'EUR')
 }

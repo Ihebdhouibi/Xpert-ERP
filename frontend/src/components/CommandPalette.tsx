@@ -4,7 +4,7 @@
  * Powered by cmdk (headless). Styled entirely with MUI sx props so it inherits
  * the design system. Renders in a portal so it works from any context.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Command } from 'cmdk'

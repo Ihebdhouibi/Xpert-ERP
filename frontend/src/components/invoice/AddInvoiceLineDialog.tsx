@@ -159,7 +159,7 @@ export function AddInvoiceLineDialog({
       onClose()
     },
     onError: (err: unknown) => {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       toastError(typeof detail === 'string' ? detail : "Impossible d'enregistrer la ligne.")
     },
   })

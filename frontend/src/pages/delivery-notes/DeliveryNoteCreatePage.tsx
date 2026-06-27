@@ -431,7 +431,7 @@ export function DeliveryNoteCreatePage() {
 
   // Header
   const [notes, setNotes] = useState('')
-  const [currency, setCurrency] = useState('EUR')
+  const [currency] = useState('EUR')
 
   // Validation
   const [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({})
@@ -735,4 +735,3 @@ export function DeliveryNoteCreatePage() {
     </Box>
   )
 }
-

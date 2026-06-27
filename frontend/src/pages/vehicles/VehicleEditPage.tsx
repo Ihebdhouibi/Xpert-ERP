@@ -215,7 +215,6 @@ export function VehicleEditPage() {
         year: year ? Number(year) : null,
         fuel_type: fuelType || null,
         color: color.trim() || null,
-        vin: vin.trim().toUpperCase() || null,
         mileage_current: mileage ? Number(mileage) : null,
         technical_inspection_due_at: ctDate || null,
         maintenance_due_at: maintenanceDate || null,

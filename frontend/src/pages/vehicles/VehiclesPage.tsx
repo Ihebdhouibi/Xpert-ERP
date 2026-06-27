@@ -21,7 +21,6 @@ import { vehiclesApi, FUEL_TYPE_LABELS, type VehicleOut, type VehicleStatus } fr
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
-import { EmptyState } from '../../components/ui/EmptyState'
 
 function isOverdue(dateStr: string | null): boolean {
   if (!dateStr) return false

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query'
 import axios from 'axios'
 import {
   Alert,
@@ -36,8 +36,6 @@ import { useToast } from '../../contexts/ToastContext'
 
 const LINE_KINDS: LineKind[] = ['labor', 'part', 'service', 'other']
 
-const CURRENCIES = ['EUR']
-
 interface DraftLine extends QuotationLineCreateInput {
   _key: number
   _partSearch?: string        // debounced search string for part autocomplete
@@ -69,7 +67,7 @@ function PartAutocomplete({
   const { data, isFetching } = useQuery({
     queryKey: ['parts-search', debounced],
     queryFn: () => partsApi.list({ search: debounced || undefined, page_size: 50 }),
-    placeholderData: (prev: typeof data) => prev,
+    placeholderData: keepPreviousData,
   })
   const parts = data?.items ?? []
 
@@ -196,7 +194,7 @@ export function QuotationCreatePage() {
   // Header fields
   const [notes, setNotes] = useState('')
   const [validUntil, setValidUntil] = useState('')
-  const [currency, setCurrency] = useState('EUR')
+  const [currency] = useState('EUR')
 
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({})
@@ -252,7 +250,7 @@ export function QuotationCreatePage() {
   const { data: customersData, isFetching: customersLoading } = useQuery({
     queryKey: ['customers', 'for-quotation', debouncedCustomerSearch],
     queryFn: () => customerApi.list({ status: 'active', q: debouncedCustomerSearch || undefined, page_size: 50 }),
-    placeholderData: (prev: typeof customersData) => prev,
+    placeholderData: keepPreviousData,
   })
   const customers = customersData?.items ?? []
 
@@ -264,7 +262,7 @@ export function QuotationCreatePage() {
       customer_id: selectedCustomer?.int_id,
       page_size: 50,
     }),
-    placeholderData: (prev: typeof vehiclesData) => prev,
+    placeholderData: keepPreviousData,
   })
   const vehicles = vehiclesData?.items ?? []
 

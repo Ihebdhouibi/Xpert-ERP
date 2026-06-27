@@ -491,7 +491,7 @@ export function DashboardPage() {
                     hasPermission('purchase_order.read') && { label: 'Bons de cmd.', sub: "Ordres d'achat", icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/purchase-orders' },
                     hasPermission('part.read') && { label: 'Catalogue', sub: 'Pièces & SKU', icon: <InventoryRoundedIcon sx={{ fontSize: 18 }} />, to: '/parts' },
                     hasPermission('part.read') && { label: 'Stock', sub: 'Niveaux & alertes', icon: <WarningAmberRoundedIcon sx={{ fontSize: 18 }} />, to: '/stock' },
-                  ].filter((m): m is { label: string; sub: string; icon: React.ReactNode; to: string } => Boolean(m)).map((m) => (
+                  ].filter((m): m is Exclude<typeof m, false> => Boolean(m)).map((m) => (
                     <Grid item xs={6} sm={3} key={m.to}>
                       <ModuleTile {...m} />
                     </Grid>

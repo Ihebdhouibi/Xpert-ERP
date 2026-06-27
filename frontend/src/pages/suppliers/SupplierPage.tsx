@@ -15,7 +15,6 @@ import {
   IconButton,
   InputAdornment,
   MenuItem,
-  Paper,
   Stack,
   Tab,
   Table,
@@ -48,11 +47,6 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../contexts/ToastContext'
-
-const STATUS_COLOR: Record<SupplierStatus, 'success' | 'default'> = {
-  active: 'success',
-  inactive: 'default',
-}
 
 function money(minor: number, currency = 'EUR') {
   return `${(minor / 100).toFixed(2)} ${currency}`
@@ -92,8 +86,8 @@ function SupplierFormDialog({ open, initial, onClose, onSaved }: SupplierFormDia
     mutationFn: (payload: ReturnType<typeof buildPayload>) =>
       supplierApi.update(initial!.id, payload as SupplierUpdatePayload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['suppliers'] }); onSaved() },
-    onError: (err: any) => {
-      if (err?.response?.data?.detail?.code === 'version_conflict') {
+    onError: (err: unknown) => {
+      if ((err as { response?: { data?: { detail?: { code?: string } } } })?.response?.data?.detail?.code === 'version_conflict') {
         setError('Conflit de version — veuillez recharger la page.')
       } else {
         setError('Erreur lors de la mise à jour.')
@@ -118,7 +112,7 @@ function SupplierFormDialog({ open, initial, onClose, onSaved }: SupplierFormDia
     if (!name.trim()) { setError('Le nom est obligatoire.'); return }
     const payload = buildPayload()
     if (isEdit) {
-      updateMutation.mutate(payload as any)
+      updateMutation.mutate(payload)
     } else {
       createMutation.mutate(payload as SupplierCreatePayload)
     }

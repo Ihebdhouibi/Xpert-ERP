@@ -21,7 +21,7 @@ import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
 import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded'
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
-import { settingsApi, type GarageSettingOut } from '../../lib/settingsApi'
+import { settingsApi } from '../../lib/settingsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { useToast } from '../../contexts/ToastContext'
 

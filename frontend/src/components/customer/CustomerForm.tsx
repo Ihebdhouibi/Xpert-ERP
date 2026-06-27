@@ -25,6 +25,7 @@ const optionalString = z
   .transform((s) => (s === '' ? null : s))
   .nullable()
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const customerFormSchema = z
   .object({
     type: z.enum(['individual', 'company']),

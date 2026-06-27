@@ -78,7 +78,7 @@ export function RecordRefundDialog({ open, onClose, avoir, remainingRefundMinor 
       handleClose()
     },
     onError: (err: unknown) => {
-      const detail = (err as any)?.response?.data?.detail
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       toastError(typeof detail === 'string' ? detail : 'Impossible d\'enregistrer le remboursement.')
     },
   })

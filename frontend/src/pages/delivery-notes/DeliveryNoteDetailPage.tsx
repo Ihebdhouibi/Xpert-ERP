@@ -17,13 +17,12 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import ReceiptLongRoundedIcon from '@mui/icons-material/ReceiptLongRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
-import { deliveryNoteApi, DELIVERY_NOTE_STATUS_LABELS, DELIVERY_NOTE_LINE_KIND_LABELS } from '../../lib/deliveryNoteApi'
+import { deliveryNoteApi, DELIVERY_NOTE_LINE_KIND_LABELS } from '../../lib/deliveryNoteApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -121,7 +120,6 @@ export function DeliveryNoteDetailPage() {
   const isDraft = dn.status === 'draft'
   const isIssued = dn.status === 'issued'
   const isDelivered = dn.status === 'delivered'
-  const isCancelled = dn.status === 'cancelled'
   const canConvert = (isIssued || isDelivered) && !dn.invoice_id
 
   return (

@@ -46,6 +46,7 @@ export function CurrencyDisplay({
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatMinor(
   minor: number | null | undefined,
   currency = 'EUR',

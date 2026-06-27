@@ -30,7 +30,7 @@ import {
   type BonRetourPartyType,
 } from '../../lib/bonRetourApi'
 import { supplierApi } from '../../lib/supplierApi'
-import { customerApi } from '../../lib/customerApi'
+import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { invoiceApi, type InvoiceOut } from '../../lib/invoiceApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
 
@@ -182,7 +182,9 @@ export function BonRetourCreatePage() {
                 options={suppliers?.items ?? []}
                 getOptionLabel={s => s.name}
                 isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 value={supplier as any}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 onChange={(_, v) => setSupplier(v ? { int_id: (v as any).int_id, name: (v as any).name } : null)}
                 onInputChange={(_, v) => setSupplierSearch(v)}
                 renderInput={params => <TextField {...params} label="Fournisseur" size="small" required />}
@@ -194,8 +196,8 @@ export function BonRetourCreatePage() {
                   options={customers?.items ?? []}
                   getOptionLabel={c => c.full_name}
                   isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
-                  value={customer as any}
-                  onChange={(_, v) => setCustomer(v ? { int_id: (v as any).int_id, full_name: (v as any).full_name } : null)}
+                  value={customer as CustomerSummary | null}
+                  onChange={(_, v) => setCustomer(v ? { int_id: v.int_id, full_name: v.full_name } : null)}
                   onInputChange={(_, v) => setCustomerSearch(v)}
                   renderInput={params => <TextField {...params} label="Client" size="small" required />}
                   noOptionsText="Aucun client"

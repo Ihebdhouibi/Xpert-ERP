@@ -37,6 +37,7 @@ import { useAuth } from '../../contexts/AuthContext'
 
 // ─── Role catalog ────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const SYSTEM_ROLES: { code: string; label: string; color: string }[] = [
   { code: 'super_admin', label: 'Super Admin', color: '#7C3AED' },
   { code: 'admin', label: 'Admin', color: '#2563EB' },
@@ -46,6 +47,7 @@ export const SYSTEM_ROLES: { code: string; label: string; color: string }[] = [
   { code: 'parts_manager', label: 'Gestionnaire stock', color: '#EA580C' },
 ]
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function roleLabelFor(code: string) {
   return SYSTEM_ROLES.find(r => r.code === code)?.label ?? code
 }

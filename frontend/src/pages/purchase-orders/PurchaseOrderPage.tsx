@@ -22,24 +22,20 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import SendIcon from '@mui/icons-material/Send'
 import MoveToInboxIcon from '@mui/icons-material/MoveToInbox'
 import CancelIcon from '@mui/icons-material/Cancel'
-import VisibilityIcon from '@mui/icons-material/Visibility'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import ReceiptIcon from '@mui/icons-material/Receipt'
 import {
   purchaseOrderApi,
   PurchaseOrder,
-  POLine,
   POStatus,
   POCreatePayload,
-  POLineInput,
   STATUS_LABELS,
   MATCH_FLAG_LABELS,
   POMatchFlag,
@@ -57,13 +53,6 @@ import { useToast } from '../../contexts/ToastContext'
 // Helpers
 // ---------------------------------------------------------------------------
 
-const STATUS_COLORS: Record<POStatus, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
-  draft: 'default',
-  sent: 'info',
-  partially_received: 'warning',
-  completed: 'success',
-  cancelled: 'error',
-}
 
 const MATCH_COLORS: Record<POMatchFlag, 'success' | 'warning' | 'error'> = {
   ok: 'success',
@@ -144,8 +133,9 @@ function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
       setExpectedDate('')
       setNotes('')
       setLines([{ part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 }])
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Erreur lors de la création')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Erreur lors de la création')
     } finally {
       setSaving(false)
     }
@@ -308,8 +298,9 @@ function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps
     try {
       const updated = await purchaseOrderApi.receive(po.id, { version: po.version, lines })
       onReceived(updated)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Erreur lors de la réception')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Erreur lors de la réception')
     } finally {
       setSaving(false)
     }
@@ -407,8 +398,9 @@ function InvoiceDialog({ open, po, onClose, onSaved }: InvoiceDialogProps) {
       }
       updated = await purchaseOrderApi.get(po.id)
       onSaved(updated)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Erreur')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Erreur')
     } finally {
       setSaving(false)
     }
@@ -534,8 +526,9 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
       success('Facture fournisseur créée.')
       onCreated()
     },
-    onError: (e: any) => {
-      setFormError(e?.response?.data?.detail || 'Erreur lors de la création.')
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setFormError(typeof detail === 'string' ? detail : 'Erreur lors de la création.')
     },
   })
 
@@ -677,8 +670,9 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
     try {
       const updated = await purchaseOrderApi.send(po.id, po.version)
       onUpdated(updated)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Erreur')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Erreur')
     } finally { setActioning(false) }
   }
 
@@ -690,8 +684,9 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
       const updated = await purchaseOrderApi.cancel(po.id, po.version)
       onUpdated(updated)
       setCancelOpen(false)
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Erreur')
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Erreur')
     } finally { setActioning(false) }
   }
 
@@ -966,5 +961,3 @@ export function PurchaseOrderPage() {
     </Box>
   )
 }
-
-

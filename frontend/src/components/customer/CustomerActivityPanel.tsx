@@ -24,12 +24,10 @@ import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import { customerSubApi } from '../../lib/customerApi'
 import { advancePaymentApi } from '../../lib/advancePaymentApi'
+import type { AdvancePaymentOut } from '../../lib/advancePaymentApi'
 import { StatusChip } from '../ui/StatusChip'
 import { formatMinor } from '../ui/CurrencyDisplay'
 import type { StatusKey } from '../ui/StatusChip'
-import { DELIVERY_NOTE_STATUS_LABELS } from '../../lib/deliveryNoteApi'
-import { INVOICE_STATUS_LABELS } from '../../lib/invoiceApi'
-import { QUOTATION_STATUS_LABELS } from '../../lib/quotationApi'
 import { PermissionGate } from '../auth/PermissionGate'
 
 // ---------------------------------------------------------------------------
@@ -115,7 +113,14 @@ function RepairOrdersTab({
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((ro: any) => (
+              {items.map((ro: {
+                id: number | string
+                created_at: string | null
+                description: string | null
+                status: string
+                actual_cost_minor: number
+                estimated_cost_currency: string | null
+              }) => (
                 <TableRow
                   key={ro.id}
                   hover
@@ -201,7 +206,14 @@ function QuotationsTab({ customerPublicId, customerIntId }: { customerPublicId: 
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((q: any) => (
+              {items.map((q: {
+                id: number | string
+                created_at: string | null
+                doc_number: string | null
+                status: string
+                total_minor: number
+                currency: string
+              }) => (
                 <TableRow
                   key={q.id}
                   hover
@@ -289,7 +301,16 @@ function InvoicesTab({ customerPublicId, customerIntId }: { customerPublicId: st
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((inv: any) => (
+              {items.map((inv: {
+                id: number | string
+                created_at: string | null
+                doc_number: string | null
+                status: string
+                total_minor: number
+                currency: string
+                paid_amount_minor: number
+                outstanding_minor: number
+              }) => (
                 <TableRow
                   key={inv.id}
                   hover
@@ -391,7 +412,16 @@ function DeliveryNotesTab({ customerPublicId, customerIntId }: { customerPublicI
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((dn: any) => (
+              {items.map((dn: {
+                id: number | string
+                public_id: string
+                created_at: string | null
+                doc_number: string | null
+                status: string
+                lines?: unknown[] | null
+                total_minor: number
+                currency: string
+              }) => (
                 <TableRow
                   key={dn.id}
                   hover
@@ -475,7 +505,7 @@ function AdvancePaymentsTab({ customerIntId }: { customerIntId: number }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.map((adv: any) => (
+            {items.map((adv: AdvancePaymentOut) => (
               <TableRow key={adv.id}>
                 <TableCell>
                   <Typography variant="body2" color="text.secondary">{fmt(adv.paid_at)}</Typography>
