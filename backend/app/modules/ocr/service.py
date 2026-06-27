@@ -431,8 +431,13 @@ async def get_page_image(
     db: AsyncSession,
     *,
     extraction_public_id: uuid.UUID,
-) -> bytes:
-    """Return the document's first page rendered as a PNG (for inline preview)."""
+    page: int = 0,
+) -> tuple[bytes, int]:
+    """Return ``(png_bytes, total_pages)`` for the given 0-based page.
+
+    The source document is downloaded once; multi-page PDFs expose every page
+    (capped at the engine's MAX_PDF_PAGES) so the preview can paginate.
+    """
     extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
     if extraction is None:
         raise OcrNotFoundError(str(extraction_public_id))
@@ -444,7 +449,9 @@ async def get_page_image(
         bucket=cfg.s3_bucket_documents, key=document.storage_key
     )
     engine = get_ocr_engine()
-    return await engine.render_first_page_png(data)
+    total = await engine.page_count(data)
+    image = await engine.render_page_png(data, max(0, page))
+    return image, total
 
 
 async def suggest_field(

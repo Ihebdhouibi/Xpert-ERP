@@ -67,6 +67,16 @@ def _pdf_to_image_bytes(pdf_bytes: bytes) -> list[bytes]:
     return images
 
 
+def _pdf_page_count(pdf_bytes: bytes) -> int:
+    """Number of pages in a PDF (capped at MAX_PDF_PAGES), or 1 on failure."""
+    try:
+        import fitz  # type: ignore[import]  # PyMuPDF
+    except ImportError:
+        return 1
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        return min(doc.page_count, MAX_PDF_PAGES) or 1
+
+
 @dataclass
 class OcrLine:
     """One recognised text block with its confidence and bounding box.
@@ -129,18 +139,27 @@ class OcrEngine(ABC):
         """Synchronous OCR of a rectangular region; returns the joined text."""
 
     # -- shared, engine-agnostic page rendering ----------------------------
-    def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
-        """Return the document's first page as PNG bytes.
+    def page_count_sync(self, file_bytes: bytes) -> int:
+        """Number of preview pages (PDFs capped at MAX_PDF_PAGES; images = 1)."""
+        if _is_pdf(file_bytes):
+            return max(1, _pdf_page_count(file_bytes))
+        return 1
+
+    def render_page_png_sync(self, file_bytes: bytes, page_index: int = 0) -> bytes:
+        """Return the given page (0-based) as PNG bytes.
 
         PDFs are rasterised at PDF_RENDER_DPI (same space as the layout boxes so
-        the highlight overlay aligns); images are re-encoded to PNG. On any
-        failure the original bytes are returned unchanged.
+        the highlight overlay aligns); images are re-encoded to PNG and ignore
+        ``page_index``. On any failure the original bytes are returned unchanged.
         """
         import io as _io
 
         if _is_pdf(file_bytes):
             pages = _pdf_to_image_bytes(file_bytes)
-            return pages[0] if pages else b""
+            if not pages:
+                return b""
+            idx = max(0, min(page_index, len(pages) - 1))
+            return pages[idx]
         try:
             from PIL import Image  # type: ignore[import]
 
@@ -150,6 +169,10 @@ class OcrEngine(ABC):
             return buf.getvalue()
         except Exception:
             return file_bytes
+
+    def render_first_page_png_sync(self, file_bytes: bytes) -> bytes:
+        """Return the document's first page as PNG bytes (see render_page_png_sync)."""
+        return self.render_page_png_sync(file_bytes, 0)
 
     # -- async wrappers (optional idle-killed worker process) --------------
     async def run_ocr(self, file_bytes: bytes) -> RawOcrResult:
@@ -178,6 +201,16 @@ class OcrEngine(ABC):
     async def render_first_page_png(self, file_bytes: bytes) -> bytes:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.render_first_page_png_sync, file_bytes)
+
+    async def render_page_png(self, file_bytes: bytes, page_index: int = 0) -> bytes:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self.render_page_png_sync, file_bytes, page_index
+        )
+
+    async def page_count(self, file_bytes: bytes) -> int:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.page_count_sync, file_bytes)
 
 
 # Module-level entry points executed inside the OCR worker process. They must be

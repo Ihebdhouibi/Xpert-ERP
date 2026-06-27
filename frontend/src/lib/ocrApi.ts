@@ -109,9 +109,17 @@ export const ocrApi = {
       .post<{ value: string | null }>(`/ocr/${extractionId}/suggest-field`, { field })
       .then((r) => r.data),
 
-  // First page rendered as a PNG (PDFs rasterised) — returned as a Blob.
-  getPageImage: (extractionId: string) =>
+  // A document page rendered as a PNG (PDFs rasterised). Returns the page blob
+  // plus the total number of preview pages (from the X-Total-Pages header) so
+  // multi-page PDFs can paginate. Page index is 0-based.
+  getPageImage: (extractionId: string, page = 0) =>
     apiClient
-      .get<Blob>(`/ocr/${extractionId}/page-image`, { responseType: 'blob' })
-      .then((r) => r.data),
+      .get<Blob>(`/ocr/${extractionId}/page-image`, {
+        params: { page },
+        responseType: 'blob',
+      })
+      .then((r) => ({
+        blob: r.data,
+        totalPages: Number(r.headers['x-total-pages']) || 1,
+      })),
 }

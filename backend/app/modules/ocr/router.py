@@ -183,19 +183,30 @@ async def ocr_region(
 @router.get(
     "/{extraction_id}/page-image",
     dependencies=[require_permission("document.read")],
-    summary="Render the document's first page as a PNG image for inline preview",
+    summary="Render a document page as a PNG image for inline preview",
 )
 async def page_image(
     extraction_id: uuid.UUID,
     user: AuthUser,
+    page: int = 0,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Return the first page as PNG (rasterises PDFs) so the preview is a plain image."""
+    """Return the requested page (0-based) as PNG (rasterises PDFs).
+
+    The total number of preview pages is returned in the ``X-Total-Pages``
+    header so the client can paginate multi-page PDFs.
+    """
     try:
-        data = await service.get_page_image(db, extraction_public_id=extraction_id)
+        data, total_pages = await service.get_page_image(
+            db, extraction_public_id=extraction_id, page=page
+        )
     except OcrNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
-    return Response(content=data, media_type="image/png")
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={"X-Total-Pages": str(total_pages)},
+    )
 
 
 @router.post(

@@ -36,6 +36,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CropFreeIcon from '@mui/icons-material/CropFree'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
+import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -161,11 +163,28 @@ function DocumentPreview({
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const update = () => setRenderW(el.clientWidth)
+    // Guard against the ResizeObserver feedback loop: a synchronous setState in
+    // the observer can re-trigger layout (e.g. when a scrollbar toggles), which
+    // makes the preview jitter. Debounce via rAF and skip no-op width changes.
+    let raf = 0
+    let last = -1
+    const update = () => {
+      const w = el.clientWidth
+      if (w !== last) {
+        last = w
+        setRenderW(w)
+      }
+    }
     update()
-    const ro = new ResizeObserver(update)
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(update)
+    })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
   }, [url])
 
   if (!url) {
@@ -308,6 +327,11 @@ export function OcrReviewPage() {
 
   const [extraction, setExtraction] = useState<OcrExtractionOut | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Multi-page preview: total pages reported by the backend + current page,
+  // with a per-page object-URL cache so navigation doesn't re-fetch.
+  const [totalPages, setTotalPages] = useState(1)
+  const [pageIndex, setPageIndex] = useState(0)
+  const pageCacheRef = useRef<Map<number, string>>(new Map())
   const [edited, setEdited] = useState<Record<string, string>>({})
   const [showRaw, setShowRaw] = useState(false)
   const [highlight, setHighlight] = useState<number[][]>([])
@@ -326,7 +350,7 @@ export function OcrReviewPage() {
     if (!extractionId) return
     let cancelled = false
     let pollTimer: ReturnType<typeof setTimeout>
-    let objectUrl: string | null = null
+    const cache = pageCacheRef.current
 
     async function load() {
       try {
@@ -347,11 +371,15 @@ export function OcrReviewPage() {
 
         // Always preview a rendered image (PDFs are rasterised server-side) so
         // the view is a plain image with a working highlight/crop overlay.
+        // Page 1 is fetched here; further pages are loaded on demand.
         try {
-          const blob = await ocrApi.getPageImage(extractionId!)
+          const { blob, totalPages: tp } = await ocrApi.getPageImage(extractionId!, 0)
           if (!cancelled) {
-            objectUrl = URL.createObjectURL(blob)
-            setPreviewUrl(objectUrl)
+            const url = URL.createObjectURL(blob)
+            cache.set(0, url)
+            setPreviewUrl(url)
+            setTotalPages(tp)
+            setPageIndex(0)
           }
         } catch {
           /* preview is best-effort */
@@ -367,9 +395,34 @@ export function OcrReviewPage() {
     return () => {
       cancelled = true
       clearTimeout(pollTimer)
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      cache.forEach((u) => URL.revokeObjectURL(u))
+      cache.clear()
     }
   }, [extractionId])
+
+  // Navigate the multi-page preview (PDFs). Field localisation / cropping is
+  // page-1 only, so any active field/crop/highlight is cleared when leaving it.
+  const goToPage = async (idx: number) => {
+    if (idx < 0 || idx >= totalPages || idx === pageIndex) return
+    setActiveField(null)
+    setCropTarget(null)
+    setHighlight([])
+    const cached = pageCacheRef.current.get(idx)
+    if (cached) {
+      setPreviewUrl(cached)
+      setPageIndex(idx)
+      return
+    }
+    try {
+      const { blob } = await ocrApi.getPageImage(extractionId!, idx)
+      const url = URL.createObjectURL(blob)
+      pageCacheRef.current.set(idx, url)
+      setPreviewUrl(url)
+      setPageIndex(idx)
+    } catch {
+      setError('Impossible de charger cette page.')
+    }
+  }
 
   const fields = useMemo(
     () => extraction?.structured_fields ?? {},
@@ -620,11 +673,53 @@ export function OcrReviewPage() {
                 : 'Dessinez la zone à reconnaître sur le document.'}
             </Alert>
           )}
+          {totalPages > 1 && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="center"
+              spacing={2}
+              sx={{ my: 1 }}
+            >
+              <Button
+                size="small"
+                startIcon={<NavigateBeforeIcon />}
+                disabled={pageIndex === 0}
+                onClick={() => goToPage(pageIndex - 1)}
+              >
+                Précédent
+              </Button>
+              <Typography variant="body2">
+                Page {pageIndex + 1} / {totalPages}
+              </Typography>
+              <Button
+                size="small"
+                endIcon={<NavigateNextIcon />}
+                disabled={pageIndex >= totalPages - 1}
+                onClick={() => goToPage(pageIndex + 1)}
+              >
+                Suivant
+              </Button>
+            </Stack>
+          )}
+          {totalPages > 1 && pageIndex > 0 && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', textAlign: 'center', mb: 1 }}
+            >
+              Localisation et recadrage des champs disponibles sur la page 1.
+            </Typography>
+          )}
           <DocumentPreview
             url={previewUrl}
-            layout={layout}
-            highlight={highlight}
-            drawMode={canHighlight && (activeField !== null || cropTarget !== null)}
+            layout={pageIndex === 0 ? layout : null}
+            highlight={pageIndex === 0 ? highlight : []}
+            drawMode={
+              pageIndex === 0 &&
+              canHighlight &&
+              (activeField !== null || cropTarget !== null)
+            }
             onRegionDrawn={handleRegionDrawn}
           />
         </Paper>
@@ -804,11 +899,17 @@ export function OcrReviewPage() {
                 <Button
                   variant="contained"
                   color="primary"
-                  startIcon={<CheckCircleOutlineIcon />}
+                  startIcon={
+                    saving ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <CheckCircleOutlineIcon />
+                    )
+                  }
                   onClick={handleIngest}
                   disabled={saving}
                 >
-                  {saving ? <CircularProgress size={20} /> : ingestLabel}
+                  {ingestLabel}
                 </Button>
               </Stack>
             )
