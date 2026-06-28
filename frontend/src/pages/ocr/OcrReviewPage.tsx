@@ -188,8 +188,17 @@ function DocumentPreview({
   }, [url])
 
   if (!url) {
+    // Reserve height so the placeholder doesn't collapse and toggle the page
+    // scrollbar (which causes a visible layout "bounce") before the image loads.
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh',
+        }}
+      >
         <CircularProgress size={28} />
       </Box>
     )
@@ -358,6 +367,26 @@ export function OcrReviewPage() {
         if (cancelled) return
         setExtraction(data)
 
+        // Fetch the document preview as soon as the extraction exists — the
+        // rasterised page image is independent of OCR completion. Showing it
+        // during processing keeps the left panel at full height and avoids the
+        // scrollbar-toggle "bounce" of the short spinner placeholder. Fetched
+        // once (page 1); further pages load on demand.
+        if (!cache.has(0)) {
+          try {
+            const { blob, totalPages: tp } = await ocrApi.getPageImage(extractionId!, 0)
+            if (!cancelled) {
+              const url = URL.createObjectURL(blob)
+              cache.set(0, url)
+              setPreviewUrl(url)
+              setTotalPages(tp)
+              setPageIndex(0)
+            }
+          } catch {
+            /* preview is best-effort */
+          }
+        }
+
         if (data.status === 'pending' || data.status === 'processing') {
           pollTimer = setTimeout(load, 2000)
           return
@@ -368,22 +397,6 @@ export function OcrReviewPage() {
           if (!isRawKey(k) && !isReservedKey(k)) semantic[k] = v as string
         }
         setEdited(semantic)
-
-        // Always preview a rendered image (PDFs are rasterised server-side) so
-        // the view is a plain image with a working highlight/crop overlay.
-        // Page 1 is fetched here; further pages are loaded on demand.
-        try {
-          const { blob, totalPages: tp } = await ocrApi.getPageImage(extractionId!, 0)
-          if (!cancelled) {
-            const url = URL.createObjectURL(blob)
-            cache.set(0, url)
-            setPreviewUrl(url)
-            setTotalPages(tp)
-            setPageIndex(0)
-          }
-        } catch {
-          /* preview is best-effort */
-        }
       } catch {
         if (!cancelled) setError("Impossible de charger l'extraction OCR.")
       } finally {
@@ -629,8 +642,18 @@ export function OcrReviewPage() {
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-        <Typography variant="h5">Vérification OCR</Typography>
+        <Typography variant="h5">Extraction automatique</Typography>
         {category && <Chip size="small" label={categoryLabel} variant="outlined" />}
+        {/* Progress lives in the fixed-height header row, so it appears and
+            disappears without changing the content layout (no "bounce"). */}
+        {isPending && (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <CircularProgress size={18} thickness={5} />
+            <Typography variant="body2" color="text.secondary">
+              Extraction en cours…
+            </Typography>
+          </Stack>
+        )}
         <Box flexGrow={1} />
         <Button
           size="small"
@@ -644,12 +667,6 @@ export function OcrReviewPage() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
-      {isPending && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Traitement OCR en cours…
-          <CircularProgress size={16} sx={{ ml: 1 }} />
-        </Alert>
-      )}
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">
         {/* ---- Left: document preview ---- */}

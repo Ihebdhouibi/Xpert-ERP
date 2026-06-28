@@ -74,6 +74,10 @@ export function AppShell() {
             flex: 1,
             p: { xs: 2, sm: 3 },
             overflow: 'auto',
+            // Always reserve the scrollbar gutter so it never appears/disappears
+            // as content height changes (e.g. polling re-renders): otherwise the
+            // content width shifts ~15px each time, which reads as a "bounce".
+            scrollbarGutter: 'stable',
             minHeight: 0,
           }}
         >
