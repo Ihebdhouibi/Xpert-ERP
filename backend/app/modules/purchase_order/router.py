@@ -106,6 +106,9 @@ class POSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    # Internal numeric id — needed when a document is filed under a PO via the
+    # GED owner pointer (document.owner_entity_id is an integer).
+    int_id: int
     supplier_id: int
     supplier_name: Optional[str] = None
     supplier_public_id: Optional[str] = None
@@ -123,6 +126,7 @@ class POSummary(BaseModel):
     @classmethod
     def _remap(cls, data: Any) -> Any:
         if hasattr(data, "public_id"):
+            data.__dict__["int_id"] = data.id  # capture before id is overwritten
             data.__dict__["id"] = str(data.public_id)
         return data
 

@@ -22,6 +22,7 @@ export interface POLine {
 
 export interface PurchaseOrder {
   id: string
+  int_id: number
   supplier_id: number
   supplier_name?: string | null
   supplier_public_id?: string | null

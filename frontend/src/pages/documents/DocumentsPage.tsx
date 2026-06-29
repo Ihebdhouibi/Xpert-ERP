@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -27,6 +28,7 @@ import {
   Typography,
   Paper,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import DownloadIcon from '@mui/icons-material/Download'
 import PageviewIcon from '@mui/icons-material/Pageview'
@@ -35,6 +37,12 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import type { DocumentCategory, DocumentOut, OwnerEntityType } from '../../lib/documentsApi'
 import { documentsApi } from '../../lib/documentsApi'
 import { ocrApi } from '../../lib/ocrApi'
+import {
+  purchaseOrderApi,
+  PurchaseOrder,
+  STATUS_LABELS,
+} from '../../lib/purchaseOrderApi'
+import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 
 // Complete labels for DISPLAY — covers every enum value (including legacy ones
 // no longer offered in the dropdowns) so existing documents always render a
@@ -96,6 +104,92 @@ function ownerLabel(owner: OwnerEntityType): string {
 }
 
 // ---------------------------------------------------------------------------
+// Purchase order picker (searchable + create-new)
+// ---------------------------------------------------------------------------
+interface PurchaseOrderPickerProps {
+  value: PurchaseOrder | null
+  onChange: (po: PurchaseOrder | null) => void
+}
+
+function PurchaseOrderPicker({ value, onChange }: PurchaseOrderPickerProps) {
+  const [inputValue, setInputValue] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [options, setOptions] = useState<PurchaseOrder[]>([])
+  const [fetching, setFetching] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+
+  // Debounce the typed search text.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(inputValue), 300)
+    return () => clearTimeout(t)
+  }, [inputValue])
+
+  useEffect(() => {
+    let cancelled = false
+    setFetching(true)
+    purchaseOrderApi
+      .list({ search: debounced || undefined, page_size: 20 })
+      .then((r) => { if (!cancelled) setOptions(r.items) })
+      .catch(() => { if (!cancelled) setOptions([]) })
+      .finally(() => { if (!cancelled) setFetching(false) })
+    return () => { cancelled = true }
+  }, [debounced])
+
+  const getLabel = (po: PurchaseOrder) =>
+    `${po.doc_number ?? 'Brouillon'} — ${po.supplier_name ?? ''} — ${STATUS_LABELS[po.status]}`
+
+  return (
+    <>
+      <Autocomplete
+        value={value}
+        onChange={(_, newValue) => onChange(newValue)}
+        inputValue={inputValue}
+        onInputChange={(_, v) => setInputValue(v)}
+        options={options}
+        getOptionLabel={getLabel}
+        isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+        loading={fetching}
+        size="small"
+        noOptionsText="Aucun bon de commande trouvé"
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Bon de commande *"
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {fetching ? <CircularProgress size={16} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.int_id}>
+            {getLabel(option)}
+          </Box>
+        )}
+      />
+      <Box>
+        <Button size="small" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+          Créer un nouveau bon de commande
+        </Button>
+      </Box>
+      <PurchaseOrderCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(po) => {
+          onChange(po)
+          setCreateOpen(false)
+        }}
+      />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Upload dialog
 // ---------------------------------------------------------------------------
 interface UploadDialogProps {
@@ -109,9 +203,12 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
   const [category, setCategory] = useState<DocumentCategory>('generic')
   const [ownerType, setOwnerType] = useState<OwnerEntityType>('generic')
   const [ownerId, setOwnerId] = useState('')
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const isPurchaseOrder = ownerType === 'purchase_order'
 
   const handleUpload = async () => {
     if (!file) return
@@ -179,7 +276,13 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             <Select
               value={ownerType}
               label="Type propriétaire"
-              onChange={(e) => setOwnerType(e.target.value as OwnerEntityType)}
+              onChange={(e) => {
+                const next = e.target.value as OwnerEntityType
+                setOwnerType(next)
+                // Reset the owner link when switching type.
+                setOwnerId('')
+                setSelectedPO(null)
+              }}
             >
               {OWNER_TYPES.filter((o) => o.value !== '').map((o) => (
                 <MenuItem key={o.value} value={o.value}>
@@ -189,16 +292,26 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             </Select>
           </FormControl>
 
-          <TextField
-            label="ID propriétaire (optionnel)"
-            size="small"
-            value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
-          />
+          {isPurchaseOrder ? (
+            <PurchaseOrderPicker
+              value={selectedPO}
+              onChange={(po) => {
+                setSelectedPO(po)
+                setOwnerId(po ? String(po.int_id) : '')
+              }}
+            />
+          ) : (
+            <TextField
+              label="ID propriétaire (optionnel)"
+              size="small"
+              value={ownerId}
+              onChange={(e) => setOwnerId(e.target.value)}
+            />
+          )}
 
           <Button
             variant="contained"
-            disabled={!file || loading}
+            disabled={!file || loading || (isPurchaseOrder && !selectedPO)}
             onClick={handleUpload}
           >
             {loading ? <CircularProgress size={20} /> : 'Télécharger'}
