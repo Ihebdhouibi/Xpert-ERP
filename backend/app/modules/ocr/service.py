@@ -35,6 +35,7 @@ logger = get_logger("ocr.service")
 OCR_TRIGGER_CATEGORIES = {
     DocumentCategory.registration_card,
     DocumentCategory.id_doc,
+    DocumentCategory.supplier_delivery_note,
 }
 
 # Per-category structured-field extractor. Categories not listed fall back to
@@ -44,6 +45,7 @@ _EXTRACTORS = {
     DocumentCategory.id_doc: extractors.extract_national_id,
     DocumentCategory.invoice: extractors.extract_invoice,
     DocumentCategory.supplier_invoice: extractors.extract_supplier_invoice,
+    DocumentCategory.supplier_delivery_note: extractors.extract_bon_de_livraison,
 }
 
 

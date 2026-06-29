@@ -65,6 +65,9 @@ const FIELD_LABELS: Record<string, string> = {
   total_ht: 'Total HT',
   tva: 'TVA',
   total_ttc: 'Total TTC',
+  numero_bl: 'N° de bon de livraison',
+  date_bl: 'Date de livraison',
+  reference_commande: 'Référence commande',
   lignes: 'Lignes détectées (brut)',
 }
 
@@ -112,6 +115,17 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'date_facture',
     'date_echeance',
     'client',
+    'total_ht',
+    'tva',
+    'total_ttc',
+    'lignes',
+  ],
+  supplier_delivery_note: [
+    'numero_bl',
+    'date_bl',
+    'fournisseur',
+    'reference_commande',
+    'immatriculation',
     'total_ht',
     'tva',
     'total_ttc',

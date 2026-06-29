@@ -406,6 +406,129 @@ def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
 
 
 # ---------------------------------------------------------------------------
+# Bon de livraison (supplier delivery note)
+# ---------------------------------------------------------------------------
+
+# BL number: a letter-prefixed code with >=3 digits (BL027543) or >=4 digits
+# (24639). The >=4-digit floor avoids matching 3-digit amounts like "120".
+_RE_BL_NUMBER = re.compile(r"\b([A-Z]{1,4}\d{3,}[A-Z0-9]*|\d{4,})\b", re.IGNORECASE)
+_KW_BL_NUMBER = re.compile(
+    r"bon\s*de\s*livraison|n[°ºo]\s*de\s*la\s*pi[eè]ce|num[ée]ro|\bBL\b", re.IGNORECASE
+)
+_KW_DATE_BL = re.compile(r"date\s*(de\s*)?livraison|\bdate\b", re.IGNORECASE)
+_KW_REF_COMMANDE = re.compile(
+    r"r[ée]f[ée]rence|bon\s*de\s*commande|n[°ºo]\s*commande|\bcommande\b|\bref\b",
+    re.IGNORECASE,
+)
+_KW_IMMAT_BL = re.compile(r"immatriculation|immat", re.IGNORECASE)
+# Our own garage / the delivery company — never the supplier on a received BL.
+_KW_OWN_PARTY = re.compile(r"garage\s*motors|al\s*delivery", re.IGNORECASE)
+_KW_BL_TITLE = re.compile(r"bon\s*de\s*livraison", re.IGNORECASE)
+
+
+def _guess_supplier_from_top(lines, top_n: int = 6) -> Optional[tuple[str, float]]:
+    """Heuristic: the issuer (supplier) is the letterhead near the top.
+
+    Skips our own garage / the delivery company, dates, the document title and
+    mostly-numeric (address/phone/SIREN) lines. Confidence is lowered — it is a
+    hint that the reviewer confirms (supplier HITL).
+    """
+    for line in lines[:top_n]:
+        t = line.text.strip()
+        if len(t) < 3:
+            continue
+        if _KW_OWN_PARTY.search(t) or _KW_BL_TITLE.search(t):
+            continue
+        if _RE_DATE_ANY.search(t):
+            continue
+        if sum(c.isdigit() for c in t) > len(t) / 2:
+            continue
+        if any(c.isalpha() for c in t):
+            return t, round(line.confidence * 0.7, 4)
+    return None
+
+
+def extract_bon_de_livraison(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a supplier Bon de livraison.
+
+    Header fields are reasonably reliable; line items are a best-effort,
+    low-confidence hint (BL tables vary and OCR splits cells across lines).
+    """
+    fields: FieldMap = {}
+    lines = result.lines
+
+    # BL number — value near a "bon de livraison / n° / numéro" label, else a
+    # code-with-digit on such a line.
+    num = _value_near_keyword(lines, _KW_BL_NUMBER, _RE_BL_NUMBER)
+    if not num:
+        for line in lines:
+            if _KW_BL_NUMBER.search(line.text) and not _KW_EXCLUDE_NUM.search(line.text):
+                tok = _first_code_with_digit(line.text)
+                if tok:
+                    num = (tok, line.confidence)
+                    break
+    if num:
+        fields["numero_bl"] = num
+
+    # Delivery date — labelled, else the first date in the document.
+    d = _value_near_keyword(lines, _KW_DATE_BL, _RE_DATE_ANY)
+    if not d:
+        for line in lines:
+            m = _RE_DATE_ANY.search(line.text)
+            if m:
+                d = (m.group(1), line.confidence)
+                break
+    if d:
+        fields["date_bl"] = d
+
+    # Order reference, if the BL prints the PO/commande number.
+    ref = _value_near_keyword(lines, _KW_REF_COMMANDE, _RE_NUM_TOKEN)
+    if ref:
+        fields["reference_commande"] = ref
+
+    # Vehicle plate (parts ordered for a specific repair). _RE_IMMATRICULATION
+    # has two alternation groups, so read group(1) or group(2) explicitly.
+    for line in lines:
+        if not _KW_IMMAT_BL.search(line.text):
+            continue
+        m = _RE_IMMATRICULATION.search(line.text)
+        if not m:
+            after = _best_line_after_keyword(lines, _KW_IMMAT_BL)
+            m = _RE_IMMATRICULATION.search(after[0]) if after else None
+            conf = after[1] if after else line.confidence
+        else:
+            conf = line.confidence
+        if m:
+            val = (m.group(1) or m.group(2) or "").upper().replace(" ", "-")
+            if val:
+                fields["immatriculation"] = (val, conf)
+        break
+
+    # Supplier (issuer) — letterhead heuristic; confirmed via HITL on review.
+    fournisseur = _guess_supplier_from_top(lines)
+    if fournisseur:
+        fields["fournisseur"] = fournisseur
+
+    # Totals (valued BLs).
+    ht = _amount_on_keyword_line(lines, _KW_TOTAL_HT)
+    if ht:
+        fields["total_ht"] = ht
+    tva = _amount_on_keyword_line(lines, _KW_TVA)
+    if tva:
+        fields["tva"] = tva
+    ttc = _amount_on_keyword_line(lines, _KW_TOTAL_TTC)
+    if ttc:
+        fields["total_ttc"] = ttc
+
+    # Line items — best-effort JSON hint (low confidence).
+    items = _extract_line_items(lines)
+    if items:
+        fields["lignes"] = items
+
+    return fields
+
+
+# ---------------------------------------------------------------------------
 # On-demand single-field suggestion ("AI auto-match" from the recognised text)
 # ---------------------------------------------------------------------------
 
@@ -420,6 +543,10 @@ _SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
     "tva": (_KW_TVA, _RE_AMOUNT_NO_PCT),
     "client": (_KW_CLIENT, None),
     "fournisseur": (_KW_FOURNISSEUR, None),
+    # Bon de livraison
+    "numero_bl": (_KW_BL_NUMBER, _RE_BL_NUMBER),
+    "date_bl": (_KW_DATE_BL, _RE_DATE_ANY),
+    "reference_commande": (_KW_REF_COMMANDE, _RE_NUM_TOKEN),
     # Carte grise
     "immatriculation": (None, _RE_IMMATRICULATION),
     "vin": (None, _RE_VIN),
