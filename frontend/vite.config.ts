@@ -81,6 +81,10 @@ export default defineConfig({
       workbox: {
         // Pre-cache the app shell (JS, CSS, HTML)
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        // The main bundle exceeds Workbox's 2 MiB default precache limit as the
+        // app grows; raise it so the shell is still fully precached. (A future
+        // optimisation is route-level code-splitting to shrink the bundle.)
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
 
         runtimeCaching: [
           // API calls: NetworkFirst with 5s timeout — fresh data when online,

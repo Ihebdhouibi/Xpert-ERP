@@ -42,6 +42,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
+import { BonLivraisonReceptionDialog } from '../../components/supplier-delivery-note/BonLivraisonReceptionDialog'
 
 // ---------------------------------------------------------------------------
 // Friendly labels for the structured field keys produced by the extractors
@@ -369,6 +370,7 @@ export function OcrReviewPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [blDialogOpen, setBlDialogOpen] = useState(false)
 
   useEffect(() => {
     if (!extractionId) return
@@ -646,6 +648,9 @@ export function OcrReviewPage() {
   const isReviewed = extraction.reviewed_at !== null
   const category = extraction.document_category ?? ''
   const ingestLabel = INGEST_LABEL[category] ?? 'Valider'
+  // A supplier delivery note is received via a dedicated reception dialog rather
+  // than the generic ingest flow.
+  const isDeliveryNote = category === 'supplier_delivery_note'
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
   const fieldsToShow = [
@@ -938,16 +943,30 @@ export function OcrReviewPage() {
                       <CheckCircleOutlineIcon />
                     )
                   }
-                  onClick={handleIngest}
+                  onClick={isDeliveryNote ? () => setBlDialogOpen(true) : handleIngest}
                   disabled={saving}
                 >
-                  {ingestLabel}
+                  {isDeliveryNote ? 'Réceptionner' : ingestLabel}
                 </Button>
               </Stack>
             )
           )}
         </Paper>
       </Stack>
+
+      {isDeliveryNote && extractionId && (
+        <BonLivraisonReceptionDialog
+          open={blDialogOpen}
+          onClose={() => setBlDialogOpen(false)}
+          extractionId={extractionId}
+          defaultBlNumber={edited.numero_bl}
+          defaultBlDate={edited.date_bl}
+          onConfirmed={() => {
+            setBlDialogOpen(false)
+            navigate('/purchase-orders')
+          }}
+        />
+      )}
     </Box>
   )
 }
