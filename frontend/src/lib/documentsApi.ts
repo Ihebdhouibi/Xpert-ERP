@@ -11,6 +11,7 @@ export type DocumentCategory =
   | 'repair_attachment'
   | 'invoice'
   | 'supplier_invoice'
+  | 'supplier_delivery_note'
   | 'generic'
 
 export type OwnerEntityType =
@@ -19,6 +20,8 @@ export type OwnerEntityType =
   | 'repair_order'
   | 'invoice'
   | 'supplier_invoice'
+  | 'supplier'
+  | 'purchase_order'
   | 'generic'
 
 export interface DocumentOut {

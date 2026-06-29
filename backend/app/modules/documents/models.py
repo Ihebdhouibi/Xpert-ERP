@@ -35,6 +35,7 @@ class DocumentCategory(str, enum.Enum):
     accident_photo = "accident_photo"
     invoice = "invoice"
     supplier_invoice = "supplier_invoice"
+    supplier_delivery_note = "supplier_delivery_note"  # Bon de livraison (fournisseur)
     repair_attachment = "repair_attachment"
     generic = "generic"
 
@@ -45,6 +46,8 @@ class OwnerEntityType(str, enum.Enum):
     repair_order = "repair_order"
     invoice = "invoice"
     supplier_invoice = "supplier_invoice"
+    supplier = "supplier"  # Fournisseur
+    purchase_order = "purchase_order"  # Bon de commande
     generic = "generic"
 
 

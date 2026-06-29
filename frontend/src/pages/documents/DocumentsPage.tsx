@@ -36,26 +36,49 @@ import type { DocumentCategory, DocumentOut, OwnerEntityType } from '../../lib/d
 import { documentsApi } from '../../lib/documentsApi'
 import { ocrApi } from '../../lib/ocrApi'
 
+// Complete labels for DISPLAY — covers every enum value (including legacy ones
+// no longer offered in the dropdowns) so existing documents always render a
+// proper French label.
+const CATEGORY_LABELS: Record<DocumentCategory, string> = {
+  registration_card: 'Carte grise',
+  supplier_invoice: 'Facture fournisseur',
+  supplier_delivery_note: 'Bon de livraison',
+  invoice: 'Facture',
+  id_doc: "Pièce d'identité",
+  insurance: 'Assurance',
+  accident_photo: 'Photo accident',
+  repair_attachment: 'Annexe OR',
+  generic: 'Générique',
+}
+
+const OWNER_LABELS: Record<OwnerEntityType, string> = {
+  vehicle: 'Véhicule',
+  supplier: 'Fournisseur',
+  purchase_order: 'Bon de commande',
+  supplier_invoice: 'Facture fournisseur',
+  customer: 'Client',
+  repair_order: 'Ordre de réparation',
+  invoice: 'Facture',
+  generic: 'Générique',
+}
+
+// Options OFFERED in the upload + filter dropdowns — scoped to the document
+// flows we currently handle (Carte grise, Facture fournisseur, Bon de livraison).
 const CATEGORIES: { value: DocumentCategory | ''; label: string }[] = [
   { value: '', label: 'Toutes les catégories' },
-  { value: 'registration_card', label: 'Carte grise' },
-  { value: 'id_doc', label: 'Pièce d\'identité' },
-  { value: 'insurance', label: 'Assurance' },
-  { value: 'accident_photo', label: 'Photo accident' },
-  { value: 'repair_attachment', label: 'Annexe OR' },
-  { value: 'invoice', label: 'Facture' },
-  { value: 'supplier_invoice', label: 'Facture fournisseur' },
-  { value: 'generic', label: 'Générique' },
+  { value: 'registration_card', label: CATEGORY_LABELS.registration_card },
+  { value: 'supplier_invoice', label: CATEGORY_LABELS.supplier_invoice },
+  { value: 'supplier_delivery_note', label: CATEGORY_LABELS.supplier_delivery_note },
+  { value: 'generic', label: CATEGORY_LABELS.generic },
 ]
 
 const OWNER_TYPES: { value: OwnerEntityType | ''; label: string }[] = [
   { value: '', label: 'Tous les types' },
-  { value: 'customer', label: 'Client' },
-  { value: 'vehicle', label: 'Véhicule' },
-  { value: 'repair_order', label: 'Ordre de réparation' },
-  { value: 'invoice', label: 'Facture' },
-  { value: 'supplier_invoice', label: 'Facture fournisseur' },
-  { value: 'generic', label: 'Générique' },
+  { value: 'vehicle', label: OWNER_LABELS.vehicle },
+  { value: 'supplier', label: OWNER_LABELS.supplier },
+  { value: 'purchase_order', label: OWNER_LABELS.purchase_order },
+  { value: 'supplier_invoice', label: OWNER_LABELS.supplier_invoice },
+  { value: 'generic', label: OWNER_LABELS.generic },
 ]
 
 function formatBytes(bytes: number): string {
@@ -65,7 +88,11 @@ function formatBytes(bytes: number): string {
 }
 
 function categoryLabel(cat: DocumentCategory): string {
-  return CATEGORIES.find((c) => c.value === cat)?.label ?? cat
+  return CATEGORY_LABELS[cat] ?? cat
+}
+
+function ownerLabel(owner: OwnerEntityType): string {
+  return OWNER_LABELS[owner] ?? owner
 }
 
 // ---------------------------------------------------------------------------
@@ -371,7 +398,7 @@ export function DocumentsPage() {
                   <TableCell>
                     <Chip label={categoryLabel(doc.category)} size="small" variant="outlined" />
                   </TableCell>
-                  <TableCell>{doc.owner_entity_type}</TableCell>
+                  <TableCell>{ownerLabel(doc.owner_entity_type)}</TableCell>
                   <TableCell>{formatBytes(doc.size_bytes)}</TableCell>
                   <TableCell>{new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</TableCell>
                   <TableCell>

@@ -83,6 +83,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   repair_attachment: 'Annexe OR',
   invoice: 'Facture',
   supplier_invoice: 'Facture fournisseur',
+  supplier_delivery_note: 'Bon de livraison',
   generic: 'Générique',
 }
 
