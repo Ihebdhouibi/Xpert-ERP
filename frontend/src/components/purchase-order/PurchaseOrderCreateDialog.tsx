@@ -31,6 +31,7 @@ import {
 } from '../../lib/purchaseOrderApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { partsApi } from '../../lib/partsApi'
+import { SupplierQuickCreateDialog } from '../supplier/SupplierQuickCreateDialog'
 
 interface PurchaseOrderCreateDialogProps {
   open: boolean
@@ -56,6 +57,7 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [supplierCreateOpen, setSupplierCreateOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -124,6 +126,15 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
               ))}
             </Select>
           </FormControl>
+          <Box>
+            <Button
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setSupplierCreateOpen(true)}
+            >
+              Ajouter un nouveau fournisseur
+            </Button>
+          </Box>
 
           <TextField
             label="Date de livraison prévue"
@@ -220,6 +231,16 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
           {saving ? <CircularProgress size={20} /> : 'Créer'}
         </Button>
       </DialogActions>
+
+      <SupplierQuickCreateDialog
+        open={supplierCreateOpen}
+        onClose={() => setSupplierCreateOpen(false)}
+        onCreated={(s) => {
+          setSuppliers((prev) => [s, ...prev.filter((p) => p.id !== s.id)])
+          setSupplierPublicId(s.id)
+          setSupplierCreateOpen(false)
+        }}
+      />
     </Dialog>
   )
 }
