@@ -150,6 +150,9 @@ def create_app() -> FastAPI:
     from app.modules.credit_note.router import router as credit_note_router, refund_router
     from app.modules.supplier.router import router as supplier_router
     from app.modules.purchase_order.router import router as purchase_order_router
+    from app.modules.supplier_delivery_note.router import (
+        router as supplier_delivery_note_router,
+    )
     from app.modules.supplier_invoice.router import router as supplier_invoice_router
     from app.modules.notification.router import router as notification_router
     from app.modules.notification.inbox_router import router as notification_inbox_router
@@ -185,6 +188,7 @@ def create_app() -> FastAPI:
     app.include_router(refund_router, prefix="/api/v1")
     app.include_router(supplier_router, prefix="/api/v1")
     app.include_router(purchase_order_router, prefix="/api/v1")
+    app.include_router(supplier_delivery_note_router, prefix="/api/v1")
     app.include_router(supplier_invoice_router, prefix="/api/v1")
     app.include_router(notification_router, prefix="/api/v1")
     app.include_router(notification_inbox_router, prefix="/api/v1")
