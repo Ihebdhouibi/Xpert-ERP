@@ -39,9 +39,13 @@ interface PurchaseOrderCreateDialogProps {
   onCreated: (po: PurchaseOrder) => void
 }
 
+// Sentinel for an "Autre" (uncatalogued) line — selected from the part dropdown.
+const OTHER_PART = '__autre__'
+
 interface LineForm {
   part_public_id: string
   part_name: string
+  label: string
   quantity_ordered: number
   unit_price_ht: number
 }
@@ -53,7 +57,7 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
   const [expectedDate, setExpectedDate] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<LineForm[]>([
-    { part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 },
+    { part_public_id: '', part_name: '', label: '', quantity_ordered: 1, unit_price_ht: 0 },
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -66,7 +70,7 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
   }, [open])
 
   const handleAddLine = () =>
-    setLines((l) => [...l, { part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 }])
+    setLines((l) => [...l, { part_public_id: '', part_name: '', label: '', quantity_ordered: 1, unit_price_ht: 0 }])
 
   const handleRemoveLine = (i: number) =>
     setLines((l) => l.filter((_, idx) => idx !== i))
@@ -79,7 +83,13 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
   const handleSubmit = async () => {
     setError('')
     if (!supplierPublicId) { setError('Veuillez sélectionner un fournisseur'); return }
-    if (lines.some((l) => !l.part_public_id)) { setError('Toutes les lignes doivent avoir une pièce'); return }
+    const invalidLine = lines.some((l) =>
+      l.part_public_id === OTHER_PART ? !l.label.trim() : !l.part_public_id,
+    )
+    if (invalidLine) {
+      setError('Chaque ligne doit avoir une pièce, ou un libellé pour les lignes « Autre ».')
+      return
+    }
 
     setSaving(true)
     try {
@@ -87,18 +97,26 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
         supplier_public_id: supplierPublicId,
         expected_delivery_date: expectedDate || undefined,
         notes: notes || undefined,
-        lines: lines.map((l) => ({
-          part_public_id: l.part_public_id,
-          quantity_ordered: l.quantity_ordered,
-          unit_price_ht: Math.round(l.unit_price_ht * 100),
-        })),
+        lines: lines.map((l) =>
+          l.part_public_id === OTHER_PART
+            ? {
+                label: l.label.trim(),
+                quantity_ordered: l.quantity_ordered,
+                unit_price_ht: Math.round(l.unit_price_ht * 100),
+              }
+            : {
+                part_public_id: l.part_public_id,
+                quantity_ordered: l.quantity_ordered,
+                unit_price_ht: Math.round(l.unit_price_ht * 100),
+              },
+        ),
       }
       const po = await purchaseOrderApi.create(payload)
       onCreated(po)
       setSupplierPublicId('')
       setExpectedDate('')
       setNotes('')
-      setLines([{ part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 }])
+      setLines([{ part_public_id: '', part_name: '', label: '', quantity_ordered: 1, unit_price_ht: 0 }])
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : 'Erreur lors de la création')
@@ -174,10 +192,22 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
                       displayEmpty
                     >
                       <MenuItem value="" disabled>Sélectionner…</MenuItem>
+                      {/* "Autre" first so it's always reachable without scrolling. */}
+                      <MenuItem value={OTHER_PART}>Autre (pièce non répertoriée)</MenuItem>
                       {parts.map((p) => (
                         <MenuItem key={p.id} value={p.id}>{p.name} ({p.sku_code})</MenuItem>
                       ))}
                     </Select>
+                    {ln.part_public_id === OTHER_PART && (
+                      <TextField
+                        size="small"
+                        fullWidth
+                        sx={{ mt: 1 }}
+                        placeholder="Désignation de la pièce (Autre)"
+                        value={ln.label}
+                        onChange={(e) => updateLine(i, 'label', e.target.value)}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <TextField

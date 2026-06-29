@@ -119,11 +119,18 @@ async def create_po(
     )
 
     for ld in lines_data:
-        part_id = await _resolve_part(db, garage_id, ld["part_public_id"])
+        part_public_id = ld.get("part_public_id")
+        # "Autre" line: no catalogue part, just a free-text label.
+        part_id = (
+            await _resolve_part(db, garage_id, part_public_id)
+            if part_public_id
+            else None
+        )
         await PurchaseOrderLineRepository.create(
             db,
             po_id=po.id,
             part_id=part_id,
+            label=ld.get("label"),
             quantity_ordered=ld["quantity_ordered"],
             unit_price_ht=ld["unit_price_ht"],
         )
@@ -168,11 +175,17 @@ async def update_po(
             raise POInvalidTransitionError("A purchase order must have at least one line")
         await PurchaseOrderLineRepository.delete_all_for_po(db, po.id)
         for ld in lines_data:
-            part_id = await _resolve_part(db, garage_id, ld["part_public_id"])
+            part_public_id = ld.get("part_public_id")
+            part_id = (
+                await _resolve_part(db, garage_id, part_public_id)
+                if part_public_id
+                else None
+            )
             await PurchaseOrderLineRepository.create(
                 db,
                 po_id=po.id,
                 part_id=part_id,
+                label=ld.get("label"),
                 quantity_ordered=ld["quantity_ordered"],
                 unit_price_ht=ld["unit_price_ht"],
             )
@@ -248,6 +261,14 @@ async def receive_po(
         line = line_map.get(line_id)
         if not line:
             raise POLineNotFoundError(f"Line {line_id} not found on PO {public_id}")
+
+        # An "Autre" line has no catalogue part yet — stock-in is impossible
+        # until it's reassigned to a real part.
+        if line.part_id is None:
+            raise POInvalidTransitionError(
+                f"Line {line_id} ('Autre') has no part defined yet; "
+                "assign a catalogue part before receiving it."
+            )
 
         # Update received quantity (no over-reception guard; partial is OK)
         line.quantity_received += qty

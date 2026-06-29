@@ -11,7 +11,8 @@ export type POMatchFlag = 'ok' | 'qty_mismatch' | 'inv_mismatch'
 
 export interface POLine {
   id: number
-  part_id: number
+  part_id: number | null
+  label?: string | null
   part_name?: string | null
   quantity_ordered: number
   unit_price_ht: number
@@ -45,7 +46,9 @@ export interface POListResponse {
 }
 
 export interface POLineInput {
-  part_public_id: string
+  // Either a catalogue part or, for an "Autre" line, a free-text label.
+  part_public_id?: string
+  label?: string
   quantity_ordered: number
   unit_price_ht: number
 }

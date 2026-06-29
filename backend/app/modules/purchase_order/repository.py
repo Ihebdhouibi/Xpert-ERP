@@ -129,13 +129,15 @@ class PurchaseOrderLineRepository:
     async def create(
         db: AsyncSession,
         po_id: int,
-        part_id: int,
+        part_id: Optional[int],
         quantity_ordered: int,
         unit_price_ht: int,
+        label: Optional[str] = None,
     ) -> PurchaseOrderLine:
         line = PurchaseOrderLine(
             purchase_order_id=po_id,
             part_id=part_id,
+            label=label,
             quantity_ordered=quantity_ordered,
             unit_price_ht=unit_price_ht,
         )
