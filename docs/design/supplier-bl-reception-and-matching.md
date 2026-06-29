@@ -144,4 +144,56 @@ and the facture loop (5) build on top.
 - Multi-page BLs spanning OCR pages (preview already paginates).
 - Whether to keep the **existing manual reception endpoint** alongside BL-driven
   reception (recommended: keep it as a no-document fallback).
-- Supplier identity resolution when OCR reads a supplier not yet in the system.
+- Supplier identity resolution when OCR reads a supplier not yet in the system →
+  resolved by §11 (HITL match-or-create).
+
+## 10. BL OCR extraction schema (refined)
+
+Formats vary widely (e.g. label is "N° de la pièce" vs "Numéro"; "Code" vs
+"Référence"; "P.U. Net" vs "P.U. H.T."), so the extractor must be
+**label-flexible** (heuristic/LLM, like the supplier-invoice extractor), not a
+fixed template.
+
+**Header**
+- `numero_bl` — N° / Numéro / N° de la pièce — **correlation key** (unique per
+  supplier, warn on duplicate).
+- `date_bl` — date / date de livraison.
+- `fournisseur` — the **issuer** → drives supplier resolution (§11).
+- `reference_commande` — order/PO ref if printed → used to auto-suggest the PO.
+- `immatriculation` — vehicle plate when present → optional link to vehicle/RO.
+- `total_ht`, `tva`, `total_ttc` — when present (valued BLs).
+- **Client is always `GARAGE MOTORS UTILITAIRE`** (our garage). **"AL DELIVERY"
+  is the delivery/transport company, NOT the client** — do not treat it as the
+  client; at most use the client line to confirm the BL is addressed to us.
+
+**Lines** (`lignes`, each):
+- `code` / `reference` — supplier part ref.
+- `designation_article` — description.
+- `quantite` — **may be decimal** (e.g. 0,20).
+- `pu_brut` — gross/list unit price.
+- `pu_net` — net unit price (after discount).
+- `montant_ht` — line total.
+- (`reste_a_livrer`, `conditionnement` captured when present.)
+
+Must support **plain BLs** (no prices/totals) and **decimal quantities**.
+
+Proposed review-page schema keys for `supplier_delivery_note`:
+`numero_bl, date_bl, fournisseur, reference_commande, immatriculation,
+total_ht, tva, total_ttc, lignes` (each line: code, designation_article,
+quantite, pu_brut, pu_net, montant_ht).
+
+## 11. Supplier resolution — HITL (Human In The Loop)
+
+On extraction, resolve the extracted `fournisseur` against the supplier list:
+- **Match found** → **pre-select** the supplier, but **require user
+  confirmation** — never apply silently (HITL).
+- **No match** → offer **"Créer un profil fournisseur"** inline, then select the
+  new one.
+
+Reuses `supplierApi.list({ search })` / `supplierApi.create`; the supplier form
+can be extracted from `SupplierPage` (same pattern as the PO create dialog).
+
+## 12. Line → PO matching
+- **Manual map for now**: the user maps each BL line to a PO line / catalog part
+  (the supplier `code` ≠ the garage's internal SKU). Auto/fuzzy matching by
+  code or désignation is a later enhancement.
