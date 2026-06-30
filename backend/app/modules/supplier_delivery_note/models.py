@@ -109,6 +109,13 @@ class SupplierDeliveryNoteLine(Base):
     # ok / over (qty > remaining) / extra (not on the PO)
     match_flag: Mapped[str] = mapped_column(String(20), nullable=False, default="ok")
 
+    # Fields captured from the BL itself (the supplier's own line), so the
+    # delivery note is recorded faithfully and linked field-by-field.
+    code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    pu_brut: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    pu_net: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    montant_ht: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
     delivery_note: Mapped[SupplierDeliveryNote] = relationship(
         "SupplierDeliveryNote", back_populates="lines"
     )

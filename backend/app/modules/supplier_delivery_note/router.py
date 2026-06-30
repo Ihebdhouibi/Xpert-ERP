@@ -34,6 +34,12 @@ class SDNLineInput(BaseModel):
     quantity_received: int = Field(..., ge=0)
     # Assign a catalogue part to an "Autre" PO line (the swap).
     part_public_id: Optional[str] = None
+    # BL-captured fields (recorded on the delivery-note line). Prices in minor units.
+    code: Optional[str] = None
+    designation: Optional[str] = None
+    pu_brut: Optional[int] = None
+    pu_net: Optional[int] = None
+    montant_ht: Optional[int] = None
 
 
 class SDNCreateRequest(BaseModel):

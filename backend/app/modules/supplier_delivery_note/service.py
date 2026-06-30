@@ -182,10 +182,15 @@ async def create_delivery_note(
                 supplier_delivery_note_id=sdn.id,
                 po_line_id=po_line.id,
                 part_id=po_line.part_id,
-                description=po_line.label,
+                # Prefer the BL-captured values; fall back to the PO line.
+                description=item.get("designation") or po_line.label,
                 quantity=int(item["quantity_received"]),
                 unit_price_ht=po_line.unit_price_ht,
                 match_flag=flag,
+                code=item.get("code"),
+                pu_brut=item.get("pu_brut"),
+                pu_net=item.get("pu_net"),
+                montant_ht=item.get("montant_ht"),
             )
         )
     if has_discrepancy:
