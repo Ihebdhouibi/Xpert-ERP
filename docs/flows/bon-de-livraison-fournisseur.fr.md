@@ -25,13 +25,13 @@ Téléversement BL ─► Catégorie « Bon de livraison »
 | **Créer un BC à la volée** | même dialogue → « Créer un nouveau bon de commande » | Saisie manuelle du BC. Le fournisseur peut être **créé à la volée** (« Ajouter un nouveau fournisseur », nom provisoire accepté). Les pièces inconnues sont saisies en ligne **« Autre »** (proposée **en premier** dans la liste). |
 | **OCR** | automatique au téléversement d'un BL | Extraction des champs (voir §3). |
 | **Vérification** | Extraction automatique (page OCR) | Les **« Champs détectés — Bon de livraison »** s'affichent et sont éditables : N° de BL, date, fournisseur, référence commande, immatriculation, totaux, lignes (brut). |
-| **Réception** | bouton **« Valider »** (sur un BL) → dialogue de réception | Affiche le **BC lié** + son **fournisseur** (lecture seule), et un tableau **ligne de BC ↔ quantité reçue**. Pour une ligne **« Autre »**, on **affecte la pièce réelle**. |
+| **Réception** | bouton **« Réceptionner »** (sur un BL) → dialogue de réception | Affiche le **BC lié** + son **fournisseur** (lecture seule). Si des lignes ont été capturées dans la grille, **une ligne de mapping par ligne de BL** : choisir la **ligne de BC** correspondante + la **quantité reçue** (pour une ligne **« Autre »**, **affecter la pièce réelle**). Sinon, repli sur la saisie **par ligne de BC**. |
 | **Confirmation** | « Confirmer la réception » | Entrée en stock, mise à jour de `quantité reçue` et du **statut du BC**, enregistrement du **BL** (n°, date, lignes). |
 
 ## 3. Champs extraits du BL (OCR)
 
 - **En-tête** : `numero_bl` (clé de corrélation), `date_bl`, `fournisseur` (en-tête/letterhead — confiance abaissée, à confirmer), `reference_commande`, `immatriculation`, `total_ht` / `tva` / `total_ttc`.
-- **Lignes** (`lignes`) : indication **best-effort** (code / désignation / quantité / montant) — les tableaux de BL varient et l'OCR éclate les cellules, donc ces lignes sont un **repère** pour l'opérateur, pas une valeur ferme.
+- **Lignes** : une **grille éditable** par ligne — colonnes **Code / Désignation / Qté / PU Brut / PU Net / Montant**. Pré-remplie au mieux depuis l'extraction (`lignes`), puis **corrigée par l'opérateur**. **Chaque cellule est remplissable au recadrage (crop)** : on dessine la zone sur le document et l'OCR remplit la cellule — **sur n'importe quelle page** (utile pour les BL multi-pages). Le champ brut « Lignes détectées (brut) » reste disponible en secondaire.
 - **Client** : toujours notre garage (`GARAGE MOTORS UTILITAIRE`) ; **« AL DELIVERY » = société de livraison, pas le client** → non extrait comme client.
 
 ## 4. Règles métier
@@ -52,7 +52,7 @@ Téléversement BL ─► Catégorie « Bon de livraison »
 ## 6. Limites connues (assumées)
 
 - **Quantités décimales** : conservées sur la ligne de BL, mais la **réception vers le BC utilise des entiers** (le BC est en entier). Cas décimal pur à traiter ultérieurement.
-- **Lignes BL** : extraction best-effort ; le **mapping** ligne BL ↔ ligne BC est **manuel** (l'opérateur saisit les quantités reçues par ligne de BC).
+- **Lignes BL** : capturées dans une **grille éditable** (cellule par cellule, recadrage OCR sur toutes les pages) ; le **mapping** ligne BL ↔ ligne BC reste **manuel** dans la réception. Auto-matching par code (mémorisation `code → pièce`) = amélioration **future**.
 - **Création de pièce catalogue à la volée** depuis la réception : non incluse — affecter une **pièce existante** (créer la pièce via le catalogue si besoin).
 - **Rapprochement 3 voies avec la facture** (BL ↔ facture via `bl_number`) : étape **suivante**, non incluse ici.
 
@@ -67,10 +67,12 @@ Téléversement BL ─► Catégorie « Bon de livraison »
 | BL-01 | Documents → Télécharger → choisir le fichier BL → Catégorie **Bon de livraison** → Type propriétaire **Bon de commande**. | Le champ « ID propriétaire » est remplacé par un **sélecteur de BC** ; « Télécharger » reste **désactivé**. | | |
 | BL-02 | Sélectionner un **BC existant** du bon fournisseur → Télécharger. | Le document est filé sous ce BC ; l'OCR démarre automatiquement. | | |
 | BL-03 | (Variante) Cliquer **« Créer un nouveau bon de commande »** → si le fournisseur n'existe pas, **« Ajouter un nouveau fournisseur »** → créer ; ajouter des lignes (dont une **« Autre »** avec désignation) → Créer. | Le BC est créé et **auto-sélectionné** ; le fournisseur créé est sélectionnable. | | |
-| BL-04 | Ouvrir la page **Extraction automatique** du BL (ou « Ré-analyser » si OCR fait avant la fonctionnalité). | **« Champs détectés — Bon de livraison »** affiche N° de BL, date, fournisseur, totaux, lignes (brut), éditables. | | |
-| BL-05 | Vérifier/corriger les champs ; cliquer **« Valider »**. | Le **dialogue de réception** s'ouvre : BC lié + fournisseur (lecture seule) + tableau des lignes du BC. | | |
-| BL-06 | Saisir la **quantité reçue** sur une ligne catalogue (ex. 1) ; pour une ligne **« Autre »**, **affecter une pièce** existante puis saisir la quantité. | La quantité est acceptée ; la ligne « Autre » exige une pièce avant confirmation. | | |
-| BL-07 | « Confirmer la réception ». | Succès ; **stock entré** (vérifier dans Stock), **quantité reçue** du BC mise à jour, **statut** du BC à `partiellement reçu`/`complété`, la ligne « Autre » porte désormais la **pièce affectée**. | | |
+| BL-04 | Ouvrir la page **Extraction automatique** du BL (ou « Ré-analyser » si OCR fait avant la fonctionnalité). | En-tête + la **grille de lignes** (Code/Désignation/Qté/PU Brut/PU Net/Montant) s'affichent, éditables et pré-remplies au mieux. | | |
+| BL-04b | Dans la grille, cliquer l'icône **recadrage** d'une cellule → dessiner la zone sur le document → relâcher. | La cellule se remplit avec le texte OCR de la zone. | | |
+| BL-04c | (BL multi-pages) Aller à **page 2** → recadrer une cellule sur cette page. | Le recadrage fonctionne **aussi sur la page 2** (la cellule se remplit). | | |
+| BL-05 | Corriger la grille au besoin ; cliquer **« Réceptionner »**. | Le dialogue s'ouvre : BC + fournisseur (lecture seule) + **une ligne de mapping par ligne capturée**. | | |
+| BL-06 | Pour chaque ligne capturée : choisir la **ligne de BC** + la **quantité reçue** ; pour une ligne **« Autre »**, **affecter une pièce** existante. | La ligne « Autre » exige une pièce ; chaque ligne exige une ligne de BC + qté > 0. | | |
+| BL-07 | « Confirmer la réception ». | Succès ; **stock entré**, **quantité reçue** du BC mise à jour, **statut** mis à jour, la ligne « Autre » porte la **pièce affectée**, et les **champs capturés** (code/PU brut/PU net/montant) sont enregistrés sur la ligne du BL. | | |
 | BL-08 | Refaire un BL avec le **même n° de BL** pour le même fournisseur. | **Avertissement** « N° de BL déjà existant » + bouton **« Confirmer quand même »**. | | |
 | BL-09 | Réceptionner une **quantité supérieure** à la quantité commandée restante. | Réception acceptée + **signalement** (écart / `has_discrepancy`). | | |
 | BL-10 | Livraison partielle : recevoir 10 sur une ligne commandée à 50, puis un 2ᵉ BL de 10. | `quantité reçue` **cumulée** (20/50) ; statut `partiellement reçu`. | | |
