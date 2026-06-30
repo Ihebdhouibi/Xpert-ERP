@@ -135,8 +135,10 @@ class OcrEngine(ABC):
         """Synchronous full-document OCR (CPU-bound)."""
 
     @abstractmethod
-    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
-        """Synchronous OCR of a rectangular region; returns the joined text."""
+    def ocr_region_sync(
+        self, file_bytes: bytes, box: tuple[int, int, int, int], page: int = 0
+    ) -> str:
+        """Synchronous OCR of a rectangular region on the given page (0-based)."""
 
     # -- shared, engine-agnostic page rendering ----------------------------
     def page_count_sync(self, file_bytes: bytes) -> int:
@@ -187,15 +189,19 @@ class OcrEngine(ABC):
             None, runner.submit, _subprocess_run_ocr, file_bytes
         )
 
-    async def run_ocr_region(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+    async def run_ocr_region(
+        self, file_bytes: bytes, box: tuple[int, int, int, int], page: int = 0
+    ) -> str:
         from app.modules.ocr.process_runner import get_runner
 
         loop = asyncio.get_running_loop()
         runner = get_runner()
         if runner is None:
-            return await loop.run_in_executor(None, self.ocr_region_sync, file_bytes, box)
+            return await loop.run_in_executor(
+                None, self.ocr_region_sync, file_bytes, box, page
+            )
         return await loop.run_in_executor(
-            None, runner.submit, _subprocess_ocr_region, file_bytes, box
+            None, runner.submit, _subprocess_ocr_region, file_bytes, box, page
         )
 
     async def render_first_page_png(self, file_bytes: bytes) -> bytes:
@@ -221,8 +227,10 @@ def _subprocess_run_ocr(file_bytes: bytes) -> RawOcrResult:
     return get_ocr_engine()._run_sync(file_bytes)
 
 
-def _subprocess_ocr_region(file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
-    return get_ocr_engine().ocr_region_sync(file_bytes, box)
+def _subprocess_ocr_region(
+    file_bytes: bytes, box: tuple[int, int, int, int], page: int = 0
+) -> str:
+    return get_ocr_engine().ocr_region_sync(file_bytes, box, page)
 
 
 class PaddleOcrEngine(OcrEngine):
@@ -311,11 +319,13 @@ class PaddleOcrEngine(OcrEngine):
                 continue
         return lines, (width, height)
 
-    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
-        """OCR just a rectangular region [x1,y1,x2,y2] of the document image.
+    def ocr_region_sync(
+        self, file_bytes: bytes, box: tuple[int, int, int, int], page: int = 0
+    ) -> str:
+        """OCR just a rectangular region [x1,y1,x2,y2] of the given page (0-based).
 
-        Coordinates are in the same pixel space as the stored layout boxes
-        (original image, or first page rendered at PDF_RENDER_DPI for PDFs).
+        Coordinates are in the rendered page's pixel space (original image, or
+        the page rasterised at PDF_RENDER_DPI for PDFs).
         """
         import io as _io
 
@@ -328,7 +338,8 @@ class PaddleOcrEngine(OcrEngine):
             pages = _pdf_to_image_bytes(file_bytes)
             if not pages:
                 return ""
-            base = _bytes_to_numpy(pages[0])
+            idx = max(0, min(page, len(pages) - 1))
+            base = _bytes_to_numpy(pages[idx])
         else:
             base = _bytes_to_numpy(file_bytes)
 
@@ -476,12 +487,15 @@ class OnnxOcrEngine(OcrEngine):
         full_text = "\n".join(line.text for line in lines)
         return RawOcrResult(lines=lines, full_text=full_text, width=width, height=height)
 
-    def ocr_region_sync(self, file_bytes: bytes, box: tuple[int, int, int, int]) -> str:
+    def ocr_region_sync(
+        self, file_bytes: bytes, box: tuple[int, int, int, int], page: int = 0
+    ) -> str:
         if _is_pdf(file_bytes):
             pages = _pdf_to_image_bytes(file_bytes)
             if not pages:
                 return ""
-            base = _bytes_to_numpy(pages[0])
+            idx = max(0, min(page, len(pages) - 1))
+            base = _bytes_to_numpy(pages[idx])
         else:
             base = _bytes_to_numpy(file_bytes)
 

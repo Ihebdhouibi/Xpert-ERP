@@ -413,6 +413,7 @@ async def ocr_region(
     *,
     extraction_public_id: uuid.UUID,
     box: tuple[int, int, int, int],
+    page: int = 0,
 ) -> str:
     """Run OCR on a sub-region of the extraction's source document."""
     extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
@@ -426,7 +427,7 @@ async def ocr_region(
         bucket=cfg.s3_bucket_documents, key=document.storage_key
     )
     engine = get_ocr_engine()
-    return await engine.run_ocr_region(data, box)
+    return await engine.run_ocr_region(data, box, max(0, page))
 
 
 async def get_page_image(

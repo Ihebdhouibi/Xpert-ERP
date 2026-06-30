@@ -172,6 +172,10 @@ function DocumentPreview({
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [renderW, setRenderW] = useState(0)
+  // Natural width of the displayed page image — drives the display→image scale so
+  // cropping works on ANY page (PDFs render every page at the same DPI), not just
+  // page 1 where the OCR layout is known.
+  const [imgNaturalW, setImgNaturalW] = useState(0)
   const [imgError, setImgError] = useState(false)
   const startRef = useRef<{ x: number; y: number } | null>(null)
   const [draw, setDraw] = useState<DrawRect | null>(null)
@@ -179,6 +183,7 @@ function DocumentPreview({
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
+    setImgNaturalW(0) // reset until the new page image reports its natural size
     // Guard against the ResizeObserver feedback loop: a synchronous setState in
     // the observer can re-trigger layout (e.g. when a scrollbar toggles), which
     // makes the preview jitter. Debounce via rAF and skip no-op width changes.
@@ -221,7 +226,10 @@ function DocumentPreview({
   }
 
   const isPdf = /\.pdf(\?|$)/i.test(url)
-  const scale = layout && layout.width ? renderW / layout.width : 1
+  // Prefer the actual image natural width (works on every page); fall back to the
+  // OCR layout width (page 1) so highlight overlays keep aligning.
+  const baseW = imgNaturalW || (layout && layout.width ? layout.width : 0)
+  const scale = baseW ? renderW / baseW : 1
 
   const localPoint = (e: ReactMouseEvent) => {
     const r = wrapRef.current!.getBoundingClientRect()
@@ -291,6 +299,9 @@ function DocumentPreview({
             src={url}
             alt="Aperçu du document"
             draggable={false}
+            onLoad={(e) =>
+              setImgNaturalW((e.currentTarget as HTMLImageElement).naturalWidth)
+            }
             onError={() => setImgError(true)}
             sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
           />
@@ -532,7 +543,7 @@ export function OcrReviewPage() {
     setCropLoading(true)
     setError(null)
     try {
-      const { text } = await ocrApi.ocrRegion(extractionId!, box)
+      const { text } = await ocrApi.ocrRegion(extractionId!, box, pageIndex)
       if (text) {
         setEdited((prev) => ({ ...prev, [target]: text }))
         setHighlight([[box.x1, box.y1, box.x2, box.y2]])
@@ -753,9 +764,9 @@ export function OcrReviewPage() {
             layout={pageIndex === 0 ? layout : null}
             highlight={pageIndex === 0 ? highlight : []}
             drawMode={
-              pageIndex === 0 &&
-              canHighlight &&
-              (activeField !== null || cropTarget !== null)
+              // Crop-to-OCR works on every page; assign-from-layout is page-1 only.
+              cropTarget !== null ||
+              (pageIndex === 0 && canHighlight && activeField !== null)
             }
             onRegionDrawn={handleRegionDrawn}
           />

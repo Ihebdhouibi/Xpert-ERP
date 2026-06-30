@@ -174,6 +174,7 @@ async def ocr_region(
             db,
             extraction_public_id=extraction_id,
             box=(body.x1, body.y1, body.x2, body.y2),
+            page=body.page,
         )
     except OcrNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OCR extraction not found")
