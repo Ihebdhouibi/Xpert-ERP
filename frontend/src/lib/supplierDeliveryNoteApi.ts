@@ -9,6 +9,12 @@ export interface SupplierDeliveryNoteLineInput {
   po_line_id: number
   quantity_received: number
   part_public_id?: string
+  // Optional per-line capture from the OCR review grid. Prices are MINOR units (cents).
+  code?: string
+  designation?: string
+  pu_brut?: number
+  pu_net?: number
+  montant_ht?: number
 }
 
 export interface SupplierDeliveryNoteCreatePayload {

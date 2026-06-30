@@ -36,6 +36,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CropFreeIcon from '@mui/icons-material/CropFree'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -145,6 +147,66 @@ interface Layout {
   width: number
   height: number
   boxes: Record<string, number[]>
+}
+
+// ---------------------------------------------------------------------------
+// Per-line "Bon de livraison" capture grid
+// ---------------------------------------------------------------------------
+interface BlLine {
+  code: string
+  designation: string
+  quantite: string
+  pu_brut: string
+  pu_net: string
+  montant: string
+}
+
+type BlLineField = keyof BlLine
+
+const BL_LINE_COLUMNS: { field: BlLineField; label: string }[] = [
+  { field: 'code', label: 'Code' },
+  { field: 'designation', label: 'Désignation' },
+  { field: 'quantite', label: 'Qté' },
+  { field: 'pu_brut', label: 'PU Brut' },
+  { field: 'pu_net', label: 'PU Net' },
+  { field: 'montant', label: 'Montant' },
+]
+
+const emptyBlLine = (): BlLine => ({
+  code: '',
+  designation: '',
+  quantite: '',
+  pu_brut: '',
+  pu_net: '',
+  montant: '',
+})
+
+// Prefix used to arm a crop targeting a single grid cell: `bl-line:${i}:${field}`.
+const BL_CROP_PREFIX = 'bl-line:'
+
+// Build the initial grid by parsing the raw `lignes` JSON string the extractor
+// produced. Each item ~ { description, quantity, unit_price, line_total }.
+function seedBlLinesFromRaw(rawLignes: string | undefined): BlLine[] {
+  if (!rawLignes) return [emptyBlLine()]
+  try {
+    const parsed = JSON.parse(rawLignes)
+    if (!Array.isArray(parsed) || parsed.length === 0) return [emptyBlLine()]
+    const toStr = (v: unknown) =>
+      v === null || v === undefined ? '' : String(v)
+    return parsed.map((item) => {
+      const obj = (item ?? {}) as Record<string, unknown>
+      return {
+        code: '',
+        designation: toStr(obj.description),
+        quantite: toStr(obj.quantity),
+        pu_brut: '',
+        pu_net: toStr(obj.unit_price),
+        montant: toStr(obj.line_total),
+      }
+    })
+  } catch {
+    return [emptyBlLine()]
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -382,6 +444,10 @@ export function OcrReviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [blDialogOpen, setBlDialogOpen] = useState(false)
+  // Per-line BL capture grid (supplier_delivery_note only). Pre-seeded once from
+  // the raw `lignes` field; not overwritten after the user starts editing.
+  const [blLines, setBlLines] = useState<BlLine[]>([])
+  const blSeededRef = useRef(false)
 
   useEffect(() => {
     if (!extractionId) return
@@ -440,6 +506,27 @@ export function OcrReviewPage() {
       cache.clear()
     }
   }, [extractionId])
+
+  // Pre-seed the BL capture grid once, after the extraction has loaded, for
+  // supplier delivery notes. Parses `edited.lignes` (raw JSON string array). The
+  // user's edits are preserved (guarded by blSeededRef).
+  useEffect(() => {
+    if (blSeededRef.current) return
+    if (extraction?.document_category !== 'supplier_delivery_note') return
+    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    blSeededRef.current = true
+    setBlLines(seedBlLinesFromRaw(edited.lignes))
+  }, [extraction, edited.lignes])
+
+  const updateBlLine = (i: number, field: BlLineField, value: string) =>
+    setBlLines((prev) =>
+      prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)),
+    )
+
+  const addBlLine = () => setBlLines((prev) => [...prev, emptyBlLine()])
+
+  const removeBlLine = (i: number) =>
+    setBlLines((prev) => prev.filter((_, idx) => idx !== i))
 
   // Navigate the multi-page preview (PDFs). Field localisation / cropping is
   // page-1 only, so any active field/crop/highlight is cleared when leaving it.
@@ -545,7 +632,16 @@ export function OcrReviewPage() {
     try {
       const { text } = await ocrApi.ocrRegion(extractionId!, box, pageIndex)
       if (text) {
-        setEdited((prev) => ({ ...prev, [target]: text }))
+        if (target.startsWith(BL_CROP_PREFIX)) {
+          // Convention: `bl-line:${i}:${field}` — write into the capture grid.
+          const [, idxStr, field] = target.split(':')
+          const i = Number(idxStr)
+          if (!Number.isNaN(i) && field) {
+            updateBlLine(i, field as BlLineField, text)
+          }
+        } else {
+          setEdited((prev) => ({ ...prev, [target]: text }))
+        }
         setHighlight([[box.x1, box.y1, box.x2, box.y2]])
       } else {
         setError('Aucun texte reconnu dans la zone sélectionnée.')
@@ -925,6 +1021,101 @@ export function OcrReviewPage() {
             </Stack>
           )}
 
+          {isDeliveryNote && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ mb: 1 }}
+              >
+                <Typography variant="subtitle1">Lignes du bon de livraison</Typography>
+                <Button size="small" startIcon={<AddIcon />} onClick={addBlLine}>
+                  Ajouter une ligne
+                </Button>
+              </Stack>
+              {canHighlight && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mb: 1 }}
+                >
+                  Pour chaque cellule, cliquez sur l'icône de recadrage puis dessinez
+                  la zone correspondante sur le document.
+                </Typography>
+              )}
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {BL_LINE_COLUMNS.map((col) => (
+                        <TableCell key={col.field}>{col.label}</TableCell>
+                      ))}
+                      <TableCell sx={{ width: 44 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {blLines.map((row, i) => (
+                      <TableRow key={i}>
+                        {BL_LINE_COLUMNS.map((col) => {
+                          const cropKey = `${BL_CROP_PREFIX}${i}:${col.field}`
+                          return (
+                            <TableCell key={col.field} sx={{ p: 0.5 }}>
+                              <Stack direction="row" spacing={0.25} alignItems="center">
+                                <TextField
+                                  size="small"
+                                  fullWidth
+                                  variant="standard"
+                                  value={row[col.field]}
+                                  onChange={(e) =>
+                                    updateBlLine(i, col.field, e.target.value)
+                                  }
+                                  sx={{ minWidth: col.field === 'designation' ? 140 : 60 }}
+                                />
+                                {canHighlight && (
+                                  <Tooltip title="Recadrer et reconnaître cette cellule">
+                                    <IconButton
+                                      size="small"
+                                      color={cropTarget === cropKey ? 'primary' : 'default'}
+                                      disabled={cropLoading}
+                                      onClick={() => {
+                                        setActiveField(null)
+                                        setCropTarget((prev) =>
+                                          prev === cropKey ? null : cropKey,
+                                        )
+                                      }}
+                                    >
+                                      <CropFreeIcon fontSize="inherit" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </Stack>
+                            </TableCell>
+                          )
+                        })}
+                        <TableCell sx={{ p: 0.5 }}>
+                          <Tooltip title="Supprimer la ligne">
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                disabled={blLines.length <= 1}
+                                onClick={() => removeBlLine(i)}
+                              >
+                                <DeleteOutlineIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </>
+          )}
+
           <Divider sx={{ my: 2 }} />
 
           {isReviewed ? (
@@ -972,6 +1163,7 @@ export function OcrReviewPage() {
           extractionId={extractionId}
           defaultBlNumber={edited.numero_bl}
           defaultBlDate={edited.date_bl}
+          blLines={blLines}
           onConfirmed={() => {
             setBlDialogOpen(false)
             navigate('/purchase-orders')
