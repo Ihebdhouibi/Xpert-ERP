@@ -12,44 +12,7 @@ import {
   Typography,
 } from '@mui/material'
 import { supplierApi, Supplier, SupplierCreatePayload } from '../../lib/supplierApi'
-
-// Normalise a supplier name for comparison: case/accents/spacing/punct-insensitive.
-function normalizeName(s: string): string {
-  return Array.from(s.normalize('NFD'))
-    .filter((c) => {
-      const n = c.charCodeAt(0)
-      return n < 0x300 || n > 0x36f // drop combining accents
-    })
-    .join('')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-// Sorensen-Dice bigram similarity in [0,1] — small and deterministic.
-function diceSimilarity(a: string, b: string): number {
-  if (a === b) return 1
-  if (a.length < 2 || b.length < 2) return 0
-  const bigrams = (s: string) => {
-    const m = new Map<string, number>()
-    for (let i = 0; i < s.length - 1; i++) {
-      const g = s.slice(i, i + 2)
-      m.set(g, (m.get(g) ?? 0) + 1)
-    }
-    return m
-  }
-  const ma = bigrams(a)
-  const mb = bigrams(b)
-  let total = 0
-  ma.forEach((v) => (total += v))
-  mb.forEach((v) => (total += v))
-  let overlap = 0
-  ma.forEach((v, g) => {
-    const w = mb.get(g)
-    if (w) overlap += Math.min(v, w)
-  })
-  return total ? (2 * overlap) / total : 0
-}
+import { normalizeName, diceSimilarity } from '../../lib/supplierMatch'
 
 // Return an existing supplier whose name closely matches `name` (to avoid
 // creating a duplicate), or null.

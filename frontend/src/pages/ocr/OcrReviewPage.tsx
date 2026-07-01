@@ -44,6 +44,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
+import { supplierApi, Supplier } from '../../lib/supplierApi'
+import { findBestSupplierMatch } from '../../lib/supplierMatch'
 import { BonLivraisonReceptionDialog } from '../../components/supplier-delivery-note/BonLivraisonReceptionDialog'
 
 // ---------------------------------------------------------------------------
@@ -451,6 +453,9 @@ export function OcrReviewPage() {
   // the raw `lignes` field; not overwritten after the user starts editing.
   const [blLines, setBlLines] = useState<BlLine[]>([])
   const blSeededRef = useRef(false)
+  // Suppliers, for resolving the OCR'd supplier to an existing one (BL only).
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const supplierMatchedRef = useRef(false)
 
   useEffect(() => {
     if (!extractionId) return
@@ -569,6 +574,39 @@ export function OcrReviewPage() {
     () => Object.keys(fields).filter((k) => !isRawKey(k) && !isReservedKey(k)),
     [fields],
   )
+
+  // Load the supplier list (BL only) so we can resolve the OCR'd supplier.
+  useEffect(() => {
+    if (extraction?.document_category !== 'supplier_delivery_note') return
+    let cancelled = false
+    supplierApi
+      .list({ page_size: 200 })
+      .then((r) => {
+        if (!cancelled) setSuppliers(r.items)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [extraction?.document_category])
+
+  // Auto-fill the supplier field with the best DB match of the OCR text (the
+  // extracted supplier plus the recognised lines), once, after OCR completes.
+  useEffect(() => {
+    if (supplierMatchedRef.current) return
+    if (extraction?.document_category !== 'supplier_delivery_note') return
+    if (!suppliers.length) return
+    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    supplierMatchedRef.current = true
+    const candidates = [
+      edited.fournisseur ?? '',
+      ...rawLines.map(([, t]) => String(t)),
+    ]
+    const match = findBestSupplierMatch(candidates, suppliers)
+    if (match && match.supplier.name !== (edited.fournisseur ?? '')) {
+      setEdited((prev) => ({ ...prev, fournisseur: match.supplier.name }))
+    }
+  }, [extraction, suppliers, rawLines, edited.fournisseur])
 
   // Boxes for a recognised line key
   const boxFor = (lineKey: string): number[][] => {
