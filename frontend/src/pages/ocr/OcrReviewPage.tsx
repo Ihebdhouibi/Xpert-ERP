@@ -71,6 +71,7 @@ const FIELD_LABELS: Record<string, string> = {
   numero_bl: 'N° de bon de livraison',
   date_bl: 'Date de livraison',
   reference_commande: 'Référence commande',
+  email: 'Email fournisseur',
   lignes: 'Lignes détectées (brut)',
 }
 
@@ -127,6 +128,7 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'numero_bl',
     'date_bl',
     'fournisseur',
+    'email',
     'reference_commande',
     'immatriculation',
     'total_ht',
@@ -1164,6 +1166,7 @@ export function OcrReviewPage() {
           extractionId={extractionId}
           defaultBlNumber={edited.numero_bl}
           defaultBlDate={edited.date_bl}
+          defaultEmail={edited.email}
           blLines={blLines}
           onConfirmed={() => {
             setBlDialogOpen(false)

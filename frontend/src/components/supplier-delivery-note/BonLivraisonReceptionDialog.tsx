@@ -41,6 +41,7 @@ interface BonLivraisonReceptionDialogProps {
   extractionId: string
   defaultBlNumber?: string
   defaultBlDate?: string
+  defaultEmail?: string
   // Per-line capture from the OCR review grid. When provided & non-empty, the
   // dialog maps each captured line to a PO line instead of driving from PO lines.
   blLines?: CapturedBlLine[]
@@ -89,6 +90,7 @@ export function BonLivraisonReceptionDialog({
   extractionId,
   defaultBlNumber,
   defaultBlDate,
+  defaultEmail,
   blLines,
   onConfirmed,
 }: BonLivraisonReceptionDialogProps) {
@@ -271,6 +273,7 @@ export function BonLivraisonReceptionDialog({
         bl_date: blDate || undefined,
         notes: notes.trim() || undefined,
         allow_duplicate_bl_number: allowDuplicate || undefined,
+        supplier_email: defaultEmail?.trim() || undefined,
         lines,
       })
       onConfirmed()

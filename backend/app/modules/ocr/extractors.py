@@ -421,6 +421,7 @@ _KW_REF_COMMANDE = re.compile(
     re.IGNORECASE,
 )
 _KW_IMMAT_BL = re.compile(r"immatriculation|immat", re.IGNORECASE)
+_RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # Our own garage / the delivery company — never the supplier on a received BL.
 _KW_OWN_PARTY = re.compile(r"garage\s*motors|al\s*delivery", re.IGNORECASE)
 _KW_BL_TITLE = re.compile(r"bon\s*de\s*livraison", re.IGNORECASE)
@@ -509,6 +510,13 @@ def extract_bon_de_livraison(result: RawOcrResult) -> FieldMap:
     if fournisseur:
         fields["fournisseur"] = fournisseur
 
+    # Supplier email — first email on the document (associated to the supplier).
+    for line in lines:
+        m = _RE_EMAIL.search(line.text)
+        if m:
+            fields["email"] = (m.group(0), line.confidence)
+            break
+
     # Totals (valued BLs).
     ht = _amount_on_keyword_line(lines, _KW_TOTAL_HT)
     if ht:
@@ -547,6 +555,7 @@ _SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
     "numero_bl": (_KW_BL_NUMBER, _RE_BL_NUMBER),
     "date_bl": (_KW_DATE_BL, _RE_DATE_ANY),
     "reference_commande": (_KW_REF_COMMANDE, _RE_NUM_TOKEN),
+    "email": (None, _RE_EMAIL),
     # Carte grise
     "immatriculation": (None, _RE_IMMATRICULATION),
     "vin": (None, _RE_VIN),

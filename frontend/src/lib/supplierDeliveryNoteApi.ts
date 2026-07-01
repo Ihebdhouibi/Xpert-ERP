@@ -23,6 +23,7 @@ export interface SupplierDeliveryNoteCreatePayload {
   bl_date?: string
   notes?: string
   allow_duplicate_bl_number?: boolean
+  supplier_email?: string
   lines: SupplierDeliveryNoteLineInput[]
 }
 

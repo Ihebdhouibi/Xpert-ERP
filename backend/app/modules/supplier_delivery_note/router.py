@@ -48,6 +48,8 @@ class SDNCreateRequest(BaseModel):
     bl_date: Optional[date] = None
     notes: Optional[str] = None
     allow_duplicate_bl_number: bool = False
+    # Email read from the BL — associated to the supplier profile if it has none.
+    supplier_email: Optional[str] = None
     lines: list[SDNLineInput] = Field(..., min_length=1)
 
 
@@ -102,6 +104,7 @@ async def create_supplier_delivery_note(
             notes=body.notes,
             lines=[ln.model_dump() for ln in body.lines],
             allow_duplicate_bl_number=body.allow_duplicate_bl_number,
+            supplier_email=body.supplier_email,
         )
         await db.commit()
         await db.refresh(sdn)

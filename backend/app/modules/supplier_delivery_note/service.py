@@ -96,6 +96,7 @@ async def create_delivery_note(
     notes: Optional[str],
     lines: list[dict],
     allow_duplicate_bl_number: bool = False,
+    supplier_email: Optional[str] = None,
 ) -> SupplierDeliveryNote:
     """Create the BL + perform reception.
 
@@ -195,6 +196,16 @@ async def create_delivery_note(
         )
     if has_discrepancy:
         sdn.has_discrepancy = True
+
+    # Associate the BL's email with the supplier profile if it has none yet.
+    if supplier_email and supplier_email.strip():
+        from app.modules.supplier.models import Supplier
+
+        sup = (
+            await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+        ).scalar_one_or_none()
+        if sup is not None and not (sup.email or "").strip():
+            sup.email = supplier_email.strip()
 
     await db.flush()
     logger.info(
