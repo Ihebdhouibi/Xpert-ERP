@@ -3,6 +3,7 @@ import { apiClient } from './apiClient'
 export interface PoForExtractionResponse {
   purchase_order_public_id: string
   supplier_id: number
+  supplier_name: string | null
 }
 
 export interface SupplierDeliveryNoteLineInput {

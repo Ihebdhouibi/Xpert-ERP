@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException
 from fastapi import status as http_status
 from fastapi.routing import APIRouter
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -78,7 +79,17 @@ async def po_for_extraction(
         )
     except (PONotLinkedError, SDNError) as e:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=str(e))
-    return {"purchase_order_public_id": str(po.public_id), "supplier_id": po.supplier_id}
+    # Resolve the supplier name — it is authoritative for the BL (from the PO).
+    from app.modules.supplier.models import Supplier
+
+    sup = (
+        await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+    ).scalar_one_or_none()
+    return {
+        "purchase_order_public_id": str(po.public_id),
+        "supplier_id": po.supplier_id,
+        "supplier_name": sup.name if sup else None,
+    }
 
 
 @router.post(
