@@ -132,7 +132,8 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'total_ht',
     'tva',
     'total_ttc',
-    'lignes',
+    // 'lignes' is intentionally omitted — the editable per-line grid below
+    // replaces the raw blob (it still seeds from edited.lignes).
   ],
 }
 
