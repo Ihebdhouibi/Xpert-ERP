@@ -422,6 +422,11 @@ _KW_REF_COMMANDE = re.compile(
 )
 _KW_IMMAT_BL = re.compile(r"immatriculation|immat", re.IGNORECASE)
 _RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Tolerant date: no word boundaries (OCR often glues the date to text/time, e.g.
+# "le26/06/202616:47"); prefer a 4-digit year, else a 2-digit year.
+_RE_DATE_LOOSE = re.compile(
+    r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{4}|\d{1,2}[./\-]\d{1,2}[./\-]\d{2})"
+)
 # Our own garage / the delivery company — never the supplier on a received BL.
 _KW_OWN_PARTY = re.compile(r"garage\s*motors|al\s*delivery", re.IGNORECASE)
 _KW_BL_TITLE = re.compile(r"bon\s*de\s*livraison", re.IGNORECASE)
@@ -471,11 +476,12 @@ def extract_bon_de_livraison(result: RawOcrResult) -> FieldMap:
     if num:
         fields["numero_bl"] = num
 
-    # Delivery date — labelled, else the first date in the document.
-    d = _value_near_keyword(lines, _KW_DATE_BL, _RE_DATE_ANY)
+    # Delivery date — labelled, else the first date in the document. Uses the
+    # tolerant pattern so a date glued to text/time still matches.
+    d = _value_near_keyword(lines, _KW_DATE_BL, _RE_DATE_LOOSE)
     if not d:
         for line in lines:
-            m = _RE_DATE_ANY.search(line.text)
+            m = _RE_DATE_LOOSE.search(line.text)
             if m:
                 d = (m.group(1), line.confidence)
                 break
@@ -553,7 +559,7 @@ _SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
     "fournisseur": (_KW_FOURNISSEUR, None),
     # Bon de livraison
     "numero_bl": (_KW_BL_NUMBER, _RE_BL_NUMBER),
-    "date_bl": (_KW_DATE_BL, _RE_DATE_ANY),
+    "date_bl": (_KW_DATE_BL, _RE_DATE_LOOSE),
     "reference_commande": (_KW_REF_COMMANDE, _RE_NUM_TOKEN),
     "email": (None, _RE_EMAIL),
     # Carte grise
