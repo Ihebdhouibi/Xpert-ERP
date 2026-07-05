@@ -87,6 +87,7 @@ async def po_for_extraction(
     ).scalar_one_or_none()
     return {
         "purchase_order_public_id": str(po.public_id),
+        "purchase_order_number": po.doc_number,
         "supplier_id": po.supplier_id,
         "supplier_name": sup.name if sup else None,
     }

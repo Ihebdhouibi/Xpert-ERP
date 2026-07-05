@@ -2,6 +2,7 @@ import { apiClient } from './apiClient'
 
 export interface PoForExtractionResponse {
   purchase_order_public_id: string
+  purchase_order_number: string | null
   supplier_id: number
   supplier_name: string | null
 }

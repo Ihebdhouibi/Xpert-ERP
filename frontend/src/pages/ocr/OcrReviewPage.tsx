@@ -126,11 +126,12 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'lignes',
   ],
   supplier_delivery_note: [
+    // Reference first — it is auto-filled from the linked PO (authoritative).
+    'reference_commande',
     'numero_bl',
     'date_bl',
     'fournisseur',
     'email',
-    'reference_commande',
     'immatriculation',
     'total_ht',
     'tva',
@@ -573,8 +574,9 @@ export function OcrReviewPage() {
     [fields],
   )
 
-  // The supplier is authoritative from the linked PO (not OCR). Fill the
-  // Fournisseur field from the PO once the extraction is ready.
+  // Supplier and order reference are authoritative from the linked PO (not OCR).
+  // Fill both the Fournisseur and Référence commande fields from the PO once the
+  // extraction is ready.
   useEffect(() => {
     if (supplierResolvedRef.current) return
     if (!extractionId) return
@@ -585,10 +587,13 @@ export function OcrReviewPage() {
     supplierDeliveryNoteApi
       .poForExtraction(extractionId)
       .then((r) => {
-        if (!cancelled && r.supplier_name) {
-          const name = r.supplier_name
-          setEdited((prev) => ({ ...prev, fournisseur: name }))
-        }
+        if (cancelled) return
+        setEdited((prev) => {
+          const next = { ...prev }
+          if (r.supplier_name) next.fournisseur = r.supplier_name
+          if (r.purchase_order_number) next.reference_commande = r.purchase_order_number
+          return next
+        })
       })
       .catch(() => {})
     return () => {
