@@ -186,6 +186,9 @@ _KW_TOTAL_HT = re.compile(
 )
 _KW_TOTAL_TTC = re.compile(r"total\s*t\.?t\.?c\.?|net\s*[àa]\s*payer|montant\s*[àa]\s*payer", re.IGNORECASE)
 _KW_TVA = re.compile(r"\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
+# The TVA *amount* label, excluding the "%T.V.A." rate column (whose value is the
+# rate, e.g. 20,00 — not the tax amount). A leading "%" disqualifies the cell.
+_KW_TVA_AMOUNT = re.compile(r"(?<!%)\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
 _KW_FOURNISSEUR = re.compile(r"fournisseur|[ée]metteur|vendeur|raison\s*sociale", re.IGNORECASE)
 _KW_CLIENT = re.compile(r"\bclient\b|destinataire|factur[ée]\s*[àa]|adress[ée]\s*[àa]", re.IGNORECASE)
 
@@ -345,6 +348,66 @@ def _value_near_keyword(lines, keyword_re: re.Pattern, value_re: re.Pattern):
     return best
 
 
+def _amount_near_keyword(
+    lines, keyword_re: re.Pattern, band_y: Optional[float] = None, tol: float = 100
+):
+    """Layout-aware amount: the value physically nearest the label (below/right).
+
+    When ``band_y`` is given, only label cells whose vertical centre is within
+    ``tol`` of it are considered — this restricts matching to the totals band and
+    ignores same-named column headers higher up the page (e.g. a "Montant HT"
+    line-item header vs the grand "Total H.T." at the bottom).
+
+    Kept in the document's own format (comma decimals). Falls back to the flat
+    keyword-line scan when no spatial match is found — this is what makes totals
+    work on exploded-cell tables where the amount is never on the label's line.
+    """
+    def cy(box):
+        return (box[1] + box[3]) / 2
+
+    kw_lines = [ln for ln in lines if keyword_re.search(ln.text)]
+    if band_y is not None:
+        kw_lines = [
+            ln for ln in kw_lines if ln.box and abs(cy(ln.box) - band_y) <= tol
+        ]
+
+    # 1. Amount on the same line as the label.
+    for kw in kw_lines:
+        m = _RE_AMOUNT_NO_PCT.search(kw.text)
+        if m:
+            return _match_value(m), kw.confidence
+    # 2. Spatially nearest amount below or to the right of any label line.
+    best = None
+    best_score: Optional[float] = None
+    for kw in kw_lines:
+        if not kw.box:
+            continue
+        kx1, ky1, kx2, ky2 = kw.box
+        kcx, kcy = (kx1 + kx2) / 2, (ky1 + ky2) / 2
+        for cand in lines:
+            if cand is kw or not cand.box:
+                continue
+            m = _RE_AMOUNT_NO_PCT.search(cand.text)
+            if not m:
+                continue
+            cx1, cy1, cx2, cy2 = cand.box
+            x_overlap = min(kx2, cx2) - max(kx1, cx1)
+            y_overlap = min(ky2, cy2) - max(ky1, cy1)
+            score: Optional[float] = None
+            if cy1 >= ky2 - 4 and x_overlap > -8:            # value below the label
+                score = (cy1 - ky2) + abs((cx1 + cx2) / 2 - kcx)
+            elif cx1 >= kx2 - 4 and y_overlap > -4:           # value to the right
+                score = (cx1 - kx2) + abs((cy1 + cy2) / 2 - kcy)
+            if score is not None and (best_score is None or score < best_score):
+                best_score = score
+                best = (_match_value(m), cand.confidence)
+    if best:
+        return best
+    if band_y is None:
+        return _amount_on_keyword_line(lines, keyword_re)
+    return None
+
+
 def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, party_field: str) -> FieldMap:
     """Shared header extraction for customer and supplier invoices."""
     fields: FieldMap = {}
@@ -412,8 +475,10 @@ def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
 # BL number: a letter-prefixed code with >=3 digits (BL027543) or >=4 digits
 # (24639). The >=4-digit floor avoids matching 3-digit amounts like "120".
 _RE_BL_NUMBER = re.compile(r"\b([A-Z]{1,4}\d{3,}[A-Z0-9]*|\d{4,})\b", re.IGNORECASE)
+# The BL number is the value under "N° de la pièce". The degree sign is optional
+# because OCR frequently drops it ("N de la piece" / "Nde la piece").
 _KW_BL_NUMBER = re.compile(
-    r"bon\s*de\s*livraison|n[°ºo]\s*de\s*la\s*pi[eè]ce|num[ée]ro|\bBL\b", re.IGNORECASE
+    r"bon\s*de\s*livraison|n[°ºo]?\s*de\s*la\s*pi[eè]ce|num[ée]ro|\bBL\b", re.IGNORECASE
 )
 _KW_DATE_BL = re.compile(r"date\s*(de\s*)?livraison|\bdate\b", re.IGNORECASE)
 _KW_REF_COMMANDE = re.compile(
@@ -523,14 +588,21 @@ def extract_bon_de_livraison(result: RawOcrResult) -> FieldMap:
             fields["email"] = (m.group(0), line.confidence)
             break
 
-    # Totals (valued BLs).
-    ht = _amount_on_keyword_line(lines, _KW_TOTAL_HT)
+    # Totals (valued BLs). Anchor on the unique, bottom-most "TOTAL T.T.C." label
+    # so HT/TVA/TTC are read from the same totals band — not the line-item column
+    # headers ("Montant HT", …) higher up the page. The amount sits in the cell
+    # below the label; the TVA amount excludes the "%T.V.A." rate column.
+    ttc_kw = [ln for ln in lines if _KW_TOTAL_TTC.search(ln.text) and ln.box]
+    band_y = (
+        max(((ln.box[1] + ln.box[3]) / 2) for ln in ttc_kw) if ttc_kw else None
+    )
+    ht = _amount_near_keyword(lines, _KW_TOTAL_HT, band_y)
     if ht:
         fields["total_ht"] = ht
-    tva = _amount_on_keyword_line(lines, _KW_TVA)
+    tva = _amount_near_keyword(lines, _KW_TVA_AMOUNT, band_y)
     if tva:
         fields["tva"] = tva
-    ttc = _amount_on_keyword_line(lines, _KW_TOTAL_TTC)
+    ttc = _amount_near_keyword(lines, _KW_TOTAL_TTC, band_y)
     if ttc:
         fields["total_ttc"] = ttc
 
@@ -554,7 +626,7 @@ _SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
     "date_echeance": (_KW_DATE_ECHEANCE, _RE_DATE_ANY),
     "total_ht": (_KW_TOTAL_HT, _RE_AMOUNT_NO_PCT),
     "total_ttc": (_KW_TOTAL_TTC, _RE_AMOUNT_NO_PCT),
-    "tva": (_KW_TVA, _RE_AMOUNT_NO_PCT),
+    "tva": (_KW_TVA_AMOUNT, _RE_AMOUNT_NO_PCT),
     "client": (_KW_CLIENT, None),
     "fournisseur": (_KW_FOURNISSEUR, None),
     # Bon de livraison
