@@ -625,17 +625,6 @@ export function OcrReviewPage() {
     }
   }, [extractionId])
 
-  // Pre-seed the BL capture grid once, after the extraction has loaded, for
-  // supplier delivery notes. Parses `edited.lignes` (raw JSON string array). The
-  // user's edits are preserved (guarded by blSeededRef).
-  useEffect(() => {
-    if (blSeededRef.current) return
-    if (extraction?.document_category !== 'supplier_delivery_note') return
-    if (extraction.status === 'pending' || extraction.status === 'processing') return
-    blSeededRef.current = true
-    setBlLines(seedBlLinesFromRaw(edited.lignes))
-  }, [extraction, edited.lignes])
-
   const updateBlLine = (i: number, field: BlLineField, value: string) =>
     setBlLines((prev) =>
       prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)),
@@ -726,6 +715,21 @@ export function OcrReviewPage() {
     () => Object.keys(fields).filter((k) => !isRawKey(k) && !isReservedKey(k)),
     [fields],
   )
+
+  // Pre-seed the BL capture grid once, after the extraction has loaded, for
+  // supplier delivery notes. Reconstructs the line table from the OCR cell boxes
+  // (all rows, deterministic); falls back to the raw `lignes` blob when the boxes
+  // are unavailable. The user's edits are preserved (guarded by blSeededRef).
+  useEffect(() => {
+    if (blSeededRef.current) return
+    if (extraction?.document_category !== 'supplier_delivery_note') return
+    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    blSeededRef.current = true
+    const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
+    setBlLines(
+      reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
+    )
+  }, [extraction, edited.lignes, rawLines, layout])
 
   // Supplier and order reference are authoritative from the linked PO (not OCR).
   // Fill both the Fournisseur and Référence commande fields from the PO once the
