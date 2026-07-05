@@ -215,6 +215,117 @@ function seedBlLinesFromRaw(rawLignes: string | undefined): BlLine[] {
 }
 
 // ---------------------------------------------------------------------------
+// Client-side reconstruction of the BL line table from the OCR cell boxes.
+//
+// PaddleOCR emits each *cell* of the table as a separate detection (columns are
+// far apart), so the flat line extractor can't rebuild rows. But within a single
+// column the rows are cleanly separated vertically, and money cells carry a
+// decimal ("8,33") while quantities / the trailing "T" column don't. So we type
+// each cell by content, cluster the money/text cells into columns by x, then
+// align rows by each column's own top-to-bottom order. Deterministic, no LLM.
+// ---------------------------------------------------------------------------
+const RE_MONEY = /^\d{1,4}[.,]\d{2}$/
+const RE_INT = /^\d{1,3}$/
+const hasAlpha = (s: string) => /[a-zA-Z]/.test(s)
+
+interface DocCell {
+  text: string
+  cx: number
+  cy: number
+}
+
+// Group cells into columns: split wherever the x-gap to the next cell exceeds `gap`.
+function clusterByX(items: DocCell[], gap = 80): DocCell[][] {
+  const sorted = [...items].sort((a, b) => a.cx - b.cx)
+  const clusters: DocCell[][] = []
+  let cur: DocCell[] = []
+  for (const c of sorted) {
+    if (cur.length && c.cx - cur[cur.length - 1].cx > gap) {
+      clusters.push(cur)
+      cur = []
+    }
+    cur.push(c)
+  }
+  if (cur.length) clusters.push(cur)
+  return clusters
+}
+
+const meanCx = (cl: DocCell[]) => cl.reduce((s, c) => s + c.cx, 0) / cl.length
+const sortByCy = (cl: DocCell[]) => [...cl].sort((a, b) => a.cy - b.cy)
+
+function reconstructBlRows(
+  rawLines: [string, unknown][],
+  boxes: Record<string, number[]>,
+): BlLine[] {
+  const cells: DocCell[] = []
+  for (const [k, t] of rawLines) {
+    const b = boxes[k]
+    if (!b) continue
+    cells.push({ text: String(t).trim(), cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2 })
+  }
+  if (!cells.length) return []
+
+  // Vertical band of the line-item table: below the "Code" header, above the
+  // totals block (Montant H.T. / Total H.T. / T.V.A. / T.T.C.).
+  const codeHdr = cells.find((c) => c.text.toLowerCase() === 'code')
+  const headerY = codeHdr ? codeHdr.cy : 0
+  const totRe = /montant\s*h|total\s*h|t\.?t\.?c|t\.?v\.?a/i
+  const totYs = cells
+    .filter((c) => totRe.test(c.text) && c.cy > headerY + 100)
+    .map((c) => c.cy)
+  const totalsY = totYs.length ? Math.min(...totYs) : Infinity
+
+  const band = cells.filter((c) => c.cy > headerY && c.cy < totalsY - 5)
+  const money = band.filter((c) => RE_MONEY.test(c.text))
+  const ints = band.filter((c) => RE_INT.test(c.text))
+  const letters = band.filter((c) => hasAlpha(c.text))
+
+  // Money columns: cluster by x, then assign from the RIGHT (Montant is always
+  // rightmost, then PU Net, then PU Brut) so a plain BL missing a column degrades
+  // gracefully. The trailing "T" column is a bare "0" (no decimal) → excluded.
+  const moneyCols = clusterByX(money).sort((a, b) => meanCx(a) - meanCx(b)).map(sortByCy)
+  const mont = moneyCols[moneyCols.length - 1] ?? []
+  const net = moneyCols[moneyCols.length - 2] ?? []
+  const brut = moneyCols[moneyCols.length - 3] ?? []
+
+  // Text columns: leftmost = code, next = désignation.
+  const letterCols = clusterByX(letters).sort((a, b) => meanCx(a) - meanCx(b))
+  const codeCol = letterCols[0] ? sortByCy(letterCols[0]) : []
+  const desCol = letterCols[1] ? sortByCy(letterCols[1]) : []
+
+  // Quantity is a bare integer; OCR often misses it. Attach the nearest one (by y)
+  // to a row's désignation, if close enough.
+  const nearestQte = (cy: number): string => {
+    let best = ''
+    let bestDist = 20
+    for (const c of ints) {
+      const d = Math.abs(c.cy - cy)
+      if (d < bestDist) {
+        bestDist = d
+        best = c.text
+      }
+    }
+    return best
+  }
+
+  const at = (col: DocCell[], i: number) => (i < col.length ? col[i].text : '')
+  const n = Math.max(codeCol.length, desCol.length, brut.length, net.length, mont.length)
+  const rows: BlLine[] = []
+  for (let i = 0; i < n; i++) {
+    const des = desCol[i]
+    rows.push({
+      code: at(codeCol, i),
+      designation: at(desCol, i),
+      quantite: des ? nearestQte(des.cy) : '',
+      pu_brut: at(brut, i),
+      pu_net: at(net, i),
+      montant: at(mont, i),
+    })
+  }
+  return rows
+}
+
+// ---------------------------------------------------------------------------
 // Document preview (image with highlight overlay, or PDF iframe)
 // ---------------------------------------------------------------------------
 interface DrawRect {
@@ -534,6 +645,48 @@ export function OcrReviewPage() {
 
   const removeBlLine = (i: number) =>
     setBlLines((prev) => prev.filter((_, idx) => idx !== i))
+
+  // AI auto-match for one BL line: reconstruct the document's line table from the
+  // OCR boxes and fill this row. If the row already has a code/désignation, use
+  // the matching reconstructed row; otherwise fall back to the row at this index.
+  // Detected values fill empty cells but never clobber what the user already typed.
+  const suggestBlLine = (i: number) => {
+    const rows = reconstructBlRows(rawLines, layout?.boxes ?? {})
+    if (!rows.length) {
+      setError('Aucune ligne détectée automatiquement sur le document.')
+      return
+    }
+    setError(null)
+    const cur = blLines[i]
+    const anchor = norm(cur.designation || cur.code)
+    let pick = -1
+    if (anchor.length >= 3) {
+      pick = rows.findIndex((r) => {
+        const d = norm(r.designation)
+        const c = norm(r.code)
+        return (
+          (d && (d.includes(anchor) || anchor.includes(d))) ||
+          (c && (c.includes(anchor) || anchor.includes(c)))
+        )
+      })
+    }
+    if (pick < 0) pick = Math.min(i, rows.length - 1)
+    const r = rows[pick]
+    setBlLines((prev) =>
+      prev.map((row, idx) =>
+        idx === i
+          ? {
+              code: cur.code || r.code,
+              designation: cur.designation || r.designation,
+              quantite: cur.quantite || r.quantite,
+              pu_brut: cur.pu_brut || r.pu_brut,
+              pu_net: cur.pu_net || r.pu_net,
+              montant: cur.montant || r.montant,
+            }
+          : row,
+      ),
+    )
+  }
 
   // Navigate the multi-page preview (PDFs). Field localisation / cropping is
   // page-1 only, so any active field/crop/highlight is cleared when leaving it.
@@ -1086,7 +1239,7 @@ export function OcrReviewPage() {
                       {BL_LINE_COLUMNS.map((col) => (
                         <TableCell key={col.field}>{col.label}</TableCell>
                       ))}
-                      <TableCell sx={{ width: 44 }} />
+                      <TableCell sx={{ width: 88 }} />
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1129,18 +1282,31 @@ export function OcrReviewPage() {
                           )
                         })}
                         <TableCell sx={{ p: 0.5 }}>
-                          <Tooltip title="Supprimer la ligne">
-                            <span>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                disabled={blLines.length <= 1}
-                                onClick={() => removeBlLine(i)}
-                              >
-                                <DeleteOutlineIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          <Stack direction="row" spacing={0} alignItems="center">
+                            {canHighlight && (
+                              <Tooltip title="Remplir automatiquement cette ligne (IA) depuis le document">
+                                <IconButton
+                                  size="small"
+                                  color="secondary"
+                                  onClick={() => suggestBlLine(i)}
+                                >
+                                  <AutoAwesomeIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            <Tooltip title="Supprimer la ligne">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  disabled={blLines.length <= 1}
+                                  onClick={() => removeBlLine(i)}
+                                >
+                                  <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))}
