@@ -17,8 +17,10 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import { purchaseOrderApi, PurchaseOrder, POLine } from '../../lib/purchaseOrderApi'
 import { partsApi } from '../../lib/partsApi'
 import {
@@ -78,6 +80,11 @@ function parseBlDate(raw?: string): string {
   const m = trimmed.match(/^(\d{2})[/\-.](\d{2})[/\-.](\d{4})$/)
   if (m) return `${m[3]}-${m[2]}-${m[1]}`
   return ''
+}
+
+// Normalise a part code for loose matching (remove dots, dashes, spaces).
+function normalizeCode(s: string): string {
+  return s.replace(/[\s.\-_]/g, '').toLowerCase()
 }
 
 function lineLabel(line: POLine): string {
@@ -182,6 +189,22 @@ export function BonLivraisonReceptionDialog({
       prev.map((row, idx) => (idx === i ? { ...row, ...patch } : row)),
     )
 
+  // When the user picks a PO line, try to auto-match the captured code to an
+  // existing inventory part so the "Affecter une pièce" field fills itself.
+  const handlePoLineSelect = (i: number, poLineId: string) => {
+    const poLine = po?.lines.find((ln) => String(ln.id) === poLineId)
+    const captured = blLines?.[i]
+    let partPublicId = ''
+
+    if (poLine?.part_id === null && captured?.code) {
+      const normCode = normalizeCode(captured.code)
+      const match = parts.find((p) => normalizeCode(p.sku_code) === normCode)
+      if (match) partPublicId = match.id
+    }
+
+    updateBlMap(i, { poLineId, partPublicId })
+  }
+
   // Look up a PO line by its (string) id from a mapping select.
   const poLineById = (id: string): POLine | undefined =>
     po?.lines.find((ln) => String(ln.id) === id)
@@ -195,9 +218,10 @@ export function BonLivraisonReceptionDialog({
 
   // Build the payload lines, validating along the way. Returns null on a
   // validation error (after setting the message).
-  const buildPayloadLines = ():
-    | SupplierDeliveryNoteLineInput[]
-    | null => {
+  // autoCreatedPartIds maps blMap index → newly created part public_id.
+  const buildPayloadLines = (
+    autoCreatedPartIds: Record<number, string> = {},
+  ): SupplierDeliveryNoteLineInput[] | null => {
     if (useCaptured) {
       const lines: SupplierDeliveryNoteLineInput[] = []
       for (let i = 0; i < blMap.length; i++) {
@@ -205,14 +229,13 @@ export function BonLivraisonReceptionDialog({
         const captured = blLines![i]
         const qty = parseInt(map.quantityReceived, 10) || 0
         const poLine = poLineById(map.poLineId)
-        if (!poLine || qty <= 0) {
-          setError(
-            `Ligne « ${captured.designation || captured.code || `#${i + 1}`} » : ` +
-              'sélectionnez une ligne de commande et une quantité reçue > 0.',
-          )
-          return null
-        }
-        if (poLine.part_id === null && !map.partPublicId) {
+
+        // No PO line selected → skip this BL line (don't error).
+        if (!poLine) continue
+        if (qty <= 0) continue
+
+        const resolvedPartId = map.partPublicId || autoCreatedPartIds[i] || undefined
+        if (poLine.part_id === null && !resolvedPartId) {
           setError(
             `Ligne « ${captured.designation || captured.code || `#${i + 1}`} » : ` +
               'affectez une pièce à la ligne « Autre » sélectionnée.',
@@ -222,14 +245,17 @@ export function BonLivraisonReceptionDialog({
         lines.push({
           po_line_id: poLine.id,
           quantity_received: qty,
-          part_public_id:
-            poLine.part_id === null ? map.partPublicId || undefined : undefined,
+          part_public_id: poLine.part_id === null ? resolvedPartId : undefined,
           code: captured.code.trim() || undefined,
           designation: captured.designation.trim() || undefined,
           pu_brut: eurosToCents(captured.pu_brut),
           pu_net: eurosToCents(captured.pu_net),
           montant_ht: eurosToCents(captured.montant),
         })
+      }
+      if (lines.length === 0) {
+        setError('Associez au moins une ligne de BL à une ligne de commande.')
+        return null
       }
       return lines
     }
@@ -261,12 +287,34 @@ export function BonLivraisonReceptionDialog({
   const handleConfirm = async (allowDuplicate: boolean) => {
     if (!po) return
     setError('')
-
-    const lines = buildPayloadLines()
-    if (!lines) return
-
     setSaving(true)
+
     try {
+      // --- Auto-create missing parts for "Autre" PO lines (useCaptured mode) ---
+      const autoCreatedPartIds: Record<number, string> = {}
+      if (useCaptured) {
+        for (let i = 0; i < blMap.length; i++) {
+          const map = blMap[i]
+          if (!map.poLineId || map.partPublicId) continue
+          const poLine = poLineById(map.poLineId)
+          if (!poLine || poLine.part_id !== null) continue
+          const captured = blLines![i]
+          if (!captured.code && !captured.designation) continue
+          // Part not in catalogue → auto-create with BL data.
+          const created = await partsApi.create({
+            sku_code: captured.code.trim() || `BL-${Date.now()}-${i}`,
+            name: captured.designation.trim() || captured.code.trim() || `Pièce ${i + 1}`,
+            purchase_price_minor: eurosToCents(captured.pu_net) ?? 0,
+            selling_price_minor: 0,
+            unit_of_measure: 'unité',
+          })
+          autoCreatedPartIds[i] = created.id
+        }
+      }
+
+      const lines = buildPayloadLines(autoCreatedPartIds)
+      if (!lines) return
+
       await supplierDeliveryNoteApi.create({
         extraction_id: extractionId,
         bl_number: blNumber.trim() || undefined,
@@ -415,25 +463,49 @@ export function BonLivraisonReceptionDialog({
                               .join(' · ')}
                           </Typography>
                           {isOther && (
-                            <Select
-                              size="small"
-                              fullWidth
-                              displayEmpty
-                              sx={{ mt: 1 }}
-                              value={map?.partPublicId ?? ''}
-                              onChange={(e) =>
-                                updateBlMap(i, { partPublicId: e.target.value })
-                              }
-                            >
-                              <MenuItem value="" disabled>
-                                Affecter une pièce…
-                              </MenuItem>
-                              {parts.map((p) => (
-                                <MenuItem key={p.id} value={p.id}>
-                                  {p.name} ({p.sku_code})
-                                </MenuItem>
-                              ))}
-                            </Select>
+                            <Box sx={{ mt: 1 }}>
+                              {map?.partPublicId ? (
+                                <Stack direction="row" alignItems="center" spacing={0.5}>
+                                  <AutoFixHighIcon fontSize="small" color="success" />
+                                  <Typography variant="caption" color="success.main">
+                                    {parts.find((p) => p.id === map.partPublicId)?.name ?? 'Pièce auto-sélectionnée'}
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    sx={{ ml: 0.5, minWidth: 0, p: 0, fontSize: '0.7rem' }}
+                                    onClick={() => updateBlMap(i, { partPublicId: '' })}
+                                  >
+                                    Modifier
+                                  </Button>
+                                </Stack>
+                              ) : (
+                                <Select
+                                  size="small"
+                                  fullWidth
+                                  displayEmpty
+                                  value={map?.partPublicId ?? ''}
+                                  onChange={(e) =>
+                                    updateBlMap(i, { partPublicId: e.target.value })
+                                  }
+                                >
+                                  <MenuItem value="" disabled>
+                                    Affecter une pièce…
+                                  </MenuItem>
+                                  {parts.map((p) => (
+                                    <MenuItem key={p.id} value={p.id}>
+                                      {p.name} ({p.sku_code})
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              )}
+                              {!map?.partPublicId && captured.code && (
+                                <Tooltip title="Aucune pièce correspondante trouvée — sera créée automatiquement à la confirmation">
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                    Sera créée automatiquement (code : {captured.code})
+                                  </Typography>
+                                </Tooltip>
+                              )}
+                            </Box>
                           )}
                         </TableCell>
                         <TableCell>
@@ -442,15 +514,10 @@ export function BonLivraisonReceptionDialog({
                             fullWidth
                             displayEmpty
                             value={map?.poLineId ?? ''}
-                            onChange={(e) =>
-                              updateBlMap(i, {
-                                poLineId: e.target.value,
-                                partPublicId: '',
-                              })
-                            }
+                            onChange={(e) => handlePoLineSelect(i, e.target.value)}
                           >
-                            <MenuItem value="" disabled>
-                              Choisir une ligne…
+                            <MenuItem value="">
+                              <em>Ignorer cette ligne</em>
                             </MenuItem>
                             {po.lines.map((ln) => (
                               <MenuItem key={ln.id} value={String(ln.id)}>
