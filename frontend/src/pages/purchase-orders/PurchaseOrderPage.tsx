@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -31,6 +32,7 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import ReceiptIcon from '@mui/icons-material/Receipt'
+import DocumentScannerIcon from '@mui/icons-material/DocumentScanner'
 import {
   purchaseOrderApi,
   PurchaseOrder,
@@ -75,6 +77,7 @@ interface ReceptionDialogProps {
 }
 
 function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps) {
+  const navigate = useNavigate()
   const [qtys, setQtys] = useState<Record<number, number>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -111,10 +114,25 @@ function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Réception — {po.doc_number}</DialogTitle>
+      <DialogTitle>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <span>Réception — {po.doc_number}</span>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<DocumentScannerIcon />}
+            onClick={() => { onClose(); navigate('/documents') }}
+          >
+            Scanner un BL via OCR
+          </Button>
+        </Stack>
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
           {error && <Alert severity="error">{error}</Alert>}
+          <Typography variant="body2" color="text.secondary">
+            Saisie manuelle des quantités. Pour lier un bon de livraison scanné, utilisez le bouton ci-dessus.
+          </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -129,7 +147,7 @@ function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps
                 const remaining = l.quantity_ordered - l.quantity_received
                 return (
                   <TableRow key={l.id}>
-                    <TableCell>#{l.part_id}</TableCell>
+                    <TableCell>{l.part_name ?? l.label ?? `Ligne #${l.id}`}</TableCell>
                     <TableCell>{l.quantity_ordered}</TableCell>
                     <TableCell>{l.quantity_received}</TableCell>
                     <TableCell>
