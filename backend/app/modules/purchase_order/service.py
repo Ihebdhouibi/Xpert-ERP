@@ -238,10 +238,19 @@ async def receive_po(
         raise PONotFoundError(public_id)
     if po.version != submitted_version:
         raise POVersionConflictError(po.version, submitted_version)
-    if po.status not in (PurchaseOrderStatus.sent, PurchaseOrderStatus.partially_received):
+    if po.status not in (
+        PurchaseOrderStatus.draft,
+        PurchaseOrderStatus.sent,
+        PurchaseOrderStatus.partially_received,
+    ):
         raise POInvalidTransitionError(
             f"Cannot receive a PO with status '{po.status}'"
         )
+
+    # A draft PO is implicitly sent when goods are first received (common
+    # garage scenario where sending is not a formal step).
+    if po.status == PurchaseOrderStatus.draft:
+        await PurchaseOrderRepository.update(db, po, status=PurchaseOrderStatus.sent)
 
     settings = get_settings()
     tolerance = settings.cfg_po_match_tolerance_percent
