@@ -411,14 +411,17 @@ function DocumentPreview({
   // Prefer the actual image natural width (works on every page); fall back to the
   // OCR layout width (page 1) so highlight overlays keep aligning.
   const baseW = imgNaturalW || (layout && layout.width ? layout.width : 0)
-  // renderW is the outer container width; the image renders at zoom × renderW.
-  const scale = baseW ? (zoom * renderW) / baseW : zoom
+  // renderW is tracked by ResizeObserver on wrapRef — the zoomed inner div.
+  // Since wrapRef has width = zoom × containerWidth, renderW already bakes in
+  // the zoom factor.  No need to multiply by zoom again here; doing so would
+  // square it and map crop boxes to the wrong image region.
+  const scale = baseW ? renderW / baseW : 1
 
   const localPoint = (e: ReactMouseEvent) => {
     const r = wrapRef.current!.getBoundingClientRect()
-    // Account for horizontal scroll when the image is zoomed wider than its container.
-    const scrollX = wrapRef.current!.parentElement?.scrollLeft ?? 0
-    return { x: e.clientX - r.left + scrollX, y: e.clientY - r.top }
+    // getBoundingClientRect() returns viewport-relative coords, which already
+    // account for all ancestor scroll offsets.  No manual scrollLeft correction.
+    return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
   const handleDown = (e: ReactMouseEvent) => {
     if (!drawMode) return
