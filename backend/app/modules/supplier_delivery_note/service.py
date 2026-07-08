@@ -133,6 +133,14 @@ async def create_delivery_note(
             if part is None:
                 raise SDNError(f"Part not found: {part_public_id}")
             po_line.part_id = part.id  # the swap (label kept for history)
+        # Backfill PO line price from BL captured data when the PO was created
+        # without pricing (e.g. "Autre" lines with unit_price_ht = 0).
+        bl_price = item.get("pu_net") or item.get("pu_brut")
+        if bl_price and bl_price > 0 and po_line.unit_price_ht == 0:
+            po_line.unit_price_ht = bl_price
+
+    # Recompute PO total after potential price backfill.
+    po.total_ht = sum(ln.quantity_ordered * ln.unit_price_ht for ln in po.lines)
     await db.flush()
 
     # 2. Validate: no "Autre" line received without a part.
@@ -186,7 +194,7 @@ async def create_delivery_note(
                 # Prefer the BL-captured values; fall back to the PO line.
                 description=item.get("designation") or po_line.label,
                 quantity=int(item["quantity_received"]),
-                unit_price_ht=po_line.unit_price_ht,
+                unit_price_ht=item.get("pu_net") or item.get("pu_brut") or po_line.unit_price_ht,
                 match_flag=flag,
                 code=item.get("code"),
                 pu_brut=item.get("pu_brut"),
