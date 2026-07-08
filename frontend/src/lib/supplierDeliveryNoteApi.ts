@@ -35,6 +35,7 @@ export interface SupplierDeliveryNote {
   bl_date: string | null
   status: string
   has_discrepancy: boolean
+  supplier_invoice_id: string | null
   created_at: string
 }
 
@@ -42,6 +43,12 @@ export const supplierDeliveryNoteApi = {
   poForExtraction(extractionId: string): Promise<PoForExtractionResponse> {
     return apiClient
       .get(`/supplier-delivery-notes/po-for-extraction/${extractionId}`)
+      .then((r) => r.data)
+  },
+
+  listByPo(poPublicId: string): Promise<SupplierDeliveryNote[]> {
+    return apiClient
+      .get(`/supplier-delivery-notes/by-po/${poPublicId}`)
       .then((r) => r.data)
   },
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import Depends, HTTPException
 from fastapi import status as http_status
@@ -60,7 +60,64 @@ class SDNResponse(BaseModel):
     bl_date: Optional[date] = None
     status: str
     has_discrepancy: bool
+    supplier_invoice_id: Optional[str] = None
     created_at: datetime
+
+
+@router.get(
+    "/supplier-delivery-notes/by-po/{po_public_id}",
+    response_model=List[SDNResponse],
+    dependencies=[require_permission("purchase_order.read")],
+    summary="List all confirmed BLs linked to a purchase order",
+)
+async def list_by_po(
+    po_public_id: uuid.UUID,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> List[SDNResponse]:
+    from app.modules.supplier_delivery_note.models import SupplierDeliveryNote as SDNModel
+    from app.modules.supplier_invoice.models import SupplierInvoice as SIModel
+    from sqlalchemy import select as _sel
+    from app.modules.purchase_order.models import PurchaseOrder
+
+    po_res = await db.execute(
+        _sel(PurchaseOrder).where(
+            PurchaseOrder.public_id == po_public_id,
+            PurchaseOrder.garage_id == user.garage_id,
+            PurchaseOrder.deleted_at.is_(None),
+        )
+    )
+    po = po_res.scalar_one_or_none()
+    if not po:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+
+    res = await db.execute(
+        _sel(SDNModel).where(
+            SDNModel.purchase_order_id == po.id,
+            SDNModel.garage_id == user.garage_id,
+        ).order_by(SDNModel.created_at.desc())
+    )
+    sdns = res.scalars().all()
+
+    # Resolve supplier_invoice public_ids in one query.
+    si_ids = {sdn.supplier_invoice_id for sdn in sdns if sdn.supplier_invoice_id}
+    si_pub_map: dict[int, str] = {}
+    if si_ids:
+        si_res = await db.execute(_sel(SIModel).where(SIModel.id.in_(si_ids)))
+        si_pub_map = {s.id: str(s.public_id) for s in si_res.scalars()}
+
+    return [
+        SDNResponse(
+            id=str(sdn.public_id),
+            bl_number=sdn.bl_number,
+            bl_date=sdn.bl_date,
+            status=sdn.status,
+            has_discrepancy=sdn.has_discrepancy,
+            supplier_invoice_id=si_pub_map.get(sdn.supplier_invoice_id) if sdn.supplier_invoice_id else None,
+            created_at=sdn.created_at,
+        )
+        for sdn in sdns
+    ]
 
 
 @router.get(

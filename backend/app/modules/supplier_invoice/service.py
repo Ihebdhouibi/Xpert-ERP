@@ -215,6 +215,21 @@ async def create_supplier_invoice(
     )
     logger.info("supplier_invoice_created", si_public_id=str(si.public_id), number=number, po_public_id=po_public_id, garage_id=garage_id)
 
+    # Link all confirmed BLs of this PO to the new invoice so the 3-way match
+    # is fully traceable (PO ↔ BL ↔ Facture).
+    from app.modules.supplier_delivery_note.models import SupplierDeliveryNote as SDNModel, SupplierDeliveryNoteStatus
+    from sqlalchemy import select as _sa_select, update as _sa_update
+    await db.execute(
+        _sa_update(SDNModel)
+        .where(
+            SDNModel.purchase_order_id == po.id,
+            SDNModel.garage_id == garage_id,
+            SDNModel.status == SupplierDeliveryNoteStatus.confirmed.value,
+            SDNModel.supplier_invoice_id.is_(None),
+        )
+        .values(supplier_invoice_id=si.id)
+    )
+
     # Record confirmed prices — prices are only known once the supplier invoice exists
     from app.modules.supplier.repository import SupplierPartPriceRepository
 

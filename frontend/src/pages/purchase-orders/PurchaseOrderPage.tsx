@@ -40,6 +40,7 @@ import {
   POMatchFlag,
 } from '../../lib/purchaseOrderApi'
 import { supplierInvoiceApi } from '../../lib/supplierInvoiceApi'
+import { supplierDeliveryNoteApi, SupplierDeliveryNote } from '../../lib/supplierDeliveryNoteApi'
 import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -287,12 +288,14 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
   const [notes, setNotes] = useState('')
   const [linesForms, setLinesForms] = useState<SILineForm[]>([])
   const [formError, setFormError] = useState('')
+  const [linkedBls, setLinkedBls] = useState<SupplierDeliveryNote[]>([])
 
   useEffect(() => {
     if (po && open) {
       setDueDate('')
       setNotes('')
       setFormError('')
+      setLinkedBls([])
       setLinesForms(
         po.lines
           .filter((l) => l.quantity_received > 0)
@@ -303,6 +306,8 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
             unit_price_ht: l.unit_price_ht,
           }))
       )
+      // Load associated BLs for display
+      supplierDeliveryNoteApi.listByPo(po.id).then(setLinkedBls).catch(() => {})
     }
   }, [po, open])
 
@@ -363,6 +368,24 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
             rows={2}
             fullWidth
           />
+          {linkedBls.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Bons de livraison liés ({linkedBls.length})
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {linkedBls.map((bl) => (
+                  <Chip
+                    key={bl.id}
+                    size="small"
+                    label={bl.bl_number ? `BL ${bl.bl_number}` : `BL du ${new Date(bl.created_at).toLocaleDateString('fr-FR')}`}
+                    color={bl.has_discrepancy ? 'warning' : 'success'}
+                    variant="outlined"
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
           <Typography variant="subtitle2">Lignes facturées</Typography>
           {linesForms.length === 0 ? (
             <Alert severity="warning">Aucune pièce reçue sur ce bon de commande.</Alert>

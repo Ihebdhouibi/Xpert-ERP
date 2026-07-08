@@ -57,6 +57,12 @@ class SupplierDeliveryNote(Base):
     bl_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     bl_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
+    # Direct link to the supplier invoice that covers this BL (set when
+    # the invoice is created from the parent PO).
+    supplier_invoice_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("supplier_invoice.id", ondelete="SET NULL"), nullable=True
+    )
+
     # The uploaded GED document this BL was created from (OCR source).
     document_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
