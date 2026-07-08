@@ -17,7 +17,6 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
@@ -119,6 +118,8 @@ export function BonLivraisonReceptionDialog({
   // One mapping row per captured BL line (parallel to blLines), used when
   // useCaptured is true.
   const [blMap, setBlMap] = useState<BlMapState[]>([])
+  // Per-row flag: show manual part picker even when no auto-match was found.
+  const [showPartOverride, setShowPartOverride] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
     if (!open) return
@@ -132,6 +133,7 @@ export function BonLivraisonReceptionDialog({
     setBlDate(parseBlDate(defaultBlDate))
     setNotes('')
     setLineStates({})
+    setShowPartOverride({})
     setBlMap(
       (blLines ?? []).map((l) => ({
         poLineId: '',
@@ -202,6 +204,8 @@ export function BonLivraisonReceptionDialog({
       if (match) partPublicId = match.id
     }
 
+    // Reset the manual override picker when PO line changes.
+    setShowPartOverride((prev) => ({ ...prev, [i]: false }))
     updateBlMap(i, { poLineId, partPublicId })
   }
 
@@ -465,28 +469,34 @@ export function BonLivraisonReceptionDialog({
                           {isOther && (
                             <Box sx={{ mt: 1 }}>
                               {map?.partPublicId ? (
+                                // ✓ Auto-matched (or manually picked)
                                 <Stack direction="row" alignItems="center" spacing={0.5}>
                                   <AutoFixHighIcon fontSize="small" color="success" />
                                   <Typography variant="caption" color="success.main">
-                                    {parts.find((p) => p.id === map.partPublicId)?.name ?? 'Pièce auto-sélectionnée'}
+                                    {parts.find((p) => p.id === map.partPublicId)?.name ?? 'Pièce sélectionnée'}
                                   </Typography>
                                   <Button
                                     size="small"
-                                    sx={{ ml: 0.5, minWidth: 0, p: 0, fontSize: '0.7rem' }}
-                                    onClick={() => updateBlMap(i, { partPublicId: '' })}
+                                    sx={{ minWidth: 0, p: 0, fontSize: '0.7rem' }}
+                                    onClick={() => {
+                                      updateBlMap(i, { partPublicId: '' })
+                                      setShowPartOverride((prev) => ({ ...prev, [i]: true }))
+                                    }}
                                   >
                                     Modifier
                                   </Button>
                                 </Stack>
-                              ) : (
+                              ) : showPartOverride[i] ? (
+                                // Manual picker (user requested override)
                                 <Select
                                   size="small"
                                   fullWidth
                                   displayEmpty
-                                  value={map?.partPublicId ?? ''}
-                                  onChange={(e) =>
+                                  value=""
+                                  onChange={(e) => {
                                     updateBlMap(i, { partPublicId: e.target.value })
-                                  }
+                                    setShowPartOverride((prev) => ({ ...prev, [i]: false }))
+                                  }}
                                 >
                                   <MenuItem value="" disabled>
                                     Affecter une pièce…
@@ -497,13 +507,24 @@ export function BonLivraisonReceptionDialog({
                                     </MenuItem>
                                   ))}
                                 </Select>
-                              )}
-                              {!map?.partPublicId && captured.code && (
-                                <Tooltip title="Aucune pièce correspondante trouvée — sera créée automatiquement à la confirmation">
-                                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                    Sera créée automatiquement (code : {captured.code})
+                              ) : (
+                                // No match — will auto-create on confirm
+                                <Stack direction="row" alignItems="center" spacing={0.5}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {captured.code
+                                      ? `Sera créée automatiquement (${captured.code})`
+                                      : 'Aucune pièce en catalogue — sera créée'}
                                   </Typography>
-                                </Tooltip>
+                                  <Button
+                                    size="small"
+                                    sx={{ minWidth: 0, p: 0, fontSize: '0.7rem' }}
+                                    onClick={() =>
+                                      setShowPartOverride((prev) => ({ ...prev, [i]: true }))
+                                    }
+                                  >
+                                    Choisir
+                                  </Button>
+                                </Stack>
                               )}
                             </Box>
                           )}
