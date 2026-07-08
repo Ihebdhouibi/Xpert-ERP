@@ -40,10 +40,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Repo backend root (…/backend), so logs land in ONE place no matter which
-# directory the server was launched from. logging.py lives at
-# backend/app/core/logging.py → parents[2] == backend/.
-_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+# Repo root (…/Xpert-ERP), so relative log_dir="logs" always resolves to
+# <repo_root>/logs/ — the single canonical log directory, matching the
+# computation in main.py (_PROJECT_ROOT = Path(__file__).parents[3]).
+# logging.py lives at backend/app/core/logging.py → parents[3] == repo root.
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
 def resolve_log_dir(log_dir: str) -> str:

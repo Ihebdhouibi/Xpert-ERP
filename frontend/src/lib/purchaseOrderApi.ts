@@ -84,7 +84,7 @@ export interface POFromAlertPayload {
 
 export const STATUS_LABELS: Record<POStatus, string> = {
   draft: 'Brouillon',
-  sent: 'Envoyé',
+  sent: 'Confirmé',
   partially_received: 'Partiellement reçu',
   completed: 'Complété',
   cancelled: 'Annulé',

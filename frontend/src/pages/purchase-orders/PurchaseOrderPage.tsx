@@ -520,7 +520,7 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
         </Button>
         {canSend && (
           <Button variant="outlined" startIcon={<SendIcon />} onClick={handleSend} disabled={actioning}>
-            Envoyer au fournisseur
+            Confirmer la commande
           </Button>
         )}
         {canReceive && (
