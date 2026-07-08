@@ -40,6 +40,8 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
+import ZoomInIcon from '@mui/icons-material/ZoomIn'
+import ZoomOutIcon from '@mui/icons-material/ZoomOut'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -341,12 +343,14 @@ function DocumentPreview({
   highlight,
   drawMode,
   onRegionDrawn,
+  zoom = 1,
 }: {
   url: string | null
   layout: Layout | null
   highlight: number[][]
   drawMode: boolean
   onRegionDrawn: (rect: DrawRect) => void
+  zoom?: number
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [renderW, setRenderW] = useState(0)
@@ -407,11 +411,14 @@ function DocumentPreview({
   // Prefer the actual image natural width (works on every page); fall back to the
   // OCR layout width (page 1) so highlight overlays keep aligning.
   const baseW = imgNaturalW || (layout && layout.width ? layout.width : 0)
-  const scale = baseW ? renderW / baseW : 1
+  // renderW is the outer container width; the image renders at zoom × renderW.
+  const scale = baseW ? (zoom * renderW) / baseW : zoom
 
   const localPoint = (e: ReactMouseEvent) => {
     const r = wrapRef.current!.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
+    // Account for horizontal scroll when the image is zoomed wider than its container.
+    const scrollX = wrapRef.current!.parentElement?.scrollLeft ?? 0
+    return { x: e.clientX - r.left + scrollX, y: e.clientY - r.top }
   }
   const handleDown = (e: ReactMouseEvent) => {
     if (!drawMode) return
@@ -455,34 +462,37 @@ function DocumentPreview({
           Aperçu indisponible. Utilisez le lien ci-dessous pour ouvrir le document.
         </Alert>
       ) : (
-        <Box
-          ref={wrapRef}
-          onMouseDown={handleDown}
-          onMouseMove={handleMove}
-          onMouseUp={handleUp}
-          onMouseLeave={() => {
-            startRef.current = null
-            setDraw(null)
-          }}
-          sx={{
-            position: 'relative',
-            width: '100%',
-            lineHeight: 0,
-            cursor: drawMode ? 'crosshair' : 'default',
-            userSelect: 'none',
-          }}
-        >
+        // Scrollable container so the zoomed image can be panned horizontally.
+        <Box sx={{ overflowX: 'auto', overflowY: 'hidden' }}>
           <Box
-            component="img"
-            src={url}
-            alt="Aperçu du document"
-            draggable={false}
-            onLoad={(e) =>
-              setImgNaturalW((e.currentTarget as HTMLImageElement).naturalWidth)
-            }
-            onError={() => setImgError(true)}
-            sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
-          />
+            ref={wrapRef}
+            onMouseDown={handleDown}
+            onMouseMove={handleMove}
+            onMouseUp={handleUp}
+            onMouseLeave={() => {
+              startRef.current = null
+              setDraw(null)
+            }}
+            sx={{
+              position: 'relative',
+              width: `${zoom * 100}%`,
+              minWidth: '100%',
+              lineHeight: 0,
+              cursor: drawMode ? 'crosshair' : 'default',
+              userSelect: 'none',
+            }}
+          >
+            <Box
+              component="img"
+              src={url}
+              alt="Aperçu du document"
+              draggable={false}
+              onLoad={(e) =>
+                setImgNaturalW((e.currentTarget as HTMLImageElement).naturalWidth)
+              }
+              onError={() => setImgError(true)}
+              sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
+            />
           {draw && (
             <Box
               sx={{
@@ -521,6 +531,7 @@ function DocumentPreview({
                 />
               )
             })}
+          </Box>
         </Box>
       )}
       <Box sx={{ mt: 1, textAlign: 'right' }}>
@@ -560,6 +571,10 @@ export function OcrReviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [blDialogOpen, setBlDialogOpen] = useState(false)
+  // Zoom level for the document preview (1 = 100%, range 0.5–3).
+  const [zoom, setZoom] = useState(1)
+  const zoomIn = () => setZoom((z) => Math.min(3, Math.round((z + 0.25) * 4) / 4))
+  const zoomOut = () => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 4) / 4))
   // Per-line BL capture grid (supplier_delivery_note only). Pre-seeded once from
   // the raw `lignes` field; not overwritten after the user starts editing.
   const [blLines, setBlLines] = useState<BlLine[]>([])
@@ -991,15 +1006,39 @@ export function OcrReviewPage() {
         <Paper sx={{ flex: 1, p: 2, position: { md: 'sticky' }, top: 16, width: '100%' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Typography variant="subtitle1">Aperçu du document</Typography>
-            {highlight.length > 0 && (
-              <Link
-                component="button"
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <Tooltip title="Zoom arrière">
+                <span>
+                  <IconButton size="small" onClick={zoomOut} disabled={zoom <= 0.5}>
+                    <ZoomOutIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Typography
                 variant="caption"
-                onClick={() => setHighlight([])}
+                sx={{ minWidth: 36, textAlign: 'center', cursor: 'pointer' }}
+                onClick={() => setZoom(1)}
               >
-                Effacer la sélection
-              </Link>
-            )}
+                {Math.round(zoom * 100)}%
+              </Typography>
+              <Tooltip title="Zoom avant">
+                <span>
+                  <IconButton size="small" onClick={zoomIn} disabled={zoom >= 3}>
+                    <ZoomInIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              {highlight.length > 0 && (
+                <Link
+                  component="button"
+                  variant="caption"
+                  onClick={() => setHighlight([])}
+                  sx={{ ml: 1 }}
+                >
+                  Effacer la sélection
+                </Link>
+              )}
+            </Stack>
           </Stack>
           {cropTarget && (
             <Alert severity="info" sx={{ mb: 1 }} icon={<CropFreeIcon fontSize="small" />}>
@@ -1056,6 +1095,7 @@ export function OcrReviewPage() {
               (pageIndex === 0 && canHighlight && activeField !== null)
             }
             onRegionDrawn={handleRegionDrawn}
+            zoom={zoom}
           />
         </Paper>
 
