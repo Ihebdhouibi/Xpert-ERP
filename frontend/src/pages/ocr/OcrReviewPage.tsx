@@ -746,12 +746,9 @@ export function OcrReviewPage() {
         reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
       )
     } else {
-      // supplier_invoice: same box-based reconstruction as BL, falls back to the
-      // `lignes` JSON blob if no table structure is detected in the boxes.
-      const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
-      setBlLines(
-        reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
-      )
+      // supplier_invoice: document layouts vary too much for automatic reconstruction.
+      // Start with one empty row; the user crops each cell manually.
+      setBlLines([emptyBlLine()])
     }
   }, [extraction, edited.lignes, rawLines, layout])
 
