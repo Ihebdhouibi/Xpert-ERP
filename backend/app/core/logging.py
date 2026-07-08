@@ -40,24 +40,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Repo root (…/Xpert-ERP), so relative log_dir="logs" always resolves to
-# <repo_root>/logs/ — the single canonical log directory, matching the
-# computation in main.py (_PROJECT_ROOT = Path(__file__).parents[3]).
-# logging.py lives at backend/app/core/logging.py → parents[3] == repo root.
-_BACKEND_ROOT = Path(__file__).resolve().parents[3]
-
 
 def resolve_log_dir(log_dir: str) -> str:
-    """Anchor a relative log dir to the backend root (absolute paths pass through).
+    """Return an absolute path for the log directory.
 
-    Without this, ``log_dir="logs"`` resolved against the current working
-    directory, so logs scattered into ``backend/logs`` or the repo-root ``logs``
-    depending on where uvicorn was started — a real source of "where are my
-    logs?" confusion. Used by both the API process and the OCR worker process so
-    they always write to the same files.
+    Absolute paths pass through unchanged.
+    Relative paths are resolved against the **current working directory** at
+    call time.  In Docker the WORKDIR is ``/app`` (the backend tree) and the
+    compose volume mounts ``../logs:/app/logs``, so ``log_dir="logs"`` →
+    ``/app/logs/`` — the mounted host directory.  Locally, if uvicorn is
+    launched from the repo root or the backend folder the same relative
+    resolution applies correctly.
+
+    This replaces the old ``_BACKEND_ROOT``-anchored approach, which was
+    computed from ``Path(__file__).parents[N]`` at *import* time and therefore
+    produced the wrong path inside containers (``/`` instead of ``/app``).
     """
     p = Path(log_dir)
-    return str(p if p.is_absolute() else _BACKEND_ROOT / p)
+    return str(p if p.is_absolute() else Path.cwd() / p)
 
 # ---------------------------------------------------------------------------
 # Posture flags (pre-deployment = capture everything)
@@ -296,7 +296,7 @@ def configure_logging(
     app_lg = logging.getLogger(STREAM_APP)
     for sa_name in ("sqlalchemy.engine", "sqlalchemy.pool"):
         sa_lg = logging.getLogger(sa_name)
-        sa_lg.setLevel(logging.INFO)  # INFO = statements+params; DEBUG = + rows
+        sa_lg.setLevel(logging.DEBUG)  # DEBUG = statements + params + result rows
         sa_lg.propagate = False
         sa_lg.disabled = False
         for h in app_lg.handlers:
@@ -337,3 +337,36 @@ def configure_logging(
         for h in app_lg.handlers:
             if not any(type(existing) is type(h) and getattr(existing, "baseFilename", None) == getattr(h, "baseFilename", None) for existing in nl.handlers):
                 nl.addHandler(h)
+
+    # --- Root logger catch-all -------------------------------------------------
+    # Any third-party library or app module that uses logging.getLogger(__name__)
+    # directly (FastAPI internals, Pydantic, aiosmtplib, httpx, etc.) propagates
+    # up to the root logger.  Attach a handler here so those messages land in
+    # backend-fastapi.log instead of being silently discarded.
+    # Our named stream loggers all have propagate=False so they are NOT affected.
+    root_lg = logging.getLogger()
+    root_lg.setLevel(level)
+    root_main_file = os.path.join(log_dir, _STREAM_FILES[STREAM_APP])
+    if not _has(root_lg, logging.handlers.RotatingFileHandler, _STREAM_FILES[STREAM_APP]):
+        root_lg.addHandler(_rotating(root_main_file, max_bytes, backup_count, level))
+    # Also attach the shared errors mirror to root so uncaught warnings/errors
+    # from any library are visible in the triage file.
+    if not _has(root_lg, logging.handlers.RotatingFileHandler, _ERRORS_FILE):
+        root_lg.addHandler(_rotating(errors_path, max_bytes, backup_count, logging.WARNING))
+    # Console handler for root as well (so nothing is lost when no TTY).
+    if not any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        for h in root_lg.handlers
+    ):
+        root_lg.addHandler(console)
+
+    # --- Startup probe ---------------------------------------------------------
+    # Log the resolved absolute log directory so we can immediately verify
+    # in the server output exactly where files will be written.
+    startup_lg = logging.getLogger(STREAM_INFRA)
+    startup_lg.info(
+        "[logging] configured  log_dir=%r  level=%s  files=%s",
+        log_dir,
+        log_level,
+        ", ".join(_STREAM_FILES.values()),
+    )
