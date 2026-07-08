@@ -115,7 +115,7 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'total_ht',
     'tva',
     'total_ttc',
-    'lignes',
+    // 'lignes' intentionally omitted — the dedicated grid below replaces the raw blob.
   ],
   invoice: [
     'numero_facture',
@@ -746,8 +746,12 @@ export function OcrReviewPage() {
         reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
       )
     } else {
-      // supplier_invoice: seed from the `lignes` JSON produced by the extractor.
-      setBlLines(seedBlLinesFromRaw(edited.lignes))
+      // supplier_invoice: same box-based reconstruction as BL, falls back to the
+      // `lignes` JSON blob if no table structure is detected in the boxes.
+      const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
+      setBlLines(
+        reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
+      )
     }
   }, [extraction, edited.lignes, rawLines, layout])
 
