@@ -450,6 +450,21 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
     if ttc:
         fields["total_ttc"] = ttc
 
+    # Fallback: derive TVA = TTC − HT when the keyword search found nothing.
+    # Invoices often place the TVA amount in a table column where the label
+    # ("TVA") and the value ("9.97") are on different OCR lines with no clean
+    # pairing, so the pattern-based search misses it.
+    if "tva" not in fields and "total_ttc" in fields and "total_ht" in fields:
+        try:
+            ttc_val = float(fields["total_ttc"][0])
+            ht_val = float(fields["total_ht"][0])
+            diff = round(ttc_val - ht_val, 2)
+            if diff > 0:
+                conf = round(min(fields["total_ttc"][1], fields["total_ht"][1]) * 0.95, 4)
+                fields["tva"] = (f"{diff:.2f}", conf)
+        except (TypeError, ValueError):
+            pass
+
     # Best-effort line items (JSON string, low confidence)
     items = _extract_line_items(lines)
     if items:
