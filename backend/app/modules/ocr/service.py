@@ -324,6 +324,37 @@ def _build_invoice_prefill(fields: dict[str, Any], party_field: str) -> "Invoice
     )
 
 
+def _si_lines_from_prefill(prefill: "InvoicePrefill") -> list[dict]:
+    """Convert OCR-extracted suggested lines to standalone SI line dicts (no PO ref)."""
+    lines = []
+    for il in (prefill.suggested_lines or []):
+        try:
+            qty = max(1, int(float((il.quantity or "1").replace(",", ".")) or 1))
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            raw = (il.unit_price or "").replace(",", ".").strip()
+            uph = max(0, int(round(float(raw) * 100))) if raw else 0
+        except (TypeError, ValueError):
+            uph = 0
+        lth = qty * uph
+        lttc = round(lth * 1.2)
+        lines.append({
+            "po_line_id": None,
+            "description": il.description or "",
+            "quantity": qty,
+            "unit_price_ht": uph,
+            "vat_rate": 20.0,
+            "line_total_ht": lth,
+            "line_total_ttc": lttc,
+            "match_status": "ok",
+            "po_quantity_ordered": 0,
+            "po_quantity_received": 0,
+            "po_unit_price_ht": uph,
+        })
+    return lines
+
+
 async def ingest_extraction(
     db: AsyncSession,
     *,
@@ -365,12 +396,14 @@ async def ingest_extraction(
                 due = _date.fromisoformat(prefill.due_date)
             except ValueError:
                 due = None
+        si_lines = _si_lines_from_prefill(prefill)
         si = await create_supplier_invoice_from_ocr(
             db,
             garage_id=document.garage_id,
             number=prefill.number or "(sans numéro)",
             total_ht=prefill.total_ht_cents or 0,
             total_ttc=prefill.total_ttc_cents or 0,
+            lines=si_lines if si_lines else None,
             due_date=due,
             notes="Importé depuis l'OCR",
             created_by=reviewer_id,

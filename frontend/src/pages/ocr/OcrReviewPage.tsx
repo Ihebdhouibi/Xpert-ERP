@@ -731,19 +731,24 @@ export function OcrReviewPage() {
     [fields],
   )
 
-  // Pre-seed the BL capture grid once, after the extraction has loaded, for
-  // supplier delivery notes. Reconstructs the line table from the OCR cell boxes
-  // (all rows, deterministic); falls back to the raw `lignes` blob when the boxes
-  // are unavailable. The user's edits are preserved (guarded by blSeededRef).
+  // Pre-seed the per-line capture grid once, after extraction is loaded.
+  // For supplier_delivery_note: reconstruct rows from OCR cell boxes.
+  // For supplier_invoice: seed from the `lignes` JSON blob (OCR line extractor).
   useEffect(() => {
     if (blSeededRef.current) return
-    if (extraction?.document_category !== 'supplier_delivery_note') return
-    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    const cat = extraction?.document_category
+    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice') return
+    if (extraction?.status === 'pending' || extraction?.status === 'processing') return
     blSeededRef.current = true
-    const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
-    setBlLines(
-      reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
-    )
+    if (cat === 'supplier_delivery_note') {
+      const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
+      setBlLines(
+        reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
+      )
+    } else {
+      // supplier_invoice: seed from the `lignes` JSON produced by the extractor.
+      setBlLines(seedBlLinesFromRaw(edited.lignes))
+    }
   }, [extraction, edited.lignes, rawLines, layout])
 
   // Supplier and order reference are authoritative from the linked PO (not OCR).
@@ -890,7 +895,20 @@ export function OcrReviewPage() {
     setSaving(true)
     setError(null)
     try {
-      const result = await ocrApi.ingest(extractionId, { confirmed_fields: edited })
+      // For supplier invoices with OCR-captured part lines, serialize them into
+      // confirmed_fields.lignes so the backend can persist them on the invoice.
+      const fieldsToSend: Record<string, string> = { ...edited }
+      if (isSupplierInvoice && blLines.length > 0 && blLines.some((l) => l.designation || l.montant)) {
+        fieldsToSend.lignes = JSON.stringify(
+          blLines.map((l) => ({
+            description: l.designation || null,
+            quantity: l.quantite || null,
+            unit_price: l.pu_net || l.pu_brut || null,
+            line_total: l.montant || null,
+          }))
+        )
+      }
+      const result = await ocrApi.ingest(extractionId, { confirmed_fields: fieldsToSend })
       switch (result.target) {
         case 'supplier_invoice':
           // The supplier invoice draft was created server-side — go to the list.
@@ -965,9 +983,12 @@ export function OcrReviewPage() {
   const isReviewed = extraction.reviewed_at !== null
   const category = extraction.document_category ?? ''
   const ingestLabel = INGEST_LABEL[category] ?? 'Valider'
-  // A supplier delivery note is received via a dedicated reception dialog rather
-  // than the generic ingest flow.
+  // supplier_delivery_note uses a dedicated BL reception dialog.
   const isDeliveryNote = category === 'supplier_delivery_note'
+  // supplier_invoice may also contain part lines (it can act as a BL itself).
+  const isSupplierInvoice = category === 'supplier_invoice'
+  // Show the per-line capture grid for both BL and supplier invoice.
+  const showLineGrid = isDeliveryNote || isSupplierInvoice
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
   const fieldsToShow = [
@@ -1256,7 +1277,7 @@ export function OcrReviewPage() {
             </Stack>
           )}
 
-          {isDeliveryNote && (
+          {showLineGrid && (
             <>
               <Divider sx={{ my: 2 }} />
               <Stack
@@ -1265,7 +1286,9 @@ export function OcrReviewPage() {
                 alignItems="center"
                 sx={{ mb: 1 }}
               >
-                <Typography variant="subtitle1">Lignes du bon de livraison</Typography>
+                <Typography variant="subtitle1">
+                  {isDeliveryNote ? 'Lignes du bon de livraison' : 'Lignes de la facture fournisseur'}
+                </Typography>
                 <Button size="small" startIcon={<AddIcon />} onClick={addBlLine}>
                   Ajouter une ligne
                 </Button>
