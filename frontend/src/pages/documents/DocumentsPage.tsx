@@ -5,6 +5,7 @@ import {
   Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -30,6 +31,7 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import DownloadIcon from '@mui/icons-material/Download'
 import PageviewIcon from '@mui/icons-material/Pageview'
 import SearchIcon from '@mui/icons-material/Search'
@@ -341,6 +343,45 @@ export function DocumentsPage() {
   const [deleting, setDeleting] = useState(false)
   const [enqueuingId, setEnqueuingId] = useState<string | null>(null)
 
+  // Batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchDeleting, setBatchDeleting] = useState(false)
+
+  const allSelected = docs.length > 0 && selectedIds.size === docs.length
+  const someSelected = selectedIds.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(docs.map((d) => d.id)))
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleBatchDelete = async () => {
+    setBatchDeleting(true)
+    try {
+      await Promise.all([...selectedIds].map((id) => documentsApi.delete(id)))
+      setDocs((prev) => prev.filter((d) => !selectedIds.has(d.id)))
+      setSelectedIds(new Set())
+    } catch {
+      alert('Certains documents n\'ont pas pu être supprimés.')
+    } finally {
+      setBatchDeleting(false)
+      setBatchDeleteOpen(false)
+    }
+  }
+
   const handleLaunchOcr = async (doc: DocumentOut) => {
     setEnqueuingId(doc.id)
     try {
@@ -358,6 +399,7 @@ export function DocumentsPage() {
   const fetchDocs = async () => {
     setLoading(true)
     setError('')
+    setSelectedIds(new Set())
     try {
       const res = await documentsApi.list({
         q: q || undefined,
@@ -410,13 +452,25 @@ export function DocumentsPage() {
     <Box p={3}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Documents</Typography>
-        <Button
-          variant="contained"
-          startIcon={<UploadFileIcon />}
-          onClick={() => setUploadOpen(true)}
-        >
-          Télécharger
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => setBatchDeleteOpen(true)}
+            >
+              Supprimer la sélection ({selectedIds.size})
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setUploadOpen(true)}
+          >
+            Télécharger
+          </Button>
+        </Stack>
       </Stack>
 
       {/* Filters */}
@@ -484,6 +538,14 @@ export function DocumentsPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={someSelected}
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    size="small"
+                  />
+                </TableCell>
                 <TableCell>Nom du fichier</TableCell>
                 <TableCell>Catégorie</TableCell>
                 <TableCell>Type</TableCell>
@@ -496,13 +558,20 @@ export function DocumentsPage() {
             <TableBody>
               {docs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     Aucun document trouvé.
                   </TableCell>
                 </TableRow>
               )}
               {docs.map((doc) => (
-                <TableRow key={doc.id} hover>
+                <TableRow key={doc.id} hover selected={selectedIds.has(doc.id)}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      size="small"
+                      checked={selectedIds.has(doc.id)}
+                      onChange={() => toggleSelect(doc.id)}
+                    />
+                  </TableCell>
                   <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <Tooltip title={doc.filename}>
                       <span>{doc.filename}</span>
@@ -576,6 +645,29 @@ export function DocumentsPage() {
             </Button>
             <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}>
               {deleting ? <CircularProgress size={18} /> : 'Supprimer'}
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch delete confirm dialog */}
+      <Dialog open={batchDeleteOpen} onClose={() => setBatchDeleteOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirmer la suppression groupée</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Supprimer <strong>{selectedIds.size}</strong> document{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''} ? Cette action est irréversible.
+          </Typography>
+          <Stack direction="row" spacing={2} justifyContent="flex-end" mt={2}>
+            <Button onClick={() => setBatchDeleteOpen(false)} disabled={batchDeleting}>
+              Annuler
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleBatchDelete}
+              disabled={batchDeleting}
+            >
+              {batchDeleting ? <CircularProgress size={18} /> : `Supprimer ${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''}`}
             </Button>
           </Stack>
         </DialogContent>
