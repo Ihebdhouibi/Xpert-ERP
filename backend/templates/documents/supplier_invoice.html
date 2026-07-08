@@ -120,13 +120,8 @@
   </table>
 </div>
 
-<!-- Notes -->
-{% if doc.notes %}
-<div class="notes-block">
-  <div class="block-title">Notes</div>
-  <div>{{ doc.notes }}</div>
-</div>
-{% endif %}
+<!-- Notes are intentionally excluded from the PDF — they are internal platform
+     annotations for staff only and must not appear on printed/shared documents. -->
 
 <!-- Legal -->
 {% if legal_mention %}
