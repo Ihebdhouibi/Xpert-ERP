@@ -138,6 +138,10 @@ async def create_delivery_note(
         bl_price = item.get("pu_net") or item.get("pu_brut")
         if bl_price and bl_price > 0 and po_line.unit_price_ht == 0:
             po_line.unit_price_ht = bl_price
+        # Backfill PO line designation from BL when the label was left blank.
+        bl_designation = (item.get("designation") or "").strip()
+        if bl_designation and not (po_line.label or "").strip():
+            po_line.label = bl_designation
 
     # Recompute PO total after potential price backfill.
     po.total_ht = sum(ln.quantity_ordered * ln.unit_price_ht for ln in po.lines)

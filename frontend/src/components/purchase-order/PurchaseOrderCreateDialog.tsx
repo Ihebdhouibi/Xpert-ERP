@@ -83,11 +83,9 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
   const handleSubmit = async () => {
     setError('')
     if (!supplierPublicId) { setError('Veuillez sélectionner un fournisseur'); return }
-    const invalidLine = lines.some((l) =>
-      l.part_public_id === OTHER_PART ? !l.label.trim() : !l.part_public_id,
-    )
-    if (invalidLine) {
-      setError('Chaque ligne doit avoir une pièce, ou un libellé pour les lignes « Autre ».')
+    // label is now optional for "Autre" lines — designation is backfilled from BL.
+    if (lines.some((l) => !l.part_public_id)) {
+      setError('Chaque ligne doit avoir une pièce sélectionnée (ou « Autre »).')
       return
     }
 
@@ -203,7 +201,7 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
                         size="small"
                         fullWidth
                         sx={{ mt: 1 }}
-                        placeholder="Désignation de la pièce (Autre)"
+                        placeholder="Désignation (optionnelle — sera complétée depuis le BL)"
                         value={ln.label}
                         onChange={(e) => updateLine(i, 'label', e.target.value)}
                       />
@@ -223,14 +221,13 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
                       size="small"
                       type="number"
                       value={ln.unit_price_ht || ''}
+                      placeholder="0"
                       onChange={(e) => {
                         const raw = e.target.value
-                        if (raw === '') return
                         const num = parseFloat(raw)
-                        if (!isNaN(num) && num >= 0) updateLine(i, 'unit_price_ht', num)
+                        updateLine(i, 'unit_price_ht', isNaN(num) ? 0 : Math.max(0, num))
                       }}
-                      onBlur={() => updateLine(i, 'unit_price_ht', Math.round(ln.unit_price_ht * 100) / 100)}
-                      inputProps={{ min: 0, step: 1 }}
+                      inputProps={{ min: 0, step: 0.01 }}
                     />
                   </TableCell>
                   <TableCell>

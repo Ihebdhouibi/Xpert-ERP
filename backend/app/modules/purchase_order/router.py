@@ -58,16 +58,20 @@ async def _enrich_part_names(db: AsyncSession, summary: "POSummary", po: Any) ->
 
 class POLineInput(BaseModel):
     # Either a catalogue part (part_public_id) OR a free-text label for an
-    # "Autre" (uncatalogued) line.
+    # "Autre" (uncatalogued) line.  Both label and unit_price_ht are optional
+    # when the part details are not yet known at order time — they will be
+    # backfilled from the BL OCR data on reception.
     part_public_id: Optional[str] = None
     label: Optional[str] = None
     quantity_ordered: int = Field(..., gt=0)
-    unit_price_ht: int = Field(..., ge=0)
+    unit_price_ht: int = Field(0, ge=0)
 
     @model_validator(mode="after")
-    def _need_part_or_label(self) -> "POLineInput":
-        if not self.part_public_id and not (self.label and self.label.strip()):
-            raise ValueError("Chaque ligne doit avoir une pièce ou un libellé (Autre).")
+    def _need_part_or_autre(self) -> "POLineInput":
+        if not self.part_public_id and self.label is None:
+            # Treat a fully-empty line as an "Autre" with no label yet.
+            # The label will be filled from BL data on reception.
+            self.label = ""
         return self
 
 
