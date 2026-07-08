@@ -180,6 +180,34 @@ export function BonLivraisonReceptionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, extractionId, defaultBlNumber, defaultBlDate])
 
+  // Auto-match BL lines to PO lines by position once both are available.
+  // BL line[0] → PO line[0], BL line[1] → PO line[1], etc.
+  // Skips rows that the user has already assigned manually.
+  // Also runs SKU auto-match when parts are available.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!po || !blLines?.length) return
+    setBlMap((prev) =>
+      prev.map((row, i) => {
+        const poLine = po.lines[i]
+        if (!poLine) return row // more BL lines than PO lines — leave unmatched
+        const poLineId = row.poLineId || String(poLine.id)
+        let partPublicId = row.partPublicId
+        // Try SKU match if PO line is "autre" and no part assigned yet.
+        if (!partPublicId && poLine.part_id === null && blLines[i]?.code && parts.length > 0) {
+          const normCode = normalizeCode(blLines[i].code)
+          const match = parts.find((p) => normalizeCode(p.sku_code) === normCode)
+          if (match) partPublicId = match.id
+        }
+        if (poLineId === row.poLineId && partPublicId === row.partPublicId) return row
+        return { ...row, poLineId, partPublicId }
+      }),
+    )
+  // Re-run when PO lines arrive AND again when parts finish loading for SKU matching.
+  // blLines intentionally excluded — snapshotted on open.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [po, parts])
+
   const updateLine = (lineId: number, patch: Partial<LineState>) =>
     setLineStates((prev) => ({
       ...prev,
