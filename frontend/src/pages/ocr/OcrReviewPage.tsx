@@ -748,12 +748,14 @@ export function OcrReviewPage() {
 
   // Supplier and order reference are authoritative from the linked PO (not OCR).
   // Fill both the Fournisseur and Référence commande fields from the PO once the
-  // extraction is ready.
+  // extraction is ready. Works for both supplier_delivery_note and supplier_invoice
+  // documents that are filed under a purchase order.
   useEffect(() => {
     if (supplierResolvedRef.current) return
     if (!extractionId) return
-    if (extraction?.document_category !== 'supplier_delivery_note') return
-    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    const cat = extraction?.document_category
+    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice') return
+    if (extraction?.status === 'pending' || extraction?.status === 'processing') return
     supplierResolvedRef.current = true
     let cancelled = false
     supplierDeliveryNoteApi
@@ -762,12 +764,14 @@ export function OcrReviewPage() {
         if (cancelled) return
         setEdited((prev) => {
           const next = { ...prev }
-          if (r.supplier_name) next.fournisseur = r.supplier_name
+          if (r.supplier_name && !prev.fournisseur) next.fournisseur = r.supplier_name
           if (r.purchase_order_number) next.reference_commande = r.purchase_order_number
           return next
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        // Document not filed under a PO — supplier stays as OCR extracted or blank.
+      })
     return () => {
       cancelled = true
     }
