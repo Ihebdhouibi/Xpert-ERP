@@ -46,6 +46,7 @@ import {
 } from '../../lib/purchaseOrderApi'
 import { vehiclesApi, VehicleOut } from '../../lib/vehiclesApi'
 import { customerApi, CustomerSummary } from '../../lib/customerApi'
+import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 
 // Complete labels for DISPLAY — covers every enum value (including legacy ones
@@ -55,6 +56,7 @@ const CATEGORY_LABELS: Record<DocumentCategory, string> = {
   registration_card: 'Carte grise',
   supplier_invoice: 'Facture fournisseur',
   supplier_delivery_note: 'Bon de livraison',
+  service_invoice: 'Facture service',
   invoice: 'Facture',
   id_doc: "Pièce d'identité",
   insurance: 'Assurance',
@@ -80,6 +82,7 @@ const CATEGORIES: { value: DocumentCategory | ''; label: string }[] = [
   { value: '', label: 'Toutes les catégories' },
   { value: 'registration_card', label: CATEGORY_LABELS.registration_card },
   { value: 'supplier_invoice', label: CATEGORY_LABELS.supplier_invoice },
+  { value: 'service_invoice', label: CATEGORY_LABELS.service_invoice },
   { value: 'supplier_delivery_note', label: CATEGORY_LABELS.supplier_delivery_note },
   { value: 'generic', label: CATEGORY_LABELS.generic },
 ]
@@ -190,6 +193,65 @@ function PurchaseOrderPicker({ value, onChange }: PurchaseOrderPickerProps) {
         }}
       />
     </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Supplier picker for service invoice uploads
+// ---------------------------------------------------------------------------
+interface SupplierPickerProps {
+  value: Supplier | null
+  onChange: (s: Supplier | null) => void
+}
+
+function SupplierPicker({ value, onChange }: SupplierPickerProps) {
+  const [options, setOptions] = useState<Supplier[]>([])
+  const [inputValue, setInputValue] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    supplierApi.list({ search: inputValue || undefined, page_size: 50, status: 'active' })
+      .then((r) => { if (!cancelled) setOptions(r?.items ?? []) })
+      .catch(() => { if (!cancelled) setOptions([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [inputValue])
+
+  const getLabel = (s: Supplier) => s.name
+
+  return (
+    <Autocomplete
+      value={value}
+      onChange={(_, v) => onChange(v)}
+      inputValue={inputValue}
+      onInputChange={(_, v) => setInputValue(v)}
+      options={options ?? []}
+      getOptionLabel={getLabel}
+      isOptionEqualToValue={(a, b) => a.id === b.id}
+      loading={loading}
+      size="small"
+      noOptionsText="Aucun fournisseur trouvé"
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Fournisseur *"
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {loading ? <CircularProgress size={16} /> : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+      renderOption={(props, option) => (
+        <Box component="li" {...props} key={option.id}>{option.name}</Box>
+      )}
+    />
   )
 }
 
@@ -373,11 +435,13 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
   const [ownerId, setOwnerId] = useState('')
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleOut | null>(null)
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const isRegistrationCard = category === 'registration_card'
+  const isServiceInvoice = category === 'service_invoice'
   const isPurchaseOrder = ownerType === 'purchase_order'
 
   const handleUpload = async () => {
@@ -385,9 +449,15 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
     setLoading(true)
     setError('')
     try {
-      const effectiveOwnerType: OwnerEntityType = isRegistrationCard ? 'vehicle' : ownerType
+      const effectiveOwnerType: OwnerEntityType = isRegistrationCard
+        ? 'vehicle'
+        : isServiceInvoice
+        ? 'supplier'
+        : ownerType
       const effectiveOwnerId = isRegistrationCard
         ? (selectedVehicle ? selectedVehicle.id : undefined)
+        : isServiceInvoice
+        ? (selectedSupplier ? selectedSupplier.int_id : undefined)
         : (ownerId ? Number(ownerId) : undefined)
       const doc = await documentsApi.upload(
         file,
@@ -444,6 +514,15 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
                   setOwnerId('')
                   setSelectedPO(null)
                   setSelectedVehicle(null)
+                  setSelectedSupplier(null)
+                }
+                // Service invoice is always linked to a supplier — reset other pickers.
+                if (next === 'service_invoice') {
+                  setOwnerType('supplier')
+                  setOwnerId('')
+                  setSelectedPO(null)
+                  setSelectedVehicle(null)
+                  setSelectedSupplier(null)
                 }
               }}
             >
@@ -460,6 +539,11 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             <VehicleRegistrationPicker
               value={selectedVehicle}
               onChange={setSelectedVehicle}
+            />
+          ) : isServiceInvoice ? (
+            <SupplierPicker
+              value={selectedSupplier}
+              onChange={setSelectedSupplier}
             />
           ) : (
             <>
@@ -504,7 +588,7 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
 
           <Button
             variant="contained"
-            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle)}
+            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle) || (isServiceInvoice && !selectedSupplier)}
             onClick={handleUpload}
           >
             {loading ? <CircularProgress size={20} /> : 'Télécharger'}
