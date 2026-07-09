@@ -135,15 +135,12 @@ class Settings(BaseSettings):
     cfg_ocr_confidence_threshold_cin: float = 0.80
     # Auxiliary preprocessing models, disabled by default. Garage inputs are flat
     # scans / straight phone photos of cards and invoices, so the document
-    # orientation and document unwarping (UVDoc, ~32 MB) models add RAM without
-    # benefit on well-oriented docs.  However, use_textline_orientation is
-    # recommended ON in practice: PaddleOCR's detection model occasionally assigns
-    # polygon corners in reverse order for short table cells (e.g. "99,00"
-    # recognised as "00'66"), and the per-line classifier (+~70 MB, ~0.2 s/scan)
-    # corrects those flips reliably.
+    # orientation, document unwarping (UVDoc, ~32 MB) and textline orientation
+    # models add RAM (~70 MB peak), image size (~46 MB) and per-scan latency for
+    # no accuracy gain. Re-enable per deployment if inputs are rotated or warped.
     cfg_ocr_use_doc_orientation: bool = False
     cfg_ocr_use_doc_unwarping: bool = False
-    cfg_ocr_use_textline_orientation: bool = True
+    cfg_ocr_use_textline_orientation: bool = False
     # Run OCR in a dedicated, idle-killed worker process (reclaims model RAM
     # between scans). DISABLED by default: the spawned worker is unreliable under
     # uvicorn --reload on Windows and could make OCR silently return empty. With
