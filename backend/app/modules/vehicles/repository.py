@@ -204,27 +204,41 @@ async def patch_from_ocr(
         "couleur": "color",
     }
 
-    # Collect registrations already owned by OTHER vehicles in the same garage
-    # to avoid the unique constraint violation on (garage_id, registration).
+    # Collect registrations AND VINs already owned by OTHER vehicles to avoid
+    # unique constraint violations on (garage_id, registration) and (garage_id, vin).
     ocr_reg = fields.get("immatriculation", "").strip()
+    ocr_vin = fields.get("vin", "").strip()
     reg_taken = False
-    if ocr_reg:
+    vin_taken = False
+    if ocr_reg or ocr_vin:
+        from sqlalchemy import or_
+        conditions = []
+        if ocr_reg:
+            conditions.append(Vehicle.registration == ocr_reg)
+        if ocr_vin:
+            conditions.append(Vehicle.vin == ocr_vin)
         conflict = await db.execute(
-            select(Vehicle.id).where(
+            select(Vehicle.id, Vehicle.registration, Vehicle.vin).where(
                 Vehicle.garage_id == garage_id,
-                Vehicle.registration == ocr_reg,
                 Vehicle.id != vehicle_id,
                 Vehicle.deleted_at.is_(None),
+                or_(*conditions),
             )
         )
-        reg_taken = conflict.first() is not None
+        for row in conflict.all():
+            if ocr_reg and row.registration == ocr_reg:
+                reg_taken = True
+            if ocr_vin and row.vin == ocr_vin:
+                vin_taken = True
 
     for ocr_field, col in str_mapping.items():
         value = fields.get(ocr_field, "").strip()
         if not value:
             continue
-        # Skip registration if it already belongs to another vehicle.
+        # Skip fields that would violate uniqueness constraints.
         if ocr_field == "immatriculation" and reg_taken:
+            continue
+        if ocr_field == "vin" and vin_taken:
             continue
         setattr(vehicle, col, value)
 
