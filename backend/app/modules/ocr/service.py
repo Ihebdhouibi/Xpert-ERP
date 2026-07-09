@@ -524,6 +524,66 @@ async def ingest_extraction(
             prefill=prefill,
             created_id=str(si.public_id),
         )
+
+    if category == DocumentCategory.service_invoice:
+        from datetime import date as _date2
+        from app.modules.supplier_invoice.service import create_supplier_invoice_from_ocr as _create_si
+
+        prefill = _build_invoice_prefill(merged, "fournisseur")
+        due = None
+        if prefill.due_date:
+            try:
+                due = _date2.fromisoformat(prefill.due_date)
+            except ValueError:
+                due = None
+        si_lines = _si_lines_from_prefill(prefill)
+
+        # Resolve supplier by name — look up or create if document is linked to a supplier.
+        supplier_id = None
+        if prefill.party:
+            from app.modules.supplier.models import Supplier as _SupModel
+            from sqlalchemy import select as _sel3, func as _func3
+            sup_res = await db.execute(
+                _sel3(_SupModel).where(
+                    _SupModel.garage_id == document.garage_id,
+                    _func3.lower(_SupModel.name) == prefill.party.lower().strip(),
+                    _SupModel.deleted_at.is_(None),
+                )
+            )
+            sup = sup_res.scalar_one_or_none()
+            if sup:
+                supplier_id = sup.id
+
+        # If document is filed under a supplier, inherit that link.
+        if not supplier_id and document.owner_entity_type == OwnerEntityType.supplier.value and document.owner_entity_id:
+            supplier_id = document.owner_entity_id
+
+        si = await _create_si(
+            db,
+            garage_id=document.garage_id,
+            number=prefill.number or "(sans numéro)",
+            total_ht=prefill.total_ht_cents or 0,
+            total_ttc=prefill.total_ttc_cents or 0,
+            supplier_id=supplier_id,
+            purchase_order_id=None,       # service invoices are never PO-linked
+            invoice_type="services",
+            lines=si_lines if si_lines else None,
+            due_date=due,
+            notes="Facture de service — importée depuis l'OCR",
+            created_by=reviewer_id,
+        )
+        await db.commit()
+        logger.info(
+            "service_invoice_created_from_ocr",
+            si_public_id=str(si.public_id),
+            garage_id=document.garage_id,
+        )
+        return IngestionResult(
+            target="supplier_invoice",   # reuses the supplier_invoice target → navigates to services page
+            prefill=prefill,
+            created_id=str(si.public_id),
+        )
+
     if category == DocumentCategory.invoice:
         from app.modules.invoice.service import create_invoice_from_ocr
 
