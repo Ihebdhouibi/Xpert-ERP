@@ -225,12 +225,12 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
       .then(([vRes, dRes]) => {
         if (cancelled) return
         const ids = new Set<number>(
-          dRes.items.map((d) => d.owner_entity_id).filter((id): id is number => id != null)
+          (dRes?.items ?? []).map((d) => d.owner_entity_id).filter((id): id is number => id != null)
         )
         setTakenIds(ids)
-        setAllVehicles(vRes.items)
+        setAllVehicles(vRes?.items ?? [])
       })
-      .catch(() => {})
+      .catch(() => { setAllVehicles([]); setTakenIds(new Set()) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
@@ -244,7 +244,7 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
     return () => { cancelled = true }
   }, [custSearch])
 
-  const available = allVehicles.filter((v) => {
+  const available = (allVehicles ?? []).filter((v) => {
     if (takenIds.has(v.id)) return false
     if (selectedCustomer && v.customer_id !== selectedCustomer.int_id) return false
     return true
@@ -296,6 +296,10 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
       />
       {/* Vehicle autocomplete filtered by client + no existing CG */}
       <Autocomplete
+        value={value}
+        onChange={(_, v) => onChange(v)}
+        options={available ?? []}
+        getOptionLabel={getLabel}
         isOptionEqualToValue={(a, b) => a.id === b.id}
         loading={loading}
         size="small"
