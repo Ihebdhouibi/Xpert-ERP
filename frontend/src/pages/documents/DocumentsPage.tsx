@@ -44,6 +44,7 @@ import {
   PurchaseOrder,
   STATUS_LABELS,
 } from '../../lib/purchaseOrderApi'
+import { vehiclesApi, VehicleOut } from '../../lib/vehiclesApi'
 import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 
 // Complete labels for DISPLAY — covers every enum value (including legacy ones
@@ -192,6 +193,132 @@ function PurchaseOrderPicker({ value, onChange }: PurchaseOrderPickerProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Vehicle picker for carte grise uploads (only vehicles without one)
+// ---------------------------------------------------------------------------
+interface VehicleRegistrationPickerProps {
+  value: VehicleOut | null
+  onChange: (v: VehicleOut | null) => void
+}
+
+function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPickerProps) {
+  const [allVehicles, setAllVehicles] = useState<VehicleOut[]>([])
+  const [takenIds, setTakenIds] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  // inline create form state
+  const [newMake, setNewMake] = useState('')
+  const [newModel, setNewModel] = useState('')
+  const [newReg, setNewReg] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      vehiclesApi.list({ status: 'active', page_size: 200 }),
+      documentsApi.list({ category: 'registration_card', owner_entity_type: 'vehicle', limit: 500 }),
+    ])
+      .then(([vRes, dRes]) => {
+        if (cancelled) return
+        const ids = new Set<number>(
+          dRes.items.map((d) => d.owner_entity_id).filter((id): id is number => id != null)
+        )
+        setTakenIds(ids)
+        setAllVehicles(vRes.items)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const available = allVehicles.filter((v) => !takenIds.has(v.id))
+
+  const getLabel = (v: VehicleOut) =>
+    `${v.make} ${v.model}${v.registration ? ` — ${v.registration}` : ''}${v.year ? ` (${v.year})` : ''}`
+
+  const handleCreate = async () => {
+    if (!newMake.trim() || !newModel.trim()) return
+    setCreating(true)
+    try {
+      const created = await vehiclesApi.create({
+        make: newMake.trim(),
+        model: newModel.trim(),
+        registration: newReg.trim() || null,
+      })
+      setAllVehicles((prev) => [created, ...prev])
+      onChange(created)
+      setCreateOpen(false)
+      setNewMake(''); setNewModel(''); setNewReg('')
+    } catch {
+      /* ignore */
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <>
+      <Autocomplete
+        value={value}
+        onChange={(_, v) => onChange(v)}
+        options={available}
+        getOptionLabel={getLabel}
+        isOptionEqualToValue={(a, b) => a.id === b.id}
+        loading={loading}
+        size="small"
+        noOptionsText="Aucun véhicule sans carte grise"
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Véhicule *"
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {loading ? <CircularProgress size={16} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.id}>{getLabel(option)}</Box>
+        )}
+      />
+      <Box>
+        <Button size="small" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+          Créer un nouveau véhicule
+        </Button>
+      </Box>
+      {createOpen && (
+        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Typography variant="caption" fontWeight={600} display="block" mb={1}>
+            Nouveau véhicule
+          </Typography>
+          <Stack spacing={1}>
+            <TextField size="small" label="Marque *" value={newMake} onChange={(e) => setNewMake(e.target.value)} />
+            <TextField size="small" label="Modèle *" value={newModel} onChange={(e) => setNewModel(e.target.value)} />
+            <TextField size="small" label="Immatriculation (optionnel)" value={newReg} onChange={(e) => setNewReg(e.target.value)} />
+            <Stack direction="row" spacing={1}>
+              <Button size="small" onClick={() => setCreateOpen(false)}>Annuler</Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={!newMake.trim() || !newModel.trim() || creating}
+                onClick={handleCreate}
+              >
+                {creating ? <CircularProgress size={16} /> : 'Créer'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Box>
+      )}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Upload dialog
 // ---------------------------------------------------------------------------
 interface UploadDialogProps {
@@ -206,10 +333,12 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
   const [ownerType, setOwnerType] = useState<OwnerEntityType>('generic')
   const [ownerId, setOwnerId] = useState('')
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleOut | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const isRegistrationCard = category === 'registration_card'
   const isPurchaseOrder = ownerType === 'purchase_order'
 
   const handleUpload = async () => {
@@ -217,11 +346,15 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
     setLoading(true)
     setError('')
     try {
+      const effectiveOwnerType: OwnerEntityType = isRegistrationCard ? 'vehicle' : ownerType
+      const effectiveOwnerId = isRegistrationCard
+        ? (selectedVehicle ? selectedVehicle.id : undefined)
+        : (ownerId ? Number(ownerId) : undefined)
       const doc = await documentsApi.upload(
         file,
         category,
-        ownerType,
-        ownerId ? Number(ownerId) : undefined,
+        effectiveOwnerType,
+        effectiveOwnerId,
       )
       onUploaded(doc)
       onClose()
@@ -263,7 +396,17 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             <Select
               value={category}
               label="Catégorie"
-              onChange={(e) => setCategory(e.target.value as DocumentCategory)}
+              onChange={(e) => {
+                const next = e.target.value as DocumentCategory
+                setCategory(next)
+                // Carte grise is always linked to a vehicle — reset other pickers.
+                if (next === 'registration_card') {
+                  setOwnerType('vehicle')
+                  setOwnerId('')
+                  setSelectedPO(null)
+                  setSelectedVehicle(null)
+                }
+              }}
             >
               {CATEGORIES.filter((c) => c.value !== '').map((c) => (
                 <MenuItem key={c.value} value={c.value}>
@@ -273,47 +416,56 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             </Select>
           </FormControl>
 
-          <FormControl fullWidth size="small">
-            <InputLabel>Type propriétaire</InputLabel>
-            <Select
-              value={ownerType}
-              label="Type propriétaire"
-              onChange={(e) => {
-                const next = e.target.value as OwnerEntityType
-                setOwnerType(next)
-                // Reset the owner link when switching type.
-                setOwnerId('')
-                setSelectedPO(null)
-              }}
-            >
-              {OWNER_TYPES.filter((o) => o.value !== '').map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {o.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {isPurchaseOrder ? (
-            <PurchaseOrderPicker
-              value={selectedPO}
-              onChange={(po) => {
-                setSelectedPO(po)
-                setOwnerId(po ? String(po.int_id) : '')
-              }}
+          {/* Carte grise: locked to vehicle, show dedicated picker */}
+          {isRegistrationCard ? (
+            <VehicleRegistrationPicker
+              value={selectedVehicle}
+              onChange={setSelectedVehicle}
             />
           ) : (
-            <TextField
-              label="ID propriétaire (optionnel)"
-              size="small"
-              value={ownerId}
-              onChange={(e) => setOwnerId(e.target.value)}
-            />
+            <>
+              <FormControl fullWidth size="small">
+                <InputLabel>Type propriétaire</InputLabel>
+                <Select
+                  value={ownerType}
+                  label="Type propriétaire"
+                  onChange={(e) => {
+                    const next = e.target.value as OwnerEntityType
+                    setOwnerType(next)
+                    setOwnerId('')
+                    setSelectedPO(null)
+                  }}
+                >
+                  {OWNER_TYPES.filter((o) => o.value !== '').map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {isPurchaseOrder ? (
+                <PurchaseOrderPicker
+                  value={selectedPO}
+                  onChange={(po) => {
+                    setSelectedPO(po)
+                    setOwnerId(po ? String(po.int_id) : '')
+                  }}
+                />
+              ) : (
+                <TextField
+                  label="ID propriétaire (optionnel)"
+                  size="small"
+                  value={ownerId}
+                  onChange={(e) => setOwnerId(e.target.value)}
+                />
+              )}
+            </>
           )}
 
           <Button
             variant="contained"
-            disabled={!file || loading || (isPurchaseOrder && !selectedPO)}
+            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle)}
             onClick={handleUpload}
           >
             {loading ? <CircularProgress size={20} /> : 'Télécharger'}

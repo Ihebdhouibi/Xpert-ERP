@@ -201,6 +201,7 @@ async def patch_from_ocr(
         "vin": "vin",
         "marque": "make",
         "modele": "model",
+        "couleur": "color",
     }
     for ocr_field, col in str_mapping.items():
         value = fields.get(ocr_field, "").strip()

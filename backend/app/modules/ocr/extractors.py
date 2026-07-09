@@ -39,6 +39,7 @@ _KW_PROPRIETAIRE = re.compile(r"propri[eé]taire|titulaire|nom", re.IGNORECASE)
 _KW_MARQUE = re.compile(r"\bmarque\b|\bD\.1\b", re.IGNORECASE)
 _KW_MODELE = re.compile(r"\bmod[eè]le\b|\bD\.3\b|\btype\b", re.IGNORECASE)
 _KW_DATE_MEC = re.compile(r"1[eè]re\s+immatriculation|mise\s+en\s+circulation|date\s+d.immatriculation|B\b", re.IGNORECASE)
+_KW_COULEUR = re.compile(r"\bcouleur\b|\bC\.2\b|\bcolor\b", re.IGNORECASE)
 
 
 def _best_line_after_keyword(lines, keyword_re: re.Pattern) -> Optional[tuple[str, float]]:
@@ -104,6 +105,11 @@ def extract_carte_grise(result: RawOcrResult) -> FieldMap:
     after_prop = _best_line_after_keyword(lines, _KW_PROPRIETAIRE)
     if after_prop:
         fields["proprietaire"] = after_prop
+
+    # Couleur (field C.2 on French/Tunisian registration cards)
+    after_couleur = _best_line_after_keyword(lines, _KW_COULEUR)
+    if after_couleur:
+        fields["couleur"] = after_couleur
 
     return fields
 
