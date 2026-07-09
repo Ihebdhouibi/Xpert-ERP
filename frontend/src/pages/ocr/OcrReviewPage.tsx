@@ -31,6 +31,7 @@ import {
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -1006,6 +1007,11 @@ export function OcrReviewPage() {
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+        <Tooltip title="Retour aux documents">
+          <IconButton onClick={() => navigate('/documents')} size="small">
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
         <Typography variant="h5">Extraction automatique</Typography>
         {category && <Chip size="small" label={categoryLabel} variant="outlined" />}
         {/* Progress lives in the fixed-height header row, so it appears and
