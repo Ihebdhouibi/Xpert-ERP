@@ -45,6 +45,7 @@ _EXTRACTORS = {
     DocumentCategory.id_doc: extractors.extract_national_id,
     DocumentCategory.invoice: extractors.extract_invoice,
     DocumentCategory.supplier_invoice: extractors.extract_supplier_invoice,
+    DocumentCategory.service_invoice: extractors.extract_service_invoice,
     DocumentCategory.supplier_delivery_note: extractors.extract_bon_de_livraison,
 }
 

@@ -496,6 +496,16 @@ def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
     return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")
 
 
+def extract_service_invoice(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a service invoice (facture de service).
+
+    Service invoices are like supplier invoices but for non-parts services
+    (repairs, audits, registrations, …). The same header fields apply; the
+    line items are free-text service descriptions rather than part codes.
+    """
+    return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")
+
+
 # ---------------------------------------------------------------------------
 # Bon de livraison (supplier delivery note)
 # ---------------------------------------------------------------------------
