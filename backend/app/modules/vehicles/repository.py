@@ -203,10 +203,30 @@ async def patch_from_ocr(
         "modele": "model",
         "couleur": "color",
     }
+
+    # Collect registrations already owned by OTHER vehicles in the same garage
+    # to avoid the unique constraint violation on (garage_id, registration).
+    ocr_reg = fields.get("immatriculation", "").strip()
+    reg_taken = False
+    if ocr_reg:
+        conflict = await db.execute(
+            select(Vehicle.id).where(
+                Vehicle.garage_id == garage_id,
+                Vehicle.registration == ocr_reg,
+                Vehicle.id != vehicle_id,
+                Vehicle.deleted_at.is_(None),
+            )
+        )
+        reg_taken = conflict.first() is not None
+
     for ocr_field, col in str_mapping.items():
         value = fields.get(ocr_field, "").strip()
-        if value:
-            setattr(vehicle, col, value)
+        if not value:
+            continue
+        # Skip registration if it already belongs to another vehicle.
+        if ocr_field == "immatriculation" and reg_taken:
+            continue
+        setattr(vehicle, col, value)
 
     # Extract 4-digit year from date_mise_en_circulation (e.g. "01/01/2019")
     date_str = fields.get("date_mise_en_circulation", "")
