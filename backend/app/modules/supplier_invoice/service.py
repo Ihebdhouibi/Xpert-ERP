@@ -266,23 +266,21 @@ async def create_supplier_invoice_from_ocr(
     total_ttc: int,
     supplier_id: Optional[int] = None,
     purchase_order_id: Optional[int] = None,
+    invoice_type: str = "parts",
     lines: Optional[list[dict]] = None,
     received_at: Optional[datetime] = None,
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
     created_by: Optional[int] = None,
 ) -> SupplierInvoice:
-    """Create a standalone draft supplier invoice from OCR data.
-
-    When ``supplier_id`` / ``purchase_order_id`` are provided (document filed
-    under a PO), they are linked immediately so the 3-way match can run.
-    """
+    """Create a standalone draft supplier invoice from OCR data."""
     logger.info("create_supplier_invoice_from_ocr_start", number=number, garage_id=garage_id)
     si = await SupplierInvoiceRepository.create(
         db,
         garage_id=garage_id,
         supplier_id=supplier_id,
         purchase_order_id=purchase_order_id,
+        invoice_type=invoice_type,
         number=number or "(sans numéro)",
         lines=lines or [],
         total_ht=total_ht,

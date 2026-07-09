@@ -55,6 +55,11 @@ class SupplierInvoice(Base):
         BigInteger, ForeignKey("purchase_order.id", ondelete="RESTRICT"), nullable=True
     )
     number: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 'parts'    → linked to a purchase order (classic 3-way match flow)
+    # 'services' → standalone service invoice, no BL or PO required
+    invoice_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="parts", server_default="parts"
+    )
     status: Mapped[SupplierInvoiceStatus] = mapped_column(
         String(30), nullable=False, default=SupplierInvoiceStatus.draft
     )

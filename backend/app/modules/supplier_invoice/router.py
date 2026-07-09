@@ -115,6 +115,7 @@ class SISummary(BaseModel):
     received_at: Optional[datetime]
     due_date: Optional[date]
     notes: Optional[str]
+    invoice_type: str = "parts"
     version: int
     created_at: datetime
     updated_at: datetime
@@ -302,6 +303,7 @@ async def list_supplier_invoices(
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
     status: Optional[SupplierInvoiceStatus] = None,
+    invoice_type: Optional[str] = None,
     search: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -313,6 +315,7 @@ async def list_supplier_invoices(
         db,
         garage_id=user.garage_id,
         status=status,
+        invoice_type=invoice_type,
         search=search,
         page=page,
         page_size=page_size,
