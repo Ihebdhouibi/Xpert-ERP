@@ -261,6 +261,8 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
         make: newMake.trim(),
         model: newModel.trim(),
         registration: newReg.trim() || null,
+        // Link to the selected client so the vehicle appears on their profile.
+        customer_id: selectedCustomer?.int_id ?? null,
       })
       setAllVehicles((prev) => [created, ...prev])
       onChange(created)
@@ -334,8 +336,8 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
             Nouveau véhicule
           </Typography>
           <Stack spacing={1}>
-            <TextField size="small" label="Marque *" value={newMake} onChange={(e) => setNewMake(e.target.value)} />
-            <TextField size="small" label="Modèle *" value={newModel} onChange={(e) => setNewModel(e.target.value)} />
+            <TextField size="small" label="Marque * (ex: Renault)" value={newMake} onChange={(e) => setNewMake(e.target.value)} />
+            <TextField size="small" label="Modèle * (ex: Clio 6)" value={newModel} onChange={(e) => setNewModel(e.target.value)} />
             <TextField size="small" label="Immatriculation (optionnel)" value={newReg} onChange={(e) => setNewReg(e.target.value)} />
             <Stack direction="row" spacing={1}>
               <Button size="small" onClick={() => setCreateOpen(false)}>Annuler</Button>
