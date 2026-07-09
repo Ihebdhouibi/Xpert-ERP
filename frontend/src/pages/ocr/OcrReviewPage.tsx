@@ -95,6 +95,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   repair_attachment: 'Annexe OR',
   invoice: 'Facture',
   supplier_invoice: 'Facture fournisseur',
+  service_invoice: 'Facture service',
   supplier_delivery_note: 'Bon de livraison',
   generic: 'Générique',
 }
@@ -119,6 +120,15 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'tva',
     'total_ttc',
     // 'lignes' intentionally omitted — the dedicated grid below replaces the raw blob.
+  ],
+  service_invoice: [
+    'numero_facture',
+    'date_facture',
+    'date_echeance',
+    'fournisseur',
+    'total_ht',
+    'tva',
+    'total_ttc',
   ],
   invoice: [
     'numero_facture',
@@ -743,7 +753,7 @@ export function OcrReviewPage() {
   useEffect(() => {
     if (blSeededRef.current) return
     const cat = extraction?.document_category
-    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice') return
+    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice' && cat !== 'service_invoice') return
     if (extraction?.status === 'pending' || extraction?.status === 'processing') return
     blSeededRef.current = true
     if (cat === 'supplier_delivery_note') {
@@ -752,8 +762,7 @@ export function OcrReviewPage() {
         reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
       )
     } else {
-      // supplier_invoice: document layouts vary too much for automatic reconstruction.
-      // Start with one empty row; the user crops each cell manually.
+      // supplier_invoice / service_invoice: start empty, user crops manually.
       setBlLines([emptyBlLine()])
     }
   }, [extraction, edited.lignes, rawLines, layout])
@@ -906,7 +915,7 @@ export function OcrReviewPage() {
       // For supplier invoices with OCR-captured part lines, serialize them into
       // confirmed_fields.lignes so the backend can persist them on the invoice.
       const fieldsToSend: Record<string, string> = { ...edited }
-      if (isSupplierInvoice && blLines.length > 0 && blLines.some((l) => l.designation || l.montant)) {
+      if ((isSupplierInvoice || isServiceInvoice) && blLines.length > 0 && blLines.some((l) => l.designation || l.montant)) {
         fieldsToSend.lignes = JSON.stringify(
           blLines.map((l) => ({
             description: l.designation || null,
@@ -995,8 +1004,9 @@ export function OcrReviewPage() {
   const isDeliveryNote = category === 'supplier_delivery_note'
   // supplier_invoice may also contain part lines (it can act as a BL itself).
   const isSupplierInvoice = category === 'supplier_invoice'
-  // Show the per-line capture grid for both BL and supplier invoice.
-  const showLineGrid = isDeliveryNote || isSupplierInvoice
+  const isServiceInvoice = category === 'service_invoice'
+  // Show the per-line capture grid for BL, supplier invoice and service invoice.
+  const showLineGrid = isDeliveryNote || isSupplierInvoice || isServiceInvoice
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
   const fieldsToShow = [
@@ -1300,7 +1310,7 @@ export function OcrReviewPage() {
                 sx={{ mb: 1 }}
               >
                 <Typography variant="subtitle1">
-                  {isDeliveryNote ? 'Lignes du bon de livraison' : 'Lignes de la facture fournisseur'}
+                  {isDeliveryNote ? 'Lignes du bon de livraison' : isServiceInvoice ? 'Lignes de services' : 'Lignes de la facture fournisseur'}
                 </Typography>
                 <Button size="small" startIcon={<AddIcon />} onClick={addBlLine}>
                   Ajouter une ligne
