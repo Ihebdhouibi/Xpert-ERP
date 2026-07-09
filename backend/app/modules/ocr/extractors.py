@@ -76,19 +76,26 @@ def extract_carte_grise(result: RawOcrResult) -> FieldMap:
             fields["vin"] = (m.group(1).upper(), line.confidence)
             break
 
-    # Date mise en circulation
-    for line in lines:
+    # Date mise en circulation (field B on French/Tunisian registration cards).
+    # OCR often splits the field code "B", the label "Date de 1ère immatriculation"
+    # and the value "05/01/1998" across separate lines. We enumerate with an index
+    # so we can look 1–2 lines ahead without re-scanning from the start (which was
+    # the old bug: re-scanning returned the label line, not the date).
+    for idx, line in enumerate(lines):
         if _KW_DATE_MEC.search(line.text):
+            # Try the same line first (e.g. "B  05/01/1998" all on one line).
             m = _RE_DATE.search(line.text)
             if m:
                 fields["date_mise_en_circulation"] = (m.group(1), line.confidence)
                 break
-            # value might be on the next line
-            result_next = _best_line_after_keyword(lines, _KW_DATE_MEC)
-            if result_next:
-                m2 = _RE_DATE.search(result_next[0])
-                if m2:
-                    fields["date_mise_en_circulation"] = (m2.group(1), result_next[1])
+            # Try the next 1–2 lines (label then value may be on separate lines).
+            for offset in range(1, 3):
+                if idx + offset < len(lines):
+                    nxt = lines[idx + offset]
+                    m2 = _RE_DATE.search(nxt.text)
+                    if m2:
+                        fields["date_mise_en_circulation"] = (m2.group(1), nxt.confidence)
+                        break
             break
 
     # Marque
