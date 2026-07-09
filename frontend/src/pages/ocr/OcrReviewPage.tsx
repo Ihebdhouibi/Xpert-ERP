@@ -47,6 +47,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
+import { documentsApi } from '../../lib/documentsApi'
 import { supplierDeliveryNoteApi } from '../../lib/supplierDeliveryNoteApi'
 import { BonLivraisonReceptionDialog } from '../../components/supplier-delivery-note/BonLivraisonReceptionDialog'
 
@@ -798,6 +799,31 @@ export function OcrReviewPage() {
       cancelled = true
     }
   }, [extraction, extractionId])
+
+  // For service_invoice: auto-fill fournisseur from the document's linked supplier
+  // (set when the user chose a supplier in the upload dialog).
+  const serviceSupplierResolvedRef = useRef(false)
+  useEffect(() => {
+    if (serviceSupplierResolvedRef.current) return
+    if (extraction?.document_category !== 'service_invoice') return
+    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    if (!extraction.document_public_id) return
+    serviceSupplierResolvedRef.current = true
+    let cancelled = false
+    documentsApi
+      .getOwnerSupplier(extraction.document_public_id)
+      .then((r) => {
+        if (cancelled) return
+        setEdited((prev) => {
+          if (prev.fournisseur) return prev  // already filled
+          return { ...prev, fournisseur: r.supplier_name }
+        })
+      })
+      .catch(() => {
+        // Not linked to a supplier — leave fournisseur for OCR or manual entry.
+      })
+    return () => { cancelled = true }
+  }, [extraction])
 
   // Boxes for a recognised line key
   const boxFor = (lineKey: string): number[][] => {

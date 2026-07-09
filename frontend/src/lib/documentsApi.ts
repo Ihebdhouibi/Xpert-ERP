@@ -95,4 +95,8 @@ export const documentsApi = {
   delete(id: string): Promise<void> {
     return apiClient.delete(`/documents/${id}`).then(() => undefined)
   },
+
+  getOwnerSupplier(documentPublicId: string): Promise<{ supplier_id: string; supplier_int_id: number; supplier_name: string }> {
+    return apiClient.get(`/documents/${documentPublicId}/owner-supplier`).then((r) => r.data)
+  },
 }
