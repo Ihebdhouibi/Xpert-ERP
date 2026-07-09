@@ -45,6 +45,7 @@ import {
   STATUS_LABELS,
 } from '../../lib/purchaseOrderApi'
 import { vehiclesApi, VehicleOut } from '../../lib/vehiclesApi'
+import { customerApi, CustomerSummary } from '../../lib/customerApi'
 import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 
 // Complete labels for DISPLAY — covers every enum value (including legacy ones
@@ -204,6 +205,9 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
   const [allVehicles, setAllVehicles] = useState<VehicleOut[]>([])
   const [takenIds, setTakenIds] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null)
+  const [customers, setCustomers] = useState<CustomerSummary[]>([])
+  const [custSearch, setCustSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   // inline create form state
   const [newMake, setNewMake] = useState('')
@@ -231,7 +235,20 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
     return () => { cancelled = true }
   }, [])
 
-  const available = allVehicles.filter((v) => !takenIds.has(v.id))
+  // Load customers for the client filter (debounced search).
+  useEffect(() => {
+    let cancelled = false
+    customerApi.list({ q: custSearch || undefined, page_size: 50, status: 'active' })
+      .then((r) => { if (!cancelled) setCustomers(r.items) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [custSearch])
+
+  const available = allVehicles.filter((v) => {
+    if (takenIds.has(v.id)) return false
+    if (selectedCustomer && v.customer_id !== selectedCustomer.int_id) return false
+    return true
+  })
 
   const getLabel = (v: VehicleOut) =>
     `${v.make} ${v.model}${v.registration ? ` — ${v.registration}` : ''}${v.year ? ` (${v.year})` : ''}`
@@ -258,11 +275,27 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
 
   return (
     <>
+      {/* Client filter — narrows the vehicle list to one client's fleet */}
       <Autocomplete
-        value={value}
-        onChange={(_, v) => onChange(v)}
-        options={available}
-        getOptionLabel={getLabel}
+        value={selectedCustomer}
+        onChange={(_, v) => { setSelectedCustomer(v); onChange(null) }}
+        inputValue={custSearch}
+        onInputChange={(_, v) => setCustSearch(v)}
+        options={customers}
+        getOptionLabel={(c) => c.company_name || c.full_name}
+        isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+        size="small"
+        clearOnEscape
+        noOptionsText="Aucun client trouvé"
+        renderInput={(params) => <TextField {...params} label="Filtrer par client (optionnel)" />}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.int_id}>
+            {option.company_name || option.full_name}
+          </Box>
+        )}
+      />
+      {/* Vehicle autocomplete filtered by client + no existing CG */}
+      <Autocomplete
         isOptionEqualToValue={(a, b) => a.id === b.id}
         loading={loading}
         size="small"
