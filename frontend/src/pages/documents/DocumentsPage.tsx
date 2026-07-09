@@ -238,9 +238,9 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
   // Load customers for the client filter (debounced search).
   useEffect(() => {
     let cancelled = false
-    customerApi.list({ q: custSearch || undefined, page_size: 50, status: 'active' })
-      .then((r) => { if (!cancelled) setCustomers(r.items) })
-      .catch(() => {})
+    customerApi.list({ q: custSearch || undefined, page_size: 50 })
+      .then((r) => { if (!cancelled) setCustomers(r?.items ?? []) })
+      .catch(() => { if (!cancelled) setCustomers([]) })
     return () => { cancelled = true }
   }, [custSearch])
 
@@ -281,8 +281,8 @@ function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPicke
         onChange={(_, v) => { setSelectedCustomer(v); onChange(null) }}
         inputValue={custSearch}
         onInputChange={(_, v) => setCustSearch(v)}
-        options={customers}
-        getOptionLabel={(c) => c.company_name || c.full_name}
+        options={customers ?? []}
+        getOptionLabel={(c) => (c ? (c.company_name || c.full_name) : '')}
         isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
         size="small"
         clearOnEscape
