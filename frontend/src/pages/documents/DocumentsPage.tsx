@@ -755,17 +755,35 @@ export function DocumentsPage() {
                 </TableRow>
               )}
               {docs.map((doc) => (
-                <TableRow key={doc.id} hover selected={selectedIds.has(doc.id)}>
+                <TableRow
+                  key={doc.id}
+                  hover
+                  selected={selectedIds.has(doc.id)}
+                  sx={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    // Don't navigate when clicking the checkbox or action icons.
+                    const target = e.target as HTMLElement
+                    if (target.closest('input[type="checkbox"]') || target.closest('button')) return
+                    handleLaunchOcr(doc)
+                  }}
+                >
                   <TableCell padding="checkbox">
                     <Checkbox
                       size="small"
                       checked={selectedIds.has(doc.id)}
                       onChange={() => toggleSelect(doc.id)}
+                      onClick={(e) => e.stopPropagation()}
                     />
                   </TableCell>
                   <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <Tooltip title={doc.filename}>
-                      <span>{doc.filename}</span>
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        sx={{ color: 'primary.main', fontWeight: 500 }}
+                      >
+                        {doc.filename}
+                      </Typography>
                     </Tooltip>
                   </TableCell>
                   <TableCell>
