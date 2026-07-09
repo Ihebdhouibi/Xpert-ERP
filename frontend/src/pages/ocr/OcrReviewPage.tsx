@@ -1395,14 +1395,17 @@ export function OcrReviewPage() {
 
           <Divider sx={{ my: 2 }} />
 
-          {isReviewed ? (
-            <Alert severity="success">
+          {isReviewed && (
+            <Alert severity="success" sx={{ mb: 1 }}>
               Extraction validée le{' '}
               {new Date(extraction.reviewed_at!).toLocaleString('fr-FR')}.
+              {' '}Vous pouvez modifier les champs et re-valider.
             </Alert>
-          ) : (
-            !isPending && (
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
+          )}
+
+          {!isPending && (
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              {!isReviewed && (
                 <Button
                   variant="outlined"
                   color="error"
@@ -1412,23 +1415,23 @@ export function OcrReviewPage() {
                 >
                   Rejeter
                 </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={
-                    saving ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <CheckCircleOutlineIcon />
-                    )
-                  }
-                  onClick={isDeliveryNote ? () => setBlDialogOpen(true) : handleIngest}
-                  disabled={saving}
-                >
-                  {isDeliveryNote ? 'Réceptionner' : ingestLabel}
-                </Button>
-              </Stack>
-            )
+              )}
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={
+                  saving ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <CheckCircleOutlineIcon />
+                  )
+                }
+                onClick={isDeliveryNote ? () => setBlDialogOpen(true) : handleIngest}
+                disabled={saving}
+              >
+                {isDeliveryNote ? 'Réceptionner' : isReviewed ? 'Re-valider' : ingestLabel}
+              </Button>
+            </Stack>
           )}
         </Paper>
       </Stack>
