@@ -776,8 +776,9 @@ export function OcrReviewPage() {
         if (cancelled) return
         setEdited((prev) => {
           const next = { ...prev }
+          // Only fill if the field is not already persisted from a previous validation.
           if (r.supplier_name && !prev.fournisseur) next.fournisseur = r.supplier_name
-          if (r.purchase_order_number) next.reference_commande = r.purchase_order_number
+          if (r.purchase_order_number && !prev.reference_commande) next.reference_commande = r.purchase_order_number
           return next
         })
       })
