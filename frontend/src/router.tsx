@@ -20,6 +20,7 @@ import { StockPage } from './pages/parts/StockPage'
 import { SupplierPage } from './pages/suppliers/SupplierPage'
 import { PurchaseOrderPage } from './pages/purchase-orders/PurchaseOrderPage'
 import { SupplierInvoicePage } from './pages/supplier-invoices/SupplierInvoicePage'
+import { ServicesExternesPage } from './pages/supplier-invoices/ServicesExternesPage'
 import { TemplatesPage } from './pages/notifications/TemplatesPage'
 import { InspectionTemplatesPage } from './pages/inspections/InspectionTemplatesPage'
 import { InspectionsListPage } from './pages/inspections/InspectionsListPage'
@@ -124,6 +125,7 @@ export const router = createBrowserRouter(
       { path: 'suppliers', element: <SupplierPage /> },
       { path: 'purchase-orders', element: <PurchaseOrderPage /> },
       { path: 'supplier-invoices', element: <SupplierInvoicePage /> },
+      { path: 'supplier-services', element: <ServicesExternesPage /> },
       { path: 'bon-retour', element: <BonRetourListPage /> },
       { path: 'bon-retour/new', element: <BonRetourCreatePage /> },
       { path: 'bon-retour/:publicId', element: <BonRetourDetailPage /> },
