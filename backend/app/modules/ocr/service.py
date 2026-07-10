@@ -519,6 +519,18 @@ async def ingest_extraction(
         )
         # get_db does not auto-commit; persist the new invoice explicitly.
         await db.commit()
+        # Store the created SI public_id in structured_fields so the OCR review
+        # page can load live SI lines on future revisits instead of the OCR snapshot.
+        linked_fields = {**extraction.structured_fields, "__linked_si_id__": str(si.public_id)}
+        from app.modules.ocr import repository as _ocr_repo
+        from app.modules.ocr.models import OcrStatus as _OcrStatus
+        await _ocr_repo.update_status(
+            db,
+            extraction_id=extraction.id,
+            status=_OcrStatus.completed,
+            structured_fields=linked_fields,
+        )
+        await db.commit()
         return IngestionResult(
             target="supplier_invoice",
             prefill=prefill,
@@ -606,6 +618,19 @@ async def ingest_extraction(
                         email=ocr_email,
                         phone=ocr_phone,
                     )
+
+        # Store the created SI public_id in structured_fields so the OCR review
+        # page can load live SI lines on future revisits instead of the OCR snapshot.
+        linked_fields = {**extraction.structured_fields, "__linked_si_id__": str(si.public_id)}
+        from app.modules.ocr import repository as _ocr_repo2
+        from app.modules.ocr.models import OcrStatus as _OcrStatus2
+        await _ocr_repo2.update_status(
+            db,
+            extraction_id=extraction.id,
+            status=_OcrStatus2.completed,
+            structured_fields=linked_fields,
+        )
+        await db.commit()
 
         return IngestionResult(
             target="supplier_invoice",   # reuses the supplier_invoice target → navigates to services page

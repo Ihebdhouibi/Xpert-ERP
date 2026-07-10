@@ -49,6 +49,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
 import { documentsApi } from '../../lib/documentsApi'
 import { supplierDeliveryNoteApi } from '../../lib/supplierDeliveryNoteApi'
+import { supplierInvoiceApi } from '../../lib/supplierInvoiceApi'
 import { BonLivraisonReceptionDialog } from '../../components/supplier-delivery-note/BonLivraisonReceptionDialog'
 
 // ---------------------------------------------------------------------------
@@ -766,10 +767,30 @@ export function OcrReviewPage() {
         reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
       )
     } else {
-      // supplier_invoice / service_invoice: seed from stored lignes if available
-      // (covers the re-visit case after validation), otherwise start with one empty row.
-      const seeded = seedBlLinesFromRaw(edited.lignes)
-      setBlLines(seeded)
+      // supplier_invoice / service_invoice: if a linked SI was created from this
+      // extraction, load its lines directly from the DB (live, not a snapshot).
+      const linkedSiId = edited['__linked_si_id__']
+      if (linkedSiId) {
+        supplierInvoiceApi.get(linkedSiId)
+          .then((si) => {
+            const liveLines: BlLine[] = si.lines.map((l) => ({
+              designation: l.description || '',
+              quantite: String(l.quantity ?? ''),
+              pu_brut: l.unit_price_ht != null ? String((l.unit_price_ht / 100).toFixed(2)) : '',
+              pu_net: '',
+              montant: l.line_total_ht != null ? String((l.line_total_ht / 100).toFixed(2)) : '',
+              code: '',
+            }))
+            setBlLines(liveLines.length ? liveLines : [emptyBlLine()])
+          })
+          .catch(() => {
+            // Fallback to OCR snapshot if SI fetch fails
+            setBlLines(seedBlLinesFromRaw(edited.lignes))
+          })
+      } else {
+        // No linked SI yet (first visit before validation) — seed from OCR blob or empty row.
+        setBlLines(seedBlLinesFromRaw(edited.lignes))
+      }
     }
   }, [extraction, edited.lignes, rawLines, layout])
 
