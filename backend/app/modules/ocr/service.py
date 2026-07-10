@@ -578,6 +578,35 @@ async def ingest_extraction(
             si_public_id=str(si.public_id),
             garage_id=document.garage_id,
         )
+
+        # Enrich the linked supplier with email / phone extracted from the invoice
+        # if those fields are currently blank (safe — only fills empty columns).
+        if supplier_id:
+            from app.modules.supplier.models import Supplier as _SupEnrich
+            from sqlalchemy import select as _sel_enrich
+            enrich_res = await db.execute(
+                _sel_enrich(_SupEnrich).where(_SupEnrich.id == supplier_id)
+            )
+            sup_enrich = enrich_res.scalar_one_or_none()
+            if sup_enrich:
+                changed = False
+                ocr_email = merged.get("email", (None,))[0]
+                ocr_phone = merged.get("telephone", (None,))[0]
+                if ocr_email and not sup_enrich.email:
+                    sup_enrich.email = ocr_email
+                    changed = True
+                if ocr_phone and not sup_enrich.phone:
+                    sup_enrich.phone = ocr_phone
+                    changed = True
+                if changed:
+                    await db.commit()
+                    logger.info(
+                        "supplier_contact_enriched_from_service_invoice",
+                        supplier_id=supplier_id,
+                        email=ocr_email,
+                        phone=ocr_phone,
+                    )
+
         return IngestionResult(
             target="supplier_invoice",   # reuses the supplier_invoice target → navigates to services page
             prefill=prefill,

@@ -483,6 +483,20 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
     if items:
         fields["lignes"] = items
 
+    # Supplier contact info — first email / phone found in the upper half of the
+    # document (supplier header area, before the "to" block).
+    for line in lines:
+        if "email" not in fields:
+            m = _RE_EMAIL.search(line.text)
+            if m:
+                fields["email"] = (m.group(0), line.confidence)
+        if "telephone" not in fields:
+            m = _RE_PHONE.search(line.text)
+            if m:
+                fields["telephone"] = (m.group(0).strip(), line.confidence)
+        if "email" in fields and "telephone" in fields:
+            break
+
     return fields
 
 
@@ -525,6 +539,8 @@ _KW_REF_COMMANDE = re.compile(
 )
 _KW_IMMAT_BL = re.compile(r"immatriculation|immat", re.IGNORECASE)
 _RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# French/international phone — 10-digit local (0X XX XX XX XX) or +33 form, allowing spaces/dots/hyphens
+_RE_PHONE = re.compile(r"(?:\+33|0033|0)[1-9](?:[\s.\-]?\d{2}){4}")
 # Tolerant date: no word boundaries (OCR often glues the date to text/time, e.g.
 # "le26/06/202616:47"); prefer a 4-digit year, else a 2-digit year.
 _RE_DATE_LOOSE = re.compile(

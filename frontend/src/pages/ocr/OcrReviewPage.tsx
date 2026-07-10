@@ -78,6 +78,7 @@ const FIELD_LABELS: Record<string, string> = {
   date_bl: 'Date de livraison',
   reference_commande: 'Référence commande',
   email: 'Email fournisseur',
+  telephone: 'Téléphone fournisseur',
   lignes: 'Lignes détectées (brut)',
 }
 
@@ -127,6 +128,8 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'date_facture',
     'date_echeance',
     'fournisseur',
+    'email',
+    'telephone',
     'total_ht',
     'tva',
     'total_ttc',
@@ -763,8 +766,10 @@ export function OcrReviewPage() {
         reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
       )
     } else {
-      // supplier_invoice / service_invoice: start empty, user crops manually.
-      setBlLines([emptyBlLine()])
+      // supplier_invoice / service_invoice: seed from stored lignes if available
+      // (covers the re-visit case after validation), otherwise start with one empty row.
+      const seeded = seedBlLinesFromRaw(edited.lignes)
+      setBlLines(seeded)
     }
   }, [extraction, edited.lignes, rawLines, layout])
 
@@ -1035,9 +1040,12 @@ export function OcrReviewPage() {
   const showLineGrid = isDeliveryNote || isSupplierInvoice || isServiceInvoice
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
+  // 'lignes' is handled by the dedicated line-item grid for these categories;
+  // suppress it from the free-form field list to avoid the raw JSON blob appearing.
+  const gridCategory = isDeliveryNote || isSupplierInvoice || isServiceInvoice
   const fieldsToShow = [
     ...schemaFields,
-    ...semanticKeys.filter((k) => !schemaFields.includes(k)),
+    ...semanticKeys.filter((k) => !schemaFields.includes(k) && !(gridCategory && k === 'lignes')),
   ]
   const canHighlight = Boolean(layout && layout.boxes)
 

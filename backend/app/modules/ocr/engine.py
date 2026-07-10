@@ -354,7 +354,11 @@ class PaddleOcrEngine(OcrEngine):
         buf = _io.BytesIO()
         Image.fromarray(crop).save(buf, format="PNG")
         lines = self._ocr_image(buf.getvalue())[0]
-        return " ".join(ln.text for ln in lines).strip()
+        text = " ".join(ln.text for ln in lines).strip()
+        # Strip leading/trailing currency symbols and whitespace that OCR sometimes
+        # picks up from the cell border or column header (€, $, £, …).
+        text = text.strip("€$£¥₣₩ \t")
+        return text
 
     def _run_sync(self, file_bytes: bytes) -> RawOcrResult:
         # PDFs are rasterised page-by-page; images are OCR'd directly.

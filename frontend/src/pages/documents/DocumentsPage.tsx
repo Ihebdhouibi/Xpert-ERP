@@ -236,7 +236,7 @@ function SupplierPicker({ value, onChange }: SupplierPickerProps) {
     if (v === CREATE_SENTINEL) {
       setCreating(true)
       try {
-        const newSupplier = await supplierApi.create({ name: trimmed })
+        const newSupplier = await supplierApi.create({ name: trimmed, payment_terms_days: 30 })
         setOptions((prev) => [newSupplier, ...prev])
         onChange(newSupplier)
         setInputValue(newSupplier.name)
