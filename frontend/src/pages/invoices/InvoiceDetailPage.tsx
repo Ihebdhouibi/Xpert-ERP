@@ -22,6 +22,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -196,6 +197,22 @@ export function InvoiceDetailPage() {
     },
     onError: () => toastError("Impossible d'assigner le client."),
   })
+
+  // Due date editing for drafts (e.g. created from a devis, BL or repair order with no due date set)
+  const [dueAtInput, setDueAtInput] = useState<string | null>(null)
+  const updateDueAtMutation = useMutation({
+    mutationFn: (value: string) =>
+      invoiceApi.update(publicId!, invoice!.version, {
+        due_at: value ? `${value}T00:00:00` : null,
+      }),
+    onSuccess: updated => {
+      success("Date d'échéance mise à jour")
+      queryClient.setQueryData(['invoice', publicId], updated)
+      setDueAtInput(null)
+    },
+    onError: () => toastError("Impossible de mettre à jour la date d'échéance."),
+  })
+  const dueAtValue = dueAtInput ?? (invoice?.due_at ? invoice.due_at.slice(0, 10) : '')
 
   const cancelMutation = useMutation({
     mutationFn: () => invoiceApi.cancel(publicId!, invoice!.version),
@@ -397,7 +414,23 @@ export function InvoiceDetailPage() {
                 } />
                 <Divider />
                 <InfoRow label="Échéance" value={
-                  invoice.due_at ? (
+                  invoice.status === 'draft' ? (
+                    <TextField
+                      size="small"
+                      type="date"
+                      value={dueAtValue}
+                      onChange={e => setDueAtInput(e.target.value)}
+                      onBlur={() => {
+                        if (dueAtInput !== null && dueAtInput !== (invoice.due_at ? invoice.due_at.slice(0, 10) : '')) {
+                          updateDueAtMutation.mutate(dueAtInput)
+                        }
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                      error={needsDueAt}
+                      disabled={updateDueAtMutation.isPending}
+                      sx={{ width: 170 }}
+                    />
+                  ) : invoice.due_at ? (
                     <Stack direction="row" alignItems="center" spacing={0.5}>
                       {isOverdue && <WarningAmberRoundedIcon sx={{ fontSize: 14, color: 'error.main' }} />}
                       <Typography

@@ -234,6 +234,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   const [dueAt, setDueAt] = useState('')
   const [notes, setNotes] = useState('')
   const [customerError, setCustomerError] = useState(false)
+  const [dueAtError, setDueAtError] = useState(false)
   const [selectedBls, setSelectedBls] = useState<DeliveryNoteOut[]>([])
 
   const { data: blsData, isLoading: blsLoading } = useQuery({
@@ -277,8 +278,11 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   }
 
   function handleSubmit() {
-    if (!customerId) { setCustomerError(true); return }
-    setCustomerError(false)
+    const missingCustomer = !customerId
+    const missingDueAt = !dueAt
+    setCustomerError(missingCustomer)
+    setDueAtError(missingDueAt)
+    if (missingCustomer || missingDueAt) return
     mutation.mutate()
   }
 
@@ -288,6 +292,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
     setNotes('')
     setSelectedBls([])
     setCustomerError(false)
+    setDueAtError(false)
     onClose()
   }
 
@@ -329,8 +334,14 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
             label="Date d'échéance"
             type="date"
             value={dueAt}
-            onChange={e => setDueAt(e.target.value)}
+            onChange={e => {
+              setDueAt(e.target.value)
+              if (e.target.value) setDueAtError(false)
+            }}
             InputLabelProps={{ shrink: true }}
+            required
+            error={dueAtError}
+            helperText={dueAtError ? "La date d'échéance est requise" : undefined}
             fullWidth
           />
           <TextField
