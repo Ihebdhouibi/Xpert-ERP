@@ -204,10 +204,15 @@ interface SupplierPickerProps {
   onChange: (s: Supplier | null) => void
 }
 
+// Sentinel object used as the "create new" option in the autocomplete list.
+const CREATE_SENTINEL = '__CREATE__'
+type SupplierOption = Supplier | typeof CREATE_SENTINEL
+
 function SupplierPicker({ value, onChange }: SupplierPickerProps) {
   const [options, setOptions] = useState<Supplier[]>([])
   const [inputValue, setInputValue] = useState('')
   const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -219,19 +224,44 @@ function SupplierPicker({ value, onChange }: SupplierPickerProps) {
     return () => { cancelled = true }
   }, [inputValue])
 
-  const getLabel = (s: Supplier) => s.name
+  // Show "create" sentinel when there is typed text and no exact match.
+  const trimmed = inputValue.trim()
+  const hasExactMatch = options.some((o) => o.name.toLowerCase() === trimmed.toLowerCase())
+  const displayOptions: SupplierOption[] = [
+    ...options,
+    ...(trimmed && !hasExactMatch ? [CREATE_SENTINEL as typeof CREATE_SENTINEL] : []),
+  ]
+
+  const handleChange = async (_: React.SyntheticEvent, v: SupplierOption | null) => {
+    if (v === CREATE_SENTINEL) {
+      setCreating(true)
+      try {
+        const newSupplier = await supplierApi.create({ name: trimmed })
+        setOptions((prev) => [newSupplier, ...prev])
+        onChange(newSupplier)
+        setInputValue(newSupplier.name)
+      } catch {
+        // leave picker unchanged — user can retry or type manually in OCR
+      } finally {
+        setCreating(false)
+      }
+    } else {
+      onChange(v as Supplier | null)
+    }
+  }
 
   return (
     <Autocomplete
       value={value}
-      onChange={(_, v) => onChange(v)}
+      onChange={handleChange}
       inputValue={inputValue}
       onInputChange={(_, v) => setInputValue(v)}
-      options={options ?? []}
-      getOptionLabel={getLabel}
-      isOptionEqualToValue={(a, b) => a.id === b.id}
-      loading={loading}
+      options={displayOptions}
+      getOptionLabel={(o) => (o === CREATE_SENTINEL ? trimmed : (o as Supplier).name)}
+      isOptionEqualToValue={(a, b) => a !== CREATE_SENTINEL && b !== CREATE_SENTINEL && (a as Supplier).id === (b as Supplier).id}
+      loading={loading || creating}
       size="small"
+      filterOptions={(x) => x}
       noOptionsText="Aucun fournisseur trouvé"
       renderInput={(params) => (
         <TextField
@@ -241,16 +271,22 @@ function SupplierPicker({ value, onChange }: SupplierPickerProps) {
             ...params.InputProps,
             endAdornment: (
               <>
-                {loading ? <CircularProgress size={16} /> : null}
+                {(loading || creating) ? <CircularProgress size={16} /> : null}
                 {params.InputProps.endAdornment}
               </>
             ),
           }}
         />
       )}
-      renderOption={(props, option) => (
-        <Box component="li" {...props} key={option.id}>{option.name}</Box>
-      )}
+      renderOption={(props, option) =>
+        option === CREATE_SENTINEL ? (
+          <Box component="li" {...props} key="__create__" sx={{ color: 'primary.main', fontStyle: 'italic' }}>
+            + Créer le fournisseur &laquo;{trimmed}&raquo;
+          </Box>
+        ) : (
+          <Box component="li" {...props} key={(option as Supplier).id}>{(option as Supplier).name}</Box>
+        )
+      }
     />
   )
 }
