@@ -2,7 +2,6 @@ import type { SvgIconComponent } from '@mui/icons-material'
 import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import ViewKanbanRoundedIcon from '@mui/icons-material/ViewKanbanRounded'
-import FindInPageRoundedIcon from '@mui/icons-material/FindInPageRounded'
 import PeopleRoundedIcon from '@mui/icons-material/PeopleRounded'
 import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
@@ -24,7 +23,6 @@ import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded'
 import CreditScoreRoundedIcon from '@mui/icons-material/CreditScoreRounded'
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded'
-import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded'
 import FolderRoundedIcon from '@mui/icons-material/FolderRounded'
 
 export interface NavItem {
@@ -63,12 +61,6 @@ export const navSections: NavSection[] = [
         path: '/workshop',
         icon: ViewKanbanRoundedIcon,
         permission: 'repair_order.transition',
-      },
-      {
-        label: 'Inspections',
-        path: '/inspections',
-        icon: FindInPageRoundedIcon,
-        permission: 'inspection.read',
       },
       {
         label: 'Documents',
@@ -240,12 +232,6 @@ export const navSections: NavSection[] = [
         path: '/notification-templates',
         icon: NotificationsRoundedIcon,
         permission: 'notification.template.manage',
-      },
-      {
-        label: "Modèles d'inspection",
-        path: '/inspection-templates',
-        icon: ChecklistRoundedIcon,
-        permission: 'inspection.template.manage',
       },
       {
         label: "Journal d'audit",
