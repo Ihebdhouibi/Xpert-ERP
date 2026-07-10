@@ -235,6 +235,11 @@ class Settings(BaseSettings):
     cfg_reminder_delay_2_days: int = 14
     cfg_reminder_delay_3_days: int = 30
 
+    # Pre-due reminders for internal/admin users (in-app bell only, days BEFORE due_at)
+    cfg_due_soon_reminder_1_days: int = 30
+    cfg_due_soon_reminder_2_days: int = 14
+    cfg_due_soon_reminder_3_days: int = 7
+
     # SMS provider (provider-agnostic HTTP)
     cfg_sms_provider: str = ""   # arbitrary label, e.g. "vonage"
     cfg_sms_api_url: str = ""    # base URL for the provider's send endpoint

@@ -179,6 +179,7 @@ export function InvoiceDetailPage() {
   // Customer assignment for OCR-captured drafts that have no customer yet
   const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
   const needsCustomer = invoice?.status === 'draft' && invoice?.customer_id == null
+  const needsDueAt = invoice?.status === 'draft' && !invoice?.due_at
   const { data: customersData } = useQuery({
     queryKey: ['customers', 'for-invoice-assign'],
     queryFn: () => customerApi.list({ page_size: 100 }),
@@ -681,14 +682,22 @@ export function InvoiceDetailPage() {
                 {/* Actions by status */}
                 <Stack spacing={1.25}>
                   {invoice.status === 'draft' && (
-                    <Tooltip title={needsCustomer ? 'Assignez un client avant d\'émettre' : ''}>
+                    <Tooltip
+                      title={
+                        needsCustomer
+                          ? 'Assignez un client avant d\'émettre'
+                          : needsDueAt
+                          ? 'Renseignez une date d\'échéance avant d\'émettre'
+                          : ''
+                      }
+                    >
                       <span>
                         <Button
                           variant="contained"
                           fullWidth
                           startIcon={<PublishRoundedIcon />}
                           onClick={() => issueMutation.mutate()}
-                          disabled={anyMutating || needsCustomer}
+                          disabled={anyMutating || needsCustomer || needsDueAt}
                         >
                           Émettre la facture
                         </Button>

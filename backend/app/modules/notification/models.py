@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -97,4 +97,20 @@ class NotificationLog(Base):
         Index("ix_notif_garage_id", "garage_id"),
         Index("ix_notif_garage_status", "garage_id", "status"),
         Index("ix_notif_recipient_id", "recipient_id"),
+    )
+
+
+class InvoiceDueReminderLog(Base):
+    """Dedup log: which (invoice, tier_days) pre-due admin reminders have already fired."""
+
+    __tablename__ = "invoice_due_reminder_log"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    invoice_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("invoice.id", ondelete="CASCADE"), nullable=False)
+    tier_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("invoice_id", "tier_days", name="uq_invoice_due_reminder_log_invoice_tier"),
+        Index("ix_invoice_due_reminder_log_invoice_id", "invoice_id"),
     )

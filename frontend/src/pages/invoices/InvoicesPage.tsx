@@ -198,14 +198,20 @@ const buildColumns = (
     width: 120,
     render: row => {
       if (!row.due_at) return <Typography variant="caption" color="text.disabled">—</Typography>
-      const overdue = new Date(row.due_at) < new Date() && row.status !== 'paid' && row.status !== 'cancelled'
+      const isFinal = row.status === 'paid' || row.status === 'cancelled'
+      const dueDate = new Date(row.due_at)
+      const now = new Date()
+      const overdue = !isFinal && dueDate < now
+      const daysUntilDue = (dueDate.getTime() - now.getTime()) / 86_400_000
+      const dueSoon = !isFinal && !overdue && daysUntilDue <= 14
+      const color = overdue ? 'error.main' : dueSoon ? 'warning.main' : 'text.secondary'
       return (
         <Typography
           variant="body2"
-          color={overdue ? 'error.main' : 'text.secondary'}
-          fontWeight={overdue ? 700 : 400}
+          color={color}
+          fontWeight={overdue || dueSoon ? 700 : 400}
         >
-          {new Date(row.due_at).toLocaleDateString('fr-FR')}
+          {dueDate.toLocaleDateString('fr-FR')}
         </Typography>
       )
     },
@@ -320,7 +326,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
             />
           )}
           <TextField
-            label="Date d'échéance (optionnel)"
+            label="Date d'échéance"
             type="date"
             value={dueAt}
             onChange={e => setDueAt(e.target.value)}

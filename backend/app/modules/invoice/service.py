@@ -517,6 +517,8 @@ async def issue_invoice(
         raise InvoiceStateError(f"Cannot issue an invoice in status '{inv.status.value}'.")
     if inv.customer_id is None:
         raise InvoiceStateError("Un client est requis pour émettre la facture.")
+    if inv.due_at is None:
+        raise InvoiceStateError("Une date d'échéance est requise pour émettre la facture.")
     if inv.version != expected_version:
         raise InvoiceVersionError(f"Version mismatch: expected {expected_version}, got {inv.version}")
 
