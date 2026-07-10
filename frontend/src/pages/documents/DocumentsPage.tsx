@@ -236,7 +236,7 @@ function SupplierPicker({ value, onChange }: SupplierPickerProps) {
       renderInput={(params) => (
         <TextField
           {...params}
-          label="Fournisseur *"
+          label="Fournisseur (optionnel)"
           InputProps={{
             ...params.InputProps,
             endAdornment: (
@@ -452,7 +452,7 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
       const effectiveOwnerType: OwnerEntityType = isRegistrationCard
         ? 'vehicle'
         : isServiceInvoice
-        ? 'supplier'
+        ? (selectedSupplier ? 'supplier' : 'generic')
         : ownerType
       const effectiveOwnerId = isRegistrationCard
         ? (selectedVehicle ? selectedVehicle.id : undefined)
@@ -588,7 +588,7 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
 
           <Button
             variant="contained"
-            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle) || (isServiceInvoice && !selectedSupplier)}
+            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle)}
             onClick={handleUpload}
           >
             {loading ? <CircularProgress size={20} /> : 'Télécharger'}
