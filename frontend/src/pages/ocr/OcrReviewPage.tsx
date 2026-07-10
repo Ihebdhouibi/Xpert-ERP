@@ -168,6 +168,19 @@ const confPct = (v: number) => `${Math.round(v * 100)}%`
 // Normalise text for fuzzy matching of a field value to a recognised line
 const norm = (s: string) => (s || '').toLowerCase().replace(/[\s.,€%]/g, '')
 
+/** Field-specific cleanup applied to raw crop-OCR text before storing it. */
+function cleanCropText(fieldKey: string, raw: string): string {
+  const key = fieldKey.toLowerCase()
+  if (key.includes('telephone') || key.includes('phone') || key.includes('tel')) {
+    // Strip common label prefixes: "Tel:", "Tél.", "Tel ", "Phone:", etc.
+    let t = raw.replace(/^(?:t[ée]l(?:[ée]phone)?|phone|mob(?:ile)?)[.\s:]*\s*/i, '')
+    // Keep only valid phone characters: digits, +, spaces, hyphens, dots, parentheses.
+    t = t.replace(/[^\d+\s\-.()/]/g, '').trim()
+    return t
+  }
+  return raw
+}
+
 interface Layout {
   width: number
   height: number
@@ -642,7 +655,11 @@ export function OcrReviewPage() {
 
         const semantic: Record<string, string> = {}
         for (const [k, v] of Object.entries(data.structured_fields ?? {})) {
-          if (!isRawKey(k) && !isReservedKey(k)) semantic[k] = v as string
+          if (!isRawKey(k) && !isReservedKey(k)) {
+            // Apply the same field-specific cleanup used for manual crops so that
+            // OCR-auto-detected values are also normalised (e.g. "Tel0491503437" → "0491503437").
+            semantic[k] = cleanCropText(k, v as string)
+          }
         }
         setEdited(semantic)
       } catch {
@@ -754,7 +771,11 @@ export function OcrReviewPage() {
 
   // Pre-seed the per-line capture grid once, after extraction is loaded.
   // For supplier_delivery_note: reconstruct rows from OCR cell boxes.
-  // For supplier_invoice: seed from the `lignes` JSON blob (OCR line extractor).
+  // For supplier_invoice / service_invoice: load live lines from the linked SI
+  // (stored as __linked_si_id__ in structured_fields) or fall back to the OCR
+  // lignes blob. IMPORTANT: read from `fields` (synchronous useMemo from
+  // extraction.structured_fields), NOT from `edited` (async-initialised state),
+  // to avoid a race where the grid seeds before edited is populated.
   useEffect(() => {
     if (blSeededRef.current) return
     const cat = extraction?.document_category
@@ -764,12 +785,12 @@ export function OcrReviewPage() {
     if (cat === 'supplier_delivery_note') {
       const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
       setBlLines(
-        reconstructed.length ? reconstructed : seedBlLinesFromRaw(edited.lignes),
+        reconstructed.length ? reconstructed : seedBlLinesFromRaw(fields.lignes as string | undefined),
       )
     } else {
       // supplier_invoice / service_invoice: if a linked SI was created from this
       // extraction, load its lines directly from the DB (live, not a snapshot).
-      const linkedSiId = edited['__linked_si_id__']
+      const linkedSiId = fields['__linked_si_id__'] as string | undefined
       if (linkedSiId) {
         supplierInvoiceApi.get(linkedSiId)
           .then((si) => {
@@ -784,15 +805,15 @@ export function OcrReviewPage() {
             setBlLines(liveLines.length ? liveLines : [emptyBlLine()])
           })
           .catch(() => {
-            // Fallback to OCR snapshot if SI fetch fails
-            setBlLines(seedBlLinesFromRaw(edited.lignes))
+            // Fallback to OCR snapshot if SI fetch fails.
+            setBlLines(seedBlLinesFromRaw(fields.lignes as string | undefined))
           })
       } else {
         // No linked SI yet (first visit before validation) — seed from OCR blob or empty row.
-        setBlLines(seedBlLinesFromRaw(edited.lignes))
+        setBlLines(seedBlLinesFromRaw(fields.lignes as string | undefined))
       }
     }
-  }, [extraction, edited.lignes, rawLines, layout])
+  }, [extraction, fields, rawLines, layout])
 
   // Supplier and order reference are authoritative from the linked PO (not OCR).
   // Fill both the Fournisseur and Référence commande fields from the PO once the
@@ -916,15 +937,17 @@ export function OcrReviewPage() {
     try {
       const { text } = await ocrApi.ocrRegion(extractionId!, box, pageIndex)
       if (text) {
+        // Field-specific cleanup of cropped text.
+        const cleanedText = cleanCropText(target, text)
         if (target.startsWith(BL_CROP_PREFIX)) {
           // Convention: `bl-line:${i}:${field}` — write into the capture grid.
           const [, idxStr, field] = target.split(':')
           const i = Number(idxStr)
           if (!Number.isNaN(i) && field) {
-            updateBlLine(i, field as BlLineField, text)
+            updateBlLine(i, field as BlLineField, cleanedText)
           }
         } else {
-          setEdited((prev) => ({ ...prev, [target]: text }))
+          setEdited((prev) => ({ ...prev, [target]: cleanedText }))
         }
         setHighlight([[box.x1, box.y1, box.x2, box.y2]])
       } else {

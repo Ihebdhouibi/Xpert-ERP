@@ -493,7 +493,11 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
         if "telephone" not in fields:
             m = _RE_PHONE.search(line.text)
             if m:
-                fields["telephone"] = (m.group(0).strip(), line.confidence)
+                # Strip label prefix that sometimes merges into the matched text
+                # (e.g. "Tel0491503437" from an OCR line "Tel: 0491503437").
+                phone_raw = m.group(0).strip()
+                phone_clean = re.sub(r"^(?:t[ée]l(?:[ée]phone)?|phone|mob)[.\s:]*", "", phone_raw, flags=re.IGNORECASE).strip()
+                fields["telephone"] = (phone_clean, line.confidence)
         if "email" in fields and "telephone" in fields:
             break
 
