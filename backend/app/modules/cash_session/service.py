@@ -16,6 +16,7 @@ from app.modules.cash_session.schemas import (
     CashSessionListResponse,
     CashSessionOut,
     PaymentMethodTally,
+    SessionPaymentOut,
     ZReportData,
 )
 from app.modules.payment.models import Payment, PaymentMethod
@@ -224,6 +225,64 @@ async def list_sessions(
         page=page,
         page_size=page_size,
     )
+
+
+async def list_session_payments(
+    db: AsyncSession, session_id: int, garage_id: int
+) -> list[SessionPaymentOut]:
+    """Return all payments for a session enriched with invoice number and customer name."""
+    from sqlalchemy.orm import aliased  # noqa: F401
+    from app.modules.invoice.models import Invoice
+    from app.modules.customer.models import Customer
+    from app.modules.auth.models import AppUser
+
+    session = await repo.get_by_id(db, session_id, garage_id)
+    if not session:
+        raise SessionNotFoundError(session_id)
+
+    stmt = (
+        select(
+            Payment.id,
+            Payment.paid_at,
+            Payment.amount_minor,
+            Payment.payment_method,
+            Payment.reference,
+            Payment.notes,
+            Payment.invoice_id,
+            Payment.created_by,
+            Invoice.doc_number.label("invoice_number"),
+            Customer.name.label("customer_name"),
+        )
+        .join(Invoice, Invoice.id == Payment.invoice_id, isouter=True)
+        .join(Customer, Customer.id == Invoice.customer_id, isouter=True)
+        .where(Payment.cash_session_id == session_id)
+        .order_by(Payment.paid_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    creator_ids = {r.created_by for r in rows if r.created_by}
+    creator_names: dict[int, str] = {}
+    if creator_ids:
+        users = (await db.execute(
+            select(AppUser.id, AppUser.display_name).where(AppUser.id.in_(creator_ids))
+        )).all()
+        creator_names = {u.id: u.display_name for u in users}
+
+    return [
+        SessionPaymentOut(
+            id=r.id,
+            paid_at=r.paid_at,
+            amount_minor=r.amount_minor,
+            payment_method=r.payment_method,
+            reference=r.reference,
+            notes=r.notes,
+            invoice_id=r.invoice_id,
+            invoice_number=r.invoice_number,
+            customer_name=r.customer_name,
+            created_by_name=creator_names.get(r.created_by) if r.created_by else None,
+        )
+        for r in rows
+    ]
 
 
 async def get_z_report_data(

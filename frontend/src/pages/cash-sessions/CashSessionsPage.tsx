@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -131,6 +132,7 @@ function CurrentSessionBanner({
 
 export function CashSessionsPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { success, error } = useToast()
   const [page, setPage] = useState(0)
   const [openOpen, setOpenOpen] = useState(false)
@@ -277,6 +279,7 @@ export function CashSessionsPage() {
         page={page}
         pageSize={20}
         onPageChange={setPage}
+        onRowClick={r => navigate(`/cash-sessions/${r.id}`)}
         emptyTitle="Aucune session"
         emptyDescription="Ouvrez votre première session de caisse pour commencer."
       />
