@@ -26,6 +26,7 @@ from app.modules.purchase_order.service import (
     create_po_from_alert,
     receive_po,
     send_po,
+    send_po_supplier_email,
     update_invoiced_qty,
     update_po,
 )
@@ -321,6 +322,10 @@ async def send_purchase_order(
         po = await send_po(db, user.garage_id, public_id, body.version)
         await db.commit()
         await db.refresh(po, ["lines"])
+        try:
+            await send_po_supplier_email(db, po, user.garage_id)
+        except Exception:
+            logger.exception("po_supplier_email_failed", po_id=po.id)
         summary = POSummary.model_validate(po)
         await _enrich_part_names(db, summary, po)
         return summary

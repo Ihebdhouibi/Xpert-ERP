@@ -37,6 +37,7 @@ import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded'
+import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -214,6 +215,24 @@ export function InvoiceDetailPage() {
   })
   const dueAtValue = dueAtInput ?? (invoice?.due_at ? invoice.due_at.slice(0, 10) : '')
 
+  const sendEmailClientMutation = useMutation({
+    mutationFn: () => invoiceApi.sendEmail(publicId!, 'client'),
+    onSuccess: () => success('Facture envoyée au client par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email au client.")
+    },
+  })
+
+  const sendEmailAdminMutation = useMutation({
+    mutationFn: () => invoiceApi.sendEmail(publicId!, 'admin'),
+    onSuccess: () => success('Facture envoyée à l\'admin par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email à l'admin.")
+    },
+  })
+
   const cancelMutation = useMutation({
     mutationFn: () => invoiceApi.cancel(publicId!, invoice!.version),
     onSuccess: () => {
@@ -290,7 +309,11 @@ export function InvoiceDetailPage() {
     new Date(invoice.due_at) < new Date() &&
     invoice.status !== 'paid' &&
     invoice.status !== 'cancelled'
-  const anyMutating = issueMutation.isPending || cancelMutation.isPending
+  const anyMutating =
+    issueMutation.isPending ||
+    cancelMutation.isPending ||
+    sendEmailClientMutation.isPending ||
+    sendEmailAdminMutation.isPending
 
   return (
     <Box>
@@ -762,6 +785,31 @@ export function InvoiceDetailPage() {
                     >
                       Créer un avoir
                     </Button>
+                  )}
+
+                  {(invoice.status === 'issued' || invoice.status === 'partial' || invoice.status === 'paid') && (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        size="small"
+                        startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailClientMutation.mutate()}
+                        disabled={anyMutating}
+                      >
+                        {sendEmailClientMutation.isPending ? 'Envoi…' : 'Envoyer au client'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        size="small"
+                        startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailAdminMutation.mutate()}
+                        disabled={anyMutating}
+                      >
+                        {sendEmailAdminMutation.isPending ? 'Envoi…' : 'Envoyer à l\'admin'}
+                      </Button>
+                    </Stack>
                   )}
 
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (

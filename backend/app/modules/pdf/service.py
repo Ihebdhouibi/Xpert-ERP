@@ -8,6 +8,7 @@ event-loop is not blocked.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +77,10 @@ def _fmt_money(minor: int | None, symbol: str = "€") -> str:
 
 def _render_pdf_sync(html_string: str, base_url: str) -> bytes:
     """Blocking WeasyPrint call — must be run in a thread executor."""
-    from weasyprint import HTML  # local import so test mocks work cleanly
+    gtk3_dll_dir = get_settings().cfg_gtk3_dll_dir
+    if gtk3_dll_dir and os.name == "nt":
+        os.add_dll_directory(gtk3_dll_dir)
+    from weasyprint import HTML  # local import so test mocks work cleanly, and after DLL dir is registered
 
     return HTML(string=html_string, base_url=base_url).write_pdf()
 

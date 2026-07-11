@@ -885,3 +885,113 @@ async def create_invoice_from_delivery_notes(
     fresh = await repo.get_by_id(db, invoice_id, garage_id)
     logger.info("invoice_from_delivery_notes", invoice_id=invoice_id, bl_count=len(dns), garage_id=garage_id)
     return InvoiceOut.model_validate(fresh)
+
+
+# ---------------------------------------------------------------------------
+# Email sending
+# ---------------------------------------------------------------------------
+
+async def _build_invoice_email_context(inv: Invoice, customer) -> dict:
+    from app.core.config import get_settings
+    settings = get_settings()
+    return {
+        "customer_name": customer.full_name if customer else "",
+        "invoice_number": inv.doc_number or str(inv.id),
+        "amount_due": f"{inv.outstanding_minor / 100:.2f}",
+        "total": f"{inv.total_minor / 100:.2f}",
+        "due_date": inv.due_at.strftime("%Y-%m-%d") if inv.due_at else "",
+        "garage_name": settings.pdf_garage_name,
+        "garage_phone": settings.pdf_garage_phone,
+    }
+
+
+async def send_invoice_email(
+    db: AsyncSession,
+    invoice_id: int,
+    garage_id: int,
+    *,
+    recipient: str,
+) -> None:
+    """Email the invoice PDF to the client (customer.email) or to the configured admin address(es)."""
+    from app.modules.notification.adapter import EmailAttachment
+    from app.modules.notification.service import dispatch, get_admin_recipients
+    from app.modules.pdf import service as pdf_service
+
+    inv = await repo.get_by_id(db, invoice_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(invoice_id)
+    if inv.status == InvoiceStatus.draft:
+        raise InvoiceStateError("La facture doit être émise avant l'envoi par email.")
+
+    customer = await customer_repo.get_by_id(db, garage_id, inv.customer_id) if inv.customer_id else None
+
+    if recipient == "client":
+        if not customer or not customer.email:
+            raise InvoiceStateError("Le client n'a pas d'adresse email renseignée.")
+        to_addresses = [customer.email]
+        template_code = "invoice_send_client"
+    else:
+        to_addresses = get_admin_recipients()
+        if not to_addresses:
+            raise InvoiceStateError("Aucune adresse email admin n'est configurée.")
+        template_code = "invoice_send_admin"
+
+    pdf_bytes = await pdf_service.render_invoice_pdf(db, invoice_id=inv.id, garage_id=garage_id)
+    filename = f"{inv.doc_number or inv.id}.pdf"
+    context = await _build_invoice_email_context(inv, customer)
+
+    for addr in to_addresses:
+        await dispatch(
+            db,
+            garage_id=garage_id,
+            recipient_id=customer.id if recipient == "client" and customer else None,
+            recipient=addr,
+            channel="email",
+            template_code=template_code,
+            context=context,
+            attachments=[EmailAttachment(filename=filename, content=pdf_bytes, mimetype="application/pdf")],
+            respect_quiet_hours=False,
+        )
+
+
+async def send_invoice_due_alert_email(
+    db: AsyncSession,
+    invoice_id: int,
+    garage_id: int,
+    *,
+    recipient: str,
+) -> None:
+    """Email the échéance (due-soon) alert to the client or to the configured admin address(es)."""
+    from app.modules.notification.service import dispatch, get_admin_recipients
+
+    inv = await repo.get_by_id(db, invoice_id, garage_id)
+    if not inv:
+        raise InvoiceNotFoundError(invoice_id)
+
+    customer = await customer_repo.get_by_id(db, garage_id, inv.customer_id) if inv.customer_id else None
+
+    if recipient == "client":
+        if not customer or not customer.email:
+            raise InvoiceStateError("Le client n'a pas d'adresse email renseignée.")
+        to_addresses = [customer.email]
+        template_code = "invoice_due_soon_client"
+    else:
+        to_addresses = get_admin_recipients()
+        if not to_addresses:
+            raise InvoiceStateError("Aucune adresse email admin n'est configurée.")
+        template_code = "invoice_due_soon_admin"
+
+    context = await _build_invoice_email_context(inv, customer)
+
+    for addr in to_addresses:
+        await dispatch(
+            db,
+            garage_id=garage_id,
+            recipient_id=customer.id if recipient == "client" and customer else None,
+            recipient=addr,
+            channel="email",
+            template_code=template_code,
+            context=context,
+            respect_quiet_hours=False,
+        )
+    return InvoiceOut.model_validate(fresh)

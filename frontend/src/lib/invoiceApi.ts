@@ -178,4 +178,10 @@ export const invoiceApi = {
   fromRepairOrder(roPublicId: string): Promise<InvoiceOut> {
     return apiClient.post(`/invoices/from-repair-order/${roPublicId}`).then(r => r.data)
   },
+
+  sendEmail(publicId: string, recipient: 'client' | 'admin'): Promise<{ status: string }> {
+    return apiClient
+      .post(`/invoices/${publicId}/send-email`, {}, { params: { recipient } })
+      .then(r => r.data)
+  },
 }

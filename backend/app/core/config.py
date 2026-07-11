@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     smtp_from_address: str = ""
     smtp_from_name: str = "Xpert-ERP"
+    # Comma-separated address(es) that receive "send to admin" copies of
+    # documents (invoice/devis) and internal alert emails (échéance, credit limit).
+    cfg_admin_notification_emails: str = ""
 
     # -------------------------------------------------------------------------
     # Frontend

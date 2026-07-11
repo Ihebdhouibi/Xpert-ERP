@@ -1,7 +1,7 @@
 """Quotation router."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import Response
@@ -361,6 +361,27 @@ async def send_quotation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
     except (QuotationStateError, QuotationVersionError) as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+
+@router.post(
+    "/{quotation_id}/send-email",
+    dependencies=[require_permission("quotation.send")],
+    summary="Email the quotation PDF to the client or to the configured admin address(es)",
+)
+async def send_quotation_email(
+    user: AuthUser,
+    quotation_id: str,
+    recipient: Literal["client", "admin"] = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    try:
+        q = await service._resolve(db, quotation_id, user.garage_id)
+        await service.send_quotation_email(db, q.id, user.garage_id, recipient=recipient)
+        return {"status": "sent"}
+    except QuotationNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    except QuotationStateError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.post(

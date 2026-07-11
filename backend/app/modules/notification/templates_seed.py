@@ -104,6 +104,69 @@ TRIGGER_CATALOG: list[dict] = [
         "type": "event",
         "channels": ["in_app"],
     },
+    {
+        "code": "invoice_send_client",
+        "label": "Facture envoyée au client",
+        "description": "Envoyé manuellement au client avec la facture en pièce jointe.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "invoice_send_admin",
+        "label": "Facture envoyée à l'admin",
+        "description": "Envoyé manuellement aux adresses admin avec la facture en pièce jointe.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "quotation_send_client",
+        "label": "Devis envoyé au client",
+        "description": "Envoyé manuellement au client avec le devis en pièce jointe.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "quotation_send_admin",
+        "label": "Devis envoyé à l'admin",
+        "description": "Envoyé manuellement aux adresses admin avec le devis en pièce jointe.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "purchase_order_send_supplier",
+        "label": "Bon de commande envoyé au fournisseur",
+        "description": "Envoyé au fournisseur avec le bon de commande en pièce jointe.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "invoice_due_soon_client",
+        "label": "Échéance à venir (client)",
+        "description": "Envoyé manuellement au client depuis l'alerte d'échéance interne.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "invoice_due_soon_admin",
+        "label": "Échéance à venir (admin)",
+        "description": "Envoyé manuellement à l'admin depuis l'alerte d'échéance interne.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "credit_limit_alert_client",
+        "label": "Limite de crédit atteinte (client)",
+        "description": "Envoyé manuellement au client depuis l'alerte de seuil de crédit.",
+        "type": "event",
+        "channels": ["email"],
+    },
+    {
+        "code": "credit_limit_alert_admin",
+        "label": "Limite de crédit atteinte (admin)",
+        "description": "Envoyé manuellement à l'admin depuis l'alerte de seuil de crédit.",
+        "type": "event",
+        "channels": ["email"],
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -378,6 +441,119 @@ _TEMPLATES: list[dict] = [
         "body": (
             "{{ garage_name }} : Paiement reçu — {{ amount_paid }} pour la facture "
             "{{ invoice_number }} le {{ payment_date }}. Merci !"
+        ),
+    },
+    # ------------------------------------------------------------------
+    # invoice_send_client / invoice_send_admin
+    # ------------------------------------------------------------------
+    {
+        "code": "invoice_send_client",
+        "channel": "email",
+        "subject": "Votre facture {{ invoice_number }} — {{ garage_name }}",
+        "body": (
+            "<p>Bonjour {{ customer_name }},</p>"
+            "<p>Veuillez trouver ci-joint votre facture <strong>{{ invoice_number }}</strong> "
+            "d'un montant de <strong>{{ total }}</strong>, échue le {{ due_date }}.</p>"
+            "<p>Pour toute question, contactez-nous au {{ garage_phone }}.</p>"
+            "<p>Cordialement,<br>{{ garage_name }}</p>"
+        ),
+    },
+    {
+        "code": "invoice_send_admin",
+        "channel": "email",
+        "subject": "[Admin] Facture {{ invoice_number }} envoyée",
+        "body": (
+            "<p>La facture <strong>{{ invoice_number }}</strong> ({{ total }}) pour "
+            "<strong>{{ customer_name }}</strong>, échue le {{ due_date }}, est jointe à cet email.</p>"
+        ),
+    },
+    # ------------------------------------------------------------------
+    # quotation_send_client / quotation_send_admin
+    # ------------------------------------------------------------------
+    {
+        "code": "quotation_send_client",
+        "channel": "email",
+        "subject": "Votre devis {{ quotation_number }} — {{ garage_name }}",
+        "body": (
+            "<p>Bonjour {{ customer_name }},</p>"
+            "<p>Veuillez trouver ci-joint votre devis <strong>{{ quotation_number }}</strong> "
+            "d'un montant de <strong>{{ total }}</strong>.</p>"
+            "<p>Pour toute question, contactez-nous au {{ garage_phone }}.</p>"
+            "<p>Cordialement,<br>{{ garage_name }}</p>"
+        ),
+    },
+    {
+        "code": "quotation_send_admin",
+        "channel": "email",
+        "subject": "[Admin] Devis {{ quotation_number }} envoyé",
+        "body": (
+            "<p>Le devis <strong>{{ quotation_number }}</strong> ({{ total }}) pour "
+            "<strong>{{ customer_name }}</strong> est joint à cet email.</p>"
+        ),
+    },
+    # ------------------------------------------------------------------
+    # purchase_order_send_supplier
+    # ------------------------------------------------------------------
+    {
+        "code": "purchase_order_send_supplier",
+        "channel": "email",
+        "subject": "Bon de commande {{ po_number }} — {{ garage_name }}",
+        "body": (
+            "<p>Bonjour {{ supplier_name }},</p>"
+            "<p>Veuillez trouver ci-joint notre bon de commande <strong>{{ po_number }}</strong> "
+            "du {{ order_date }}, d'un montant de <strong>{{ amount_ht }}</strong> HT.</p>"
+            "<p>Pour toute question, contactez-nous au {{ garage_phone }}.</p>"
+            "<p>Cordialement,<br>{{ garage_name }}</p>"
+        ),
+    },
+    # ------------------------------------------------------------------
+    # invoice_due_soon_client / invoice_due_soon_admin
+    # ------------------------------------------------------------------
+    {
+        "code": "invoice_due_soon_client",
+        "channel": "email",
+        "subject": "Échéance à venir — Facture {{ invoice_number }}",
+        "body": (
+            "<p>Bonjour {{ customer_name }},</p>"
+            "<p>Nous vous rappelons que la facture <strong>{{ invoice_number }}</strong> "
+            "d'un montant de <strong>{{ amount_due }}</strong> arrive à échéance le "
+            "<strong>{{ due_date }}</strong>.</p>"
+            "<p>Pour toute question, contactez-nous au {{ garage_phone }}.</p>"
+            "<p>Cordialement,<br>{{ garage_name }}</p>"
+        ),
+    },
+    {
+        "code": "invoice_due_soon_admin",
+        "channel": "email",
+        "subject": "[Admin] Échéance à venir — Facture {{ invoice_number }}",
+        "body": (
+            "<p>La facture <strong>{{ invoice_number }}</strong> de <strong>{{ customer_name }}</strong> "
+            "({{ amount_due }}) arrive à échéance le {{ due_date }}.</p>"
+        ),
+    },
+    # ------------------------------------------------------------------
+    # credit_limit_alert_client / credit_limit_alert_admin
+    # ------------------------------------------------------------------
+    {
+        "code": "credit_limit_alert_client",
+        "channel": "email",
+        "subject": "Votre encours approche de votre limite de crédit",
+        "body": (
+            "<p>Bonjour {{ customer_name }},</p>"
+            "<p>Votre encours actuel est de <strong>{{ outstanding }}</strong> sur une limite de crédit "
+            "de <strong>{{ limit }}</strong> ({{ ratio }} %).</p>"
+            "<p>Merci de bien vouloir régulariser votre situation. Pour toute question, contactez-nous "
+            "au {{ garage_phone }}.</p>"
+            "<p>Cordialement,<br>{{ garage_name }}</p>"
+        ),
+    },
+    {
+        "code": "credit_limit_alert_admin",
+        "channel": "email",
+        "subject": "[Admin] Encours client proche de la limite — {{ customer_name }}",
+        "body": (
+            "<p>L'encours de <strong>{{ customer_name }}</strong> est de <strong>{{ outstanding }}</strong> "
+            "sur une limite de <strong>{{ limit }}</strong> ({{ ratio }} %).</p>"
         ),
     },
 ]

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from fastapi.responses import Response
@@ -418,6 +418,27 @@ async def issue_invoice(
                 ),
             },
         )
+
+
+@router.post(
+    "/{invoice_id}/send-email",
+    dependencies=[require_permission("invoice.issue")],
+    summary="Email the invoice PDF to the client or to the configured admin address(es)",
+)
+async def send_invoice_email(
+    user: AuthUser,
+    invoice_id: str,
+    recipient: Literal["client", "admin"] = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    try:
+        inv = await service._resolve(db, invoice_id, user.garage_id)
+        await service.send_invoice_email(db, inv.id, user.garage_id, recipient=recipient)
+        return {"status": "sent"}
+    except InvoiceNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    except InvoiceStateError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.post(

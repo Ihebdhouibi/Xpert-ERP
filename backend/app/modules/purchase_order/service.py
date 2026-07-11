@@ -207,6 +207,47 @@ async def send_po(
     )
 
 
+async def send_po_supplier_email(db: AsyncSession, po: PurchaseOrder, garage_id: int) -> None:
+    """Best-effort: email the PO PDF to the supplier. Logs and returns on any failure."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.modules.supplier.models import Supplier
+    from app.modules.pdf import service as pdf_service
+    from app.modules.notification.adapter import EmailAttachment
+    from app.modules.notification.service import dispatch
+
+    supplier = (
+        await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
+    ).scalar_one_or_none()
+    if not supplier or not supplier.email:
+        logger.warning("po_supplier_email_skipped_no_email", po_id=po.id, supplier_id=po.supplier_id)
+        return
+
+    settings = get_settings()
+    pdf_bytes = await pdf_service.render_purchase_order_pdf(db, public_id=str(po.public_id), garage_id=garage_id)
+    context = {
+        "supplier_name": supplier.name,
+        "po_number": po.doc_number or str(po.id),
+        "order_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d"),
+        "amount_ht": f"{po.total_ht / 100:.2f}",
+        "garage_name": settings.pdf_garage_name,
+        "garage_phone": settings.pdf_garage_phone,
+    }
+    await dispatch(
+        db,
+        garage_id=garage_id,
+        recipient_id=None,
+        recipient=supplier.email,
+        channel="email",
+        template_code="purchase_order_send_supplier",
+        context=context,
+        attachments=[EmailAttachment(
+            filename=f"{po.doc_number or po.id}.pdf", content=pdf_bytes, mimetype="application/pdf"
+        )],
+        respect_quiet_hours=False,
+    )
+
+
 async def receive_po(
     db: AsyncSession,
     garage_id: int,

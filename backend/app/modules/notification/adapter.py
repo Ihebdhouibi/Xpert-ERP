@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Optional
@@ -36,6 +37,13 @@ class DeliveryResult:
     error: Optional[str] = field(default=None)
 
 
+@dataclass
+class EmailAttachment:
+    filename: str
+    content: bytes
+    mimetype: str = "application/pdf"
+
+
 # ---------------------------------------------------------------------------
 # Abstract interface
 # ---------------------------------------------------------------------------
@@ -49,6 +57,7 @@ class NotificationAdapter(ABC):
         channel: str,
         subject: Optional[str],
         body: str,
+        attachments: Optional[list[EmailAttachment]] = None,
     ) -> DeliveryResult:
         """Send a pre-rendered notification and return a DeliveryResult."""
 
@@ -65,14 +74,26 @@ class EmailAdapter(NotificationAdapter):
         channel: str,
         subject: Optional[str],
         body: str,
+        attachments: Optional[list[EmailAttachment]] = None,
     ) -> DeliveryResult:
         settings = get_settings()
 
-        message = MIMEMultipart("alternative")
+        if attachments:
+            message: MIMEMultipart = MIMEMultipart("mixed")
+            alt_part = MIMEMultipart("alternative")
+            alt_part.attach(MIMEText(body, "html", "utf-8"))
+            message.attach(alt_part)
+            for att in attachments:
+                part = MIMEApplication(att.content, _subtype=att.mimetype.split("/")[-1])
+                part.add_header("Content-Disposition", "attachment", filename=att.filename)
+                message.attach(part)
+        else:
+            message = MIMEMultipart("alternative")
+            message.attach(MIMEText(body, "html", "utf-8"))
+
         message["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_address}>"
         message["To"] = recipient
         message["Subject"] = subject or ""
-        message.attach(MIMEText(body, "html", "utf-8"))
 
         try:
             await aiosmtplib.send(
@@ -81,8 +102,7 @@ class EmailAdapter(NotificationAdapter):
                 port=settings.smtp_port,
                 username=settings.smtp_username or None,
                 password=settings.smtp_password or None,
-                use_tls=settings.smtp_use_tls,
-                start_tls=False if not settings.smtp_use_tls else None,
+                start_tls=settings.smtp_use_tls,
             )
         except Exception as exc:
             logger.warning("email_send_failed: %s to %s", type(exc).__name__, recipient)
@@ -103,6 +123,7 @@ class SmsAdapter(NotificationAdapter):
         channel: str,
         subject: Optional[str],
         body: str,
+        attachments: Optional[list[EmailAttachment]] = None,
     ) -> DeliveryResult:
         settings = get_settings()
 
