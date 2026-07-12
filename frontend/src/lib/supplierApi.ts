@@ -4,6 +4,7 @@ export type SupplierStatus = 'active' | 'inactive'
 
 export interface Supplier {
   id: string
+  int_id: number
   name: string
   email: string | null
   phone: string | null

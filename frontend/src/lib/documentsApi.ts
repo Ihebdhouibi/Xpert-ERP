@@ -12,6 +12,7 @@ export type DocumentCategory =
   | 'invoice'
   | 'supplier_invoice'
   | 'supplier_delivery_note'
+  | 'service_invoice'
   | 'generic'
 
 export type OwnerEntityType =
