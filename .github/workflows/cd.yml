@@ -18,7 +18,9 @@ name: CD
 
 on:
   push:
-    branches: [staging, deployment]
+    branches: []   # disabled — Dokploy handles build+deploy directly from source
+    # Re-enable: branches: [staging, deployment]
+    # Also fix repo owner casing: use ${{ github.repository_owner | lower }}
 
 concurrency:
   group: cd-${{ github.ref_name }}
