@@ -131,6 +131,23 @@ services:
         condition: service_started
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-config uvicorn_log_config.json
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infra/Dockerfile.frontend
+    container_name: xpert_erp_frontend
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ | grep -q '<html' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   backup:
     build:
       context: .
