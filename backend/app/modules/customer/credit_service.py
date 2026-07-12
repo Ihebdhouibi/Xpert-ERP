@@ -335,4 +335,65 @@ async def recompute_outstanding(
         db.add(customer)
         await db.flush()
 
+
+# ---------------------------------------------------------------------------
+# Manual credit-limit alert email (triggered from the in-app notification)
+# ---------------------------------------------------------------------------
+
+
+class CreditAlertError(Exception):
+    pass
+
+
+async def send_credit_limit_alert_email(
+    db: AsyncSession,
+    customer_id: int,
+    garage_id: int,
+    *,
+    recipient: str,
+) -> None:
+    """Email the current credit-limit standing to the client or configured admin address(es)."""
+    from app.modules.notification.service import dispatch, get_admin_recipients
+
+    customer = await customer_repo.get_by_id(db, garage_id, customer_id)
+    if not customer:
+        raise CreditAlertError("Client introuvable.")
+
+    settings = get_settings()
+    limit_eur = (customer.credit_limit_minor or 0) / 100
+    outstanding_eur = (customer.outstanding_minor or 0) / 100
+    ratio = round((outstanding_eur / limit_eur) * 100) if limit_eur else 0
+
+    context = {
+        "customer_name": customer.full_name,
+        "outstanding": f"{outstanding_eur:.2f}",
+        "limit": f"{limit_eur:.2f}",
+        "ratio": ratio,
+        "garage_name": settings.pdf_garage_name,
+        "garage_phone": settings.pdf_garage_phone,
+    }
+
+    if recipient == "client":
+        if not customer.email:
+            raise CreditAlertError("Le client n'a pas d'adresse email renseignée.")
+        to_addresses = [customer.email]
+        template_code = "credit_limit_alert_client"
+    else:
+        to_addresses = get_admin_recipients()
+        if not to_addresses:
+            raise CreditAlertError("Aucune adresse email admin n'est configurée.")
+        template_code = "credit_limit_alert_admin"
+
+    for addr in to_addresses:
+        await dispatch(
+            db,
+            garage_id=garage_id,
+            recipient_id=customer.id if recipient == "client" else None,
+            recipient=addr,
+            channel="email",
+            template_code=template_code,
+            context=context,
+            respect_quiet_hours=False,
+        )
+
     return total

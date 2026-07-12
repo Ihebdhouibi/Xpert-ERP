@@ -173,4 +173,10 @@ export const quotationApi = {
       .get(`/pdf/quotations/${id}`, { responseType: 'blob' })
       .then(r => URL.createObjectURL(r.data as Blob))
   },
+
+  sendEmail(publicId: string, recipient: 'client' | 'admin'): Promise<{ status: string }> {
+    return apiClient
+      .post(`/quotations/${publicId}/send-email`, {}, { params: { recipient } })
+      .then(r => r.data)
+  },
 }

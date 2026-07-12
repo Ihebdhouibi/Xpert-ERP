@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True
     smtp_from_address: str = ""
     smtp_from_name: str = "Xpert-ERP"
+    # Comma-separated address(es) that receive "send to admin" copies of
+    # documents (invoice/devis) and internal alert emails (échéance, credit limit).
+    cfg_admin_notification_emails: str = ""
 
     # -------------------------------------------------------------------------
     # Frontend
@@ -234,6 +237,11 @@ class Settings(BaseSettings):
     cfg_reminder_delay_1_days: int = 7
     cfg_reminder_delay_2_days: int = 14
     cfg_reminder_delay_3_days: int = 30
+
+    # Pre-due reminders for internal/admin users (in-app bell only, days BEFORE due_at)
+    cfg_due_soon_reminder_1_days: int = 30
+    cfg_due_soon_reminder_2_days: int = 14
+    cfg_due_soon_reminder_3_days: int = 7
 
     # SMS provider (provider-agnostic HTTP)
     cfg_sms_provider: str = ""   # arbitrary label, e.g. "vonage"

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -19,7 +19,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { inboxApi } from '../../lib/notificationApi'
+import { inboxApi, notificationSupportsEmail } from '../../lib/notificationApi'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
@@ -27,7 +27,9 @@ import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneR
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import TabletAndroidRoundedIcon from '@mui/icons-material/TabletAndroidRounded'
+import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../contexts/ToastContext'
 import { navSections } from './navConfig'
 
 function getPageTitle(pathname: string): string {
@@ -56,8 +58,10 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { success, error: toastError } = useToast()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [notifAnchor, setNotifAnchor] = useState<HTMLElement | null>(null)
+  const [sendingEmailId, setSendingEmailId] = useState<number | null>(null)
 
   const { data: inbox } = useQuery({
     queryKey: ['notifications', 'inbox'],
@@ -80,6 +84,24 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
   const markAll = async () => {
     await inboxApi.markAllRead()
     queryClient.invalidateQueries({ queryKey: ['notifications', 'inbox'] })
+  }
+
+  const sendNotificationEmail = async (
+    e: MouseEvent,
+    notificationId: number,
+    recipient: 'client' | 'admin',
+  ) => {
+    e.stopPropagation()
+    setSendingEmailId(notificationId)
+    try {
+      await inboxApi.sendEmail(notificationId, recipient)
+      success(recipient === 'client' ? 'Email envoyé au client' : "Email envoyé à l'admin")
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email.")
+    } finally {
+      setSendingEmailId(null)
+    }
   }
 
   const pageTitle = getPageTitle(location.pathname)
@@ -290,10 +312,34 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
                       <Typography component="span" variant="caption" color="text.disabled" display="block">
                         {new Date(n.created_at).toLocaleString('fr-FR')}
                       </Typography>
+                      {notificationSupportsEmail(n.link) && (
+                        <Stack direction="row" spacing={1} mt={0.5}>
+                          <Button
+                            size="small"
+                            variant="text"
+                            startIcon={<MailRoundedIcon fontSize="small" />}
+                            disabled={sendingEmailId === n.id}
+                            onClick={(e) => sendNotificationEmail(e, n.id, 'client')}
+                            sx={{ textTransform: 'none', minWidth: 0, p: 0 }}
+                          >
+                            Email client
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="text"
+                            startIcon={<MailRoundedIcon fontSize="small" />}
+                            disabled={sendingEmailId === n.id}
+                            onClick={(e) => sendNotificationEmail(e, n.id, 'admin')}
+                            sx={{ textTransform: 'none', minWidth: 0, p: 0 }}
+                          >
+                            Email admin
+                          </Button>
+                        </Stack>
+                      )}
                     </>
                   }
                   primaryTypographyProps={{ fontWeight: n.read_at ? 500 : 700, variant: 'body2' }}
-                  secondaryTypographyProps={{ variant: 'caption' }}
+                  secondaryTypographyProps={{ variant: 'caption', component: 'div' }}
                 />
               </MenuItem>
             ))

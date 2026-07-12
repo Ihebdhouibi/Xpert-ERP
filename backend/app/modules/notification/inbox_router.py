@@ -1,10 +1,11 @@
 """In-app notification inbox — /notifications endpoints (bell)."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,8 @@ from app.modules.notification.models import AppNotification
 from app.modules.rbac.dependencies import AuthUser
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+_LINK_PATTERN = re.compile(r"^/(invoices|customers)/([^/]+)$")
 
 
 class AppNotificationOut(BaseModel):
@@ -104,6 +107,63 @@ async def mark_read(
         notif.read_at = datetime.now(tz=timezone.utc)
         await db.commit()
     return {"status": "read"}
+
+
+@router.post("/{notification_id}/send-email")
+async def send_notification_email(
+    notification_id: int,
+    user: AuthUser,
+    recipient: Literal["client", "admin"] = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Email the client or admin about the underlying échéance / credit-limit alert.
+
+    Only supports notifications whose link points at an invoice (échéance)
+    or a customer (credit-limit) — the only two triggers that currently
+    expose this action in the bell dropdown.
+    """
+    notif = (
+        await db.execute(
+            select(AppNotification).where(
+                AppNotification.id == notification_id,
+                AppNotification.recipient_id == user.user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if notif is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    match = _LINK_PATTERN.match(notif.link or "")
+    if not match:
+        raise HTTPException(status_code=422, detail="Cette notification ne peut pas être envoyée par email.")
+
+    resource, public_id = match.group(1), match.group(2)
+
+    if resource == "invoices":
+        from app.modules.invoice import service as invoice_service
+
+        try:
+            inv = await invoice_service._resolve(db, public_id, user.garage_id)
+            await invoice_service.send_invoice_due_alert_email(
+                db, inv.id, user.garage_id, recipient=recipient
+            )
+        except invoice_service.InvoiceNotFoundError:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        except invoice_service.InvoiceStateError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+    else:  # customers
+        from app.modules.customer import repository as customer_repo
+        from app.modules.customer.credit_service import CreditAlertError, send_credit_limit_alert_email
+
+        customer = await customer_repo.get_by_public_id(db, user.garage_id, public_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        try:
+            await send_credit_limit_alert_email(db, customer.id, user.garage_id, recipient=recipient)
+        except CreditAlertError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    return {"status": "sent"}
 
 
 @router.post("/read-all")

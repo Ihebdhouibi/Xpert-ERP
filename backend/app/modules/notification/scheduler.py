@@ -133,6 +133,120 @@ async def _run_invoice_reminders() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Job: invoice due soon (admin-facing, pre-due, in-app bell only)
+# ---------------------------------------------------------------------------
+
+
+async def _run_invoice_due_soon() -> None:
+    """Notify internal users (in-app bell) when an invoice's due_at is 30/14/7 days out.
+
+    Mirror image of _run_invoice_reminders: this fires BEFORE due_at, at internal
+    staff (not the customer), so they can proactively chase payment. Each
+    (invoice, tier) pair fires exactly once, tracked via invoice_due_reminder_log,
+    since these are discrete one-time triggers rather than a continuous overdue state.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    settings = get_settings()
+    tiers = [
+        settings.cfg_due_soon_reminder_1_days,
+        settings.cfg_due_soon_reminder_2_days,
+        settings.cfg_due_soon_reminder_3_days,
+    ]
+    today = datetime.now(tz=timezone.utc).date()
+
+    async with AsyncSessionFactory() as db:
+        try:
+            from app.modules.invoice.models import Invoice, InvoiceStatus
+            from app.modules.notification.models import InvoiceDueReminderLog
+            from app.modules.auth.models import AppUser, Role, RolePermission, Permission, UserRole, UserStatus
+            from app.modules.notification.inbox_router import create_app_notification
+
+            for tier_days in tiers:
+                target_date = today + timedelta(days=tier_days)
+                window_start = datetime(
+                    target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc
+                )
+                window_end = window_start + timedelta(days=1)
+
+                invoices = (
+                    await db.execute(
+                        select(Invoice).where(
+                            Invoice.status.in_([InvoiceStatus.issued, InvoiceStatus.partial]),
+                            Invoice.due_at >= window_start,
+                            Invoice.due_at < window_end,
+                            Invoice.deleted_at.is_(None),
+                        )
+                    )
+                ).scalars().all()
+                if not invoices:
+                    continue
+
+                invoice_ids = [inv.id for inv in invoices]
+                already_logged = {
+                    row.invoice_id
+                    for row in (
+                        await db.execute(
+                            select(InvoiceDueReminderLog).where(
+                                InvoiceDueReminderLog.invoice_id.in_(invoice_ids),
+                                InvoiceDueReminderLog.tier_days == tier_days,
+                            )
+                        )
+                    ).scalars().all()
+                }
+
+                for inv in invoices:
+                    if inv.id in already_logged:
+                        continue
+
+                    recipients = (
+                        await db.execute(
+                            select(AppUser.id)
+                            .distinct()
+                            .join(UserRole, UserRole.user_id == AppUser.id)
+                            .join(Role, Role.id == UserRole.role_id)
+                            .join(RolePermission, RolePermission.role_id == Role.id)
+                            .join(Permission, Permission.id == RolePermission.permission_id)
+                            .where(
+                                AppUser.garage_id == inv.garage_id,
+                                AppUser.deleted_at.is_(None),
+                                AppUser.status == UserStatus.active,
+                                Permission.code == "invoice.issue",
+                            )
+                        )
+                    ).scalars().all()
+
+                    title = f"Facture bientôt échue : {inv.doc_number or inv.public_id}"
+                    body = (
+                        f"Échéance dans {tier_days} jours ({inv.due_at.strftime('%Y-%m-%d')}) — "
+                        f"reste dû {inv.outstanding_minor / 100:.2f} €."
+                    )
+                    for uid in recipients:
+                        await create_app_notification(
+                            db,
+                            garage_id=inv.garage_id,
+                            recipient_id=uid,
+                            title=title,
+                            body=body,
+                            link=f"/invoices/{inv.public_id}",
+                        )
+
+                    db.add(InvoiceDueReminderLog(invoice_id=inv.id, tier_days=tier_days))
+                    try:
+                        await db.commit()
+                    except IntegrityError:
+                        await db.rollback()
+                        logger.info(
+                            "invoice_due_soon_dedup_race_skipped",
+                            invoice_id=inv.id,
+                            tier_days=tier_days,
+                        )
+        except Exception:
+            logger.exception("scheduler_invoice_due_soon_error")
+            await db.rollback()
+
+
+# ---------------------------------------------------------------------------
 # Job: maintenance due
 # ---------------------------------------------------------------------------
 
@@ -339,6 +453,14 @@ def configure_scheduler() -> AsyncIOScheduler:
         trigger="interval",
         minutes=1,
         id="invoice_reminders",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _run_invoice_due_soon,
+        trigger="interval",
+        minutes=1,
+        id="invoice_due_soon",
         max_instances=1,
         coalesce=True,
     )

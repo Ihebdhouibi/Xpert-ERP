@@ -54,6 +54,15 @@ export const inboxApi = {
   list: () => apiClient.get<InboxResponse>('/notifications').then(r => r.data),
   markRead: (id: number) => apiClient.post(`/notifications/${id}/read`).then(r => r.data),
   markAllRead: () => apiClient.post('/notifications/read-all').then(r => r.data),
+  sendEmail: (id: number, recipient: 'client' | 'admin') =>
+    apiClient
+      .post(`/notifications/${id}/send-email`, {}, { params: { recipient } })
+      .then(r => r.data),
+}
+
+/** True for notifications that support the "send email" action (échéance / credit-limit alerts). */
+export function notificationSupportsEmail(link: string | null): boolean {
+  return !!link && /^\/(invoices|customers)\/[^/]+$/.test(link)
 }
 
 export const notificationApi = {

@@ -26,6 +26,7 @@ from app.core.logging import get_logger
 from app.modules.notification.adapter import (
     DeliveryResult,
     EmailAdapter,
+    EmailAttachment,
     NotificationAdapter,
     SmsAdapter,
 )
@@ -146,6 +147,8 @@ async def dispatch(
     template_code: str,
     context: dict[str, Any],
     locale: str = "fr",
+    attachments: Optional[list[EmailAttachment]] = None,
+    respect_quiet_hours: bool = True,
 ) -> None:
     """Send a notification with retry and quiet-hours support.
 
@@ -153,7 +156,9 @@ async def dispatch(
     attempts delivery up to CFG_NOTIFICATION_MAX_RETRIES times with
     exponential backoff. Final status is always persisted.
 
-    Call this from a FastAPI BackgroundTask or APScheduler job.
+    Call this from a FastAPI BackgroundTask or APScheduler job. For
+    manually-triggered sends (a user clicking "send"), pass
+    respect_quiet_hours=False so the request doesn't block for hours.
     """
     logger.info("dispatch_start", garage_id=garage_id, channel=channel, template_code=template_code)
     settings = get_settings()
@@ -172,7 +177,7 @@ async def dispatch(
 
     # Delay if inside quiet hours
     now = datetime.now(tz=timezone.utc)
-    if _in_quiet_hours(now, quiet_start, quiet_end):
+    if respect_quiet_hours and _in_quiet_hours(now, quiet_start, quiet_end):
         wait = _seconds_until_quiet_end(now, quiet_end)
         logger.info("notification_quiet_hours_delay", log_id=log.id, wait_seconds=round(wait))
         await asyncio.sleep(wait)
@@ -185,7 +190,7 @@ async def dispatch(
 
     for attempt in range(1, max_retries + 1):
         try:
-            result = await adapter.send(recipient, channel, subject, body)
+            result = await adapter.send(recipient, channel, subject, body, attachments=attachments)
         except Exception as exc:
             result = DeliveryResult(success=False, error=type(exc).__name__)
 
@@ -226,6 +231,12 @@ async def dispatch(
         template_code=template_code,
         attempts=max_retries,
     )
+
+
+def get_admin_recipients() -> list[str]:
+    """Parse the comma-separated CFG_ADMIN_NOTIFICATION_EMAILS setting."""
+    raw = get_settings().cfg_admin_notification_emails
+    return [addr.strip() for addr in raw.split(",") if addr.strip()]
 
 
 async def render_preview(

@@ -38,6 +38,7 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import PictureAsPdfRoundedIcon from '@mui/icons-material/PictureAsPdfRounded'
 import PrintRoundedIcon from '@mui/icons-material/PrintRounded'
+import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import {
@@ -189,6 +190,24 @@ export function QuotationDetailPage() {
     onError: () => toastError("Impossible de refuser le devis."),
   })
 
+  const sendEmailClientMutation = useMutation({
+    mutationFn: () => quotationApi.sendEmail(publicId!, 'client'),
+    onSuccess: () => success('Devis envoyé au client par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email au client.")
+    },
+  })
+
+  const sendEmailAdminMutation = useMutation({
+    mutationFn: () => quotationApi.sendEmail(publicId!, 'admin'),
+    onSuccess: () => success('Devis envoyé à l\'admin par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email à l'admin.")
+    },
+  })
+
   const convertMutation = useMutation({
     mutationFn: () => invoiceApi.fromQuotation(quotation!.id),
     onSuccess: (invoice) => {
@@ -296,7 +315,7 @@ export function QuotationDetailPage() {
   }
 
   const isExpired = quotation.valid_until ? new Date(quotation.valid_until) < new Date() : false
-  const anyMutating = sendMutation.isPending || approveMutation.isPending || rejectMutation.isPending || convertMutation.isPending || convertToBLMutation.isPending
+  const anyMutating = sendMutation.isPending || approveMutation.isPending || rejectMutation.isPending || convertMutation.isPending || convertToBLMutation.isPending || sendEmailClientMutation.isPending || sendEmailAdminMutation.isPending
   const canEditLines = quotation.status === 'draft'
 
   const customerLabel = customer
@@ -722,6 +741,19 @@ export function QuotationDetailPage() {
                         Refuser
                       </Button>
                     </>
+                  )}
+
+                  {quotation.status !== 'draft' && (
+                    <Stack direction="row" spacing={1}>
+                      <Button variant="outlined" fullWidth size="small" startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailClientMutation.mutate()} disabled={anyMutating}>
+                        {sendEmailClientMutation.isPending ? 'Envoi…' : 'Emailer au client'}
+                      </Button>
+                      <Button variant="outlined" fullWidth size="small" startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailAdminMutation.mutate()} disabled={anyMutating}>
+                        {sendEmailAdminMutation.isPending ? 'Envoi…' : 'Emailer à l\'admin'}
+                      </Button>
+                    </Stack>
                   )}
 
                   {quotation.status === 'approved' && (

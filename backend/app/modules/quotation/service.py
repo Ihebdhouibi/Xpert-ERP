@@ -489,3 +489,67 @@ async def reject_quotation(
     fresh = await repo.get_by_id(db, quotation.id, garage_id)
     logger.info("quotation_rejected", quotation_id=quotation_id)
     return QuotationOut.model_validate(fresh)
+
+
+# ---------------------------------------------------------------------------
+# Email sending
+# ---------------------------------------------------------------------------
+
+async def send_quotation_email(
+    db: AsyncSession,
+    quotation_id: int,
+    garage_id: int,
+    *,
+    recipient: str,
+) -> None:
+    """Email the quotation PDF to the client (customer.email) or to the configured admin address(es)."""
+    from app.core.config import get_settings
+    from app.modules.notification.adapter import EmailAttachment
+    from app.modules.notification.service import dispatch, get_admin_recipients
+    from app.modules.pdf import service as pdf_service
+
+    quotation = await repo.get_by_id(db, quotation_id, garage_id)
+    if not quotation:
+        raise QuotationNotFoundError(quotation_id)
+    if quotation.status == QuotationStatus.draft:
+        raise QuotationStateError("Le devis doit être envoyé avant l'envoi par email.")
+
+    customer = (
+        await customer_repo.get_by_id(db, garage_id, quotation.customer_id)
+        if quotation.customer_id else None
+    )
+    settings = get_settings()
+
+    if recipient == "client":
+        if not customer or not customer.email:
+            raise QuotationStateError("Le client n'a pas d'adresse email renseignée.")
+        to_addresses = [customer.email]
+        template_code = "quotation_send_client"
+    else:
+        to_addresses = get_admin_recipients()
+        if not to_addresses:
+            raise QuotationStateError("Aucune adresse email admin n'est configurée.")
+        template_code = "quotation_send_admin"
+
+    pdf_bytes = await pdf_service.render_quotation_pdf(db, quotation_id=quotation.id, garage_id=garage_id)
+    filename = f"{quotation.doc_number or quotation.id}.pdf"
+    context = {
+        "customer_name": customer.full_name if customer else "",
+        "quotation_number": quotation.doc_number or str(quotation.id),
+        "total": f"{quotation.total_minor / 100:.2f}",
+        "garage_name": settings.pdf_garage_name,
+        "garage_phone": settings.pdf_garage_phone,
+    }
+
+    for addr in to_addresses:
+        await dispatch(
+            db,
+            garage_id=garage_id,
+            recipient_id=customer.id if recipient == "client" and customer else None,
+            recipient=addr,
+            channel="email",
+            template_code=template_code,
+            context=context,
+            attachments=[EmailAttachment(filename=filename, content=pdf_bytes, mimetype="application/pdf")],
+            respect_quiet_hours=False,
+        )

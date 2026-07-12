@@ -22,6 +22,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -36,6 +37,7 @@ import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded'
+import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import {
   invoiceApi,
   INVOICE_STATUS_LABELS,
@@ -179,6 +181,7 @@ export function InvoiceDetailPage() {
   // Customer assignment for OCR-captured drafts that have no customer yet
   const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
   const needsCustomer = invoice?.status === 'draft' && invoice?.customer_id == null
+  const needsDueAt = invoice?.status === 'draft' && !invoice?.due_at
   const { data: customersData } = useQuery({
     queryKey: ['customers', 'for-invoice-assign'],
     queryFn: () => customerApi.list({ page_size: 100 }),
@@ -194,6 +197,40 @@ export function InvoiceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['invoice', publicId] })
     },
     onError: () => toastError("Impossible d'assigner le client."),
+  })
+
+  // Due date editing for drafts (e.g. created from a devis, BL or repair order with no due date set)
+  const [dueAtInput, setDueAtInput] = useState<string | null>(null)
+  const updateDueAtMutation = useMutation({
+    mutationFn: (value: string) =>
+      invoiceApi.update(publicId!, invoice!.version, {
+        due_at: value ? `${value}T00:00:00` : null,
+      }),
+    onSuccess: updated => {
+      success("Date d'échéance mise à jour")
+      queryClient.setQueryData(['invoice', publicId], updated)
+      setDueAtInput(null)
+    },
+    onError: () => toastError("Impossible de mettre à jour la date d'échéance."),
+  })
+  const dueAtValue = dueAtInput ?? (invoice?.due_at ? invoice.due_at.slice(0, 10) : '')
+
+  const sendEmailClientMutation = useMutation({
+    mutationFn: () => invoiceApi.sendEmail(publicId!, 'client'),
+    onSuccess: () => success('Facture envoyée au client par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email au client.")
+    },
+  })
+
+  const sendEmailAdminMutation = useMutation({
+    mutationFn: () => invoiceApi.sendEmail(publicId!, 'admin'),
+    onSuccess: () => success('Facture envoyée à l\'admin par email'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email à l'admin.")
+    },
   })
 
   const cancelMutation = useMutation({
@@ -272,7 +309,11 @@ export function InvoiceDetailPage() {
     new Date(invoice.due_at) < new Date() &&
     invoice.status !== 'paid' &&
     invoice.status !== 'cancelled'
-  const anyMutating = issueMutation.isPending || cancelMutation.isPending
+  const anyMutating =
+    issueMutation.isPending ||
+    cancelMutation.isPending ||
+    sendEmailClientMutation.isPending ||
+    sendEmailAdminMutation.isPending
 
   return (
     <Box>
@@ -396,7 +437,23 @@ export function InvoiceDetailPage() {
                 } />
                 <Divider />
                 <InfoRow label="Échéance" value={
-                  invoice.due_at ? (
+                  invoice.status === 'draft' ? (
+                    <TextField
+                      size="small"
+                      type="date"
+                      value={dueAtValue}
+                      onChange={e => setDueAtInput(e.target.value)}
+                      onBlur={() => {
+                        if (dueAtInput !== null && dueAtInput !== (invoice.due_at ? invoice.due_at.slice(0, 10) : '')) {
+                          updateDueAtMutation.mutate(dueAtInput)
+                        }
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                      error={needsDueAt}
+                      disabled={updateDueAtMutation.isPending}
+                      sx={{ width: 170 }}
+                    />
+                  ) : invoice.due_at ? (
                     <Stack direction="row" alignItems="center" spacing={0.5}>
                       {isOverdue && <WarningAmberRoundedIcon sx={{ fontSize: 14, color: 'error.main' }} />}
                       <Typography
@@ -681,14 +738,22 @@ export function InvoiceDetailPage() {
                 {/* Actions by status */}
                 <Stack spacing={1.25}>
                   {invoice.status === 'draft' && (
-                    <Tooltip title={needsCustomer ? 'Assignez un client avant d\'émettre' : ''}>
+                    <Tooltip
+                      title={
+                        needsCustomer
+                          ? 'Assignez un client avant d\'émettre'
+                          : needsDueAt
+                          ? 'Renseignez une date d\'échéance avant d\'émettre'
+                          : ''
+                      }
+                    >
                       <span>
                         <Button
                           variant="contained"
                           fullWidth
                           startIcon={<PublishRoundedIcon />}
                           onClick={() => issueMutation.mutate()}
-                          disabled={anyMutating || needsCustomer}
+                          disabled={anyMutating || needsCustomer || needsDueAt}
                         >
                           Émettre la facture
                         </Button>
@@ -720,6 +785,31 @@ export function InvoiceDetailPage() {
                     >
                       Créer un avoir
                     </Button>
+                  )}
+
+                  {(invoice.status === 'issued' || invoice.status === 'partial' || invoice.status === 'paid') && (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        size="small"
+                        startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailClientMutation.mutate()}
+                        disabled={anyMutating}
+                      >
+                        {sendEmailClientMutation.isPending ? 'Envoi…' : 'Envoyer au client'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        fullWidth
+                        size="small"
+                        startIcon={<MailRoundedIcon />}
+                        onClick={() => sendEmailAdminMutation.mutate()}
+                        disabled={anyMutating}
+                      >
+                        {sendEmailAdminMutation.isPending ? 'Envoi…' : 'Envoyer à l\'admin'}
+                      </Button>
+                    </Stack>
                   )}
 
                   {(invoice.status === 'issued' || invoice.status === 'partial') && (

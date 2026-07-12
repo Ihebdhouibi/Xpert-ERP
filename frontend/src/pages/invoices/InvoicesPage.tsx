@@ -198,14 +198,20 @@ const buildColumns = (
     width: 120,
     render: row => {
       if (!row.due_at) return <Typography variant="caption" color="text.disabled">—</Typography>
-      const overdue = new Date(row.due_at) < new Date() && row.status !== 'paid' && row.status !== 'cancelled'
+      const isFinal = row.status === 'paid' || row.status === 'cancelled'
+      const dueDate = new Date(row.due_at)
+      const now = new Date()
+      const overdue = !isFinal && dueDate < now
+      const daysUntilDue = (dueDate.getTime() - now.getTime()) / 86_400_000
+      const dueSoon = !isFinal && !overdue && daysUntilDue <= 14
+      const color = overdue ? 'error.main' : dueSoon ? 'warning.main' : 'text.secondary'
       return (
         <Typography
           variant="body2"
-          color={overdue ? 'error.main' : 'text.secondary'}
-          fontWeight={overdue ? 700 : 400}
+          color={color}
+          fontWeight={overdue || dueSoon ? 700 : 400}
         >
-          {new Date(row.due_at).toLocaleDateString('fr-FR')}
+          {dueDate.toLocaleDateString('fr-FR')}
         </Typography>
       )
     },
@@ -228,6 +234,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   const [dueAt, setDueAt] = useState('')
   const [notes, setNotes] = useState('')
   const [customerError, setCustomerError] = useState(false)
+  const [dueAtError, setDueAtError] = useState(false)
   const [selectedBls, setSelectedBls] = useState<DeliveryNoteOut[]>([])
 
   const { data: blsData, isLoading: blsLoading } = useQuery({
@@ -271,8 +278,11 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   }
 
   function handleSubmit() {
-    if (!customerId) { setCustomerError(true); return }
-    setCustomerError(false)
+    const missingCustomer = !customerId
+    const missingDueAt = !dueAt
+    setCustomerError(missingCustomer)
+    setDueAtError(missingDueAt)
+    if (missingCustomer || missingDueAt) return
     mutation.mutate()
   }
 
@@ -282,6 +292,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
     setNotes('')
     setSelectedBls([])
     setCustomerError(false)
+    setDueAtError(false)
     onClose()
   }
 
@@ -320,11 +331,17 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
             />
           )}
           <TextField
-            label="Date d'échéance (optionnel)"
+            label="Date d'échéance"
             type="date"
             value={dueAt}
-            onChange={e => setDueAt(e.target.value)}
+            onChange={e => {
+              setDueAt(e.target.value)
+              if (e.target.value) setDueAtError(false)
+            }}
             InputLabelProps={{ shrink: true }}
+            required
+            error={dueAtError}
+            helperText={dueAtError ? "La date d'échéance est requise" : undefined}
             fullWidth
           />
           <TextField
