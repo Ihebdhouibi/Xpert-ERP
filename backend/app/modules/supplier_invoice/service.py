@@ -215,6 +215,21 @@ async def create_supplier_invoice(
     )
     logger.info("supplier_invoice_created", si_public_id=str(si.public_id), number=number, po_public_id=po_public_id, garage_id=garage_id)
 
+    # Link all confirmed BLs of this PO to the new invoice so the 3-way match
+    # is fully traceable (PO ↔ BL ↔ Facture).
+    from app.modules.supplier_delivery_note.models import SupplierDeliveryNote as SDNModel, SupplierDeliveryNoteStatus
+    from sqlalchemy import select as _sa_select, update as _sa_update
+    await db.execute(
+        _sa_update(SDNModel)
+        .where(
+            SDNModel.purchase_order_id == po.id,
+            SDNModel.garage_id == garage_id,
+            SDNModel.status == SupplierDeliveryNoteStatus.confirmed.value,
+            SDNModel.supplier_invoice_id.is_(None),
+        )
+        .values(supplier_invoice_id=si.id)
+    )
+
     # Record confirmed prices — prices are only known once the supplier invoice exists
     from app.modules.supplier.repository import SupplierPartPriceRepository
 
@@ -249,24 +264,23 @@ async def create_supplier_invoice_from_ocr(
     number: str,
     total_ht: int,
     total_ttc: int,
+    supplier_id: Optional[int] = None,
+    purchase_order_id: Optional[int] = None,
+    invoice_type: str = "parts",
     lines: Optional[list[dict]] = None,
     received_at: Optional[datetime] = None,
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
     created_by: Optional[int] = None,
 ) -> SupplierInvoice:
-    """Create a standalone draft supplier invoice from OCR data.
-
-    No purchase order / supplier is linked yet (so no 3-way match runs); the
-    operator attaches them and runs matching later. The record is immediately
-    visible in the supplier-invoices list.
-    """
+    """Create a standalone draft supplier invoice from OCR data."""
     logger.info("create_supplier_invoice_from_ocr_start", number=number, garage_id=garage_id)
     si = await SupplierInvoiceRepository.create(
         db,
         garage_id=garage_id,
-        supplier_id=None,
-        purchase_order_id=None,
+        supplier_id=supplier_id,
+        purchase_order_id=purchase_order_id,
+        invoice_type=invoice_type,
         number=number or "(sans numéro)",
         lines=lines or [],
         total_ht=total_ht,

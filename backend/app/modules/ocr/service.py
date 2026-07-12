@@ -35,6 +35,7 @@ logger = get_logger("ocr.service")
 OCR_TRIGGER_CATEGORIES = {
     DocumentCategory.registration_card,
     DocumentCategory.id_doc,
+    DocumentCategory.supplier_delivery_note,
 }
 
 # Per-category structured-field extractor. Categories not listed fall back to
@@ -44,6 +45,8 @@ _EXTRACTORS = {
     DocumentCategory.id_doc: extractors.extract_national_id,
     DocumentCategory.invoice: extractors.extract_invoice,
     DocumentCategory.supplier_invoice: extractors.extract_supplier_invoice,
+    DocumentCategory.service_invoice: extractors.extract_service_invoice,
+    DocumentCategory.supplier_delivery_note: extractors.extract_bon_de_livraison,
 }
 
 
@@ -322,6 +325,37 @@ def _build_invoice_prefill(fields: dict[str, Any], party_field: str) -> "Invoice
     )
 
 
+def _si_lines_from_prefill(prefill: "InvoicePrefill") -> list[dict]:
+    """Convert OCR-extracted suggested lines to standalone SI line dicts (no PO ref)."""
+    lines = []
+    for il in (prefill.suggested_lines or []):
+        try:
+            qty = max(1, int(float((il.quantity or "1").replace(",", ".")) or 1))
+        except (TypeError, ValueError):
+            qty = 1
+        try:
+            raw = (il.unit_price or "").replace(",", ".").strip()
+            uph = max(0, int(round(float(raw) * 100))) if raw else 0
+        except (TypeError, ValueError):
+            uph = 0
+        lth = qty * uph
+        lttc = round(lth * 1.2)
+        lines.append({
+            "po_line_id": None,
+            "description": il.description or "",
+            "quantity": qty,
+            "unit_price_ht": uph,
+            "vat_rate": 20.0,
+            "line_total_ht": lth,
+            "line_total_ttc": lttc,
+            "match_status": "ok",
+            "po_quantity_ordered": 0,
+            "po_quantity_received": 0,
+            "po_unit_price_ht": uph,
+        })
+    return lines
+
+
 async def ingest_extraction(
     db: AsyncSession,
     *,
@@ -351,10 +385,8 @@ async def ingest_extraction(
 
     if category == DocumentCategory.supplier_invoice:
         from datetime import date as _date
-
-        from app.modules.supplier_invoice.service import (
-            create_supplier_invoice_from_ocr,
-        )
+        from app.modules.supplier_invoice.service import create_supplier_invoice_from_ocr
+        from app.modules.documents.models import OwnerEntityType
 
         prefill = _build_invoice_prefill(merged, "fournisseur")
         due = None
@@ -363,23 +395,249 @@ async def ingest_extraction(
                 due = _date.fromisoformat(prefill.due_date)
             except ValueError:
                 due = None
+        si_lines = _si_lines_from_prefill(prefill)
+
+        # --- Resolve supplier by name from confirmed fields ---
+        supplier_id: int | None = None
+        if prefill.party:
+            from app.modules.supplier.models import Supplier as SupplierModel
+            from sqlalchemy import select as _sa_sel, func as _sa_func
+            sup_res = await db.execute(
+                _sa_sel(SupplierModel).where(
+                    SupplierModel.garage_id == document.garage_id,
+                    _sa_func.lower(SupplierModel.name) == prefill.party.lower().strip(),
+                    SupplierModel.deleted_at.is_(None),
+                )
+            )
+            sup = sup_res.scalar_one_or_none()
+            if sup:
+                supplier_id = sup.id
+
+        # --- If document is filed under a PO, link invoice + auto-receive ---
+        po_db_id: int | None = None
+        if (
+            document is not None
+            and document.owner_entity_type == OwnerEntityType.purchase_order.value
+            and document.owner_entity_id
+        ):
+            from app.modules.purchase_order.models import PurchaseOrder
+            from app.modules.purchase_order.service import receive_po
+            from app.modules.parts.repository import PartRepository
+            from sqlalchemy import select as _sa_sel2
+
+            po_res = await db.execute(
+                _sa_sel2(PurchaseOrder).where(
+                    PurchaseOrder.id == document.owner_entity_id,
+                    PurchaseOrder.garage_id == document.garage_id,
+                    PurchaseOrder.deleted_at.is_(None),
+                )
+            )
+            po = po_res.scalar_one_or_none()
+            if po:
+                po_db_id = po.id
+                # Inherit supplier from PO if not already resolved.
+                if not supplier_id:
+                    supplier_id = po.supplier_id
+
+                # For "Autre" PO lines (no part_id), find or create a catalogue
+                # part so the reception can proceed.
+                for po_line in po.lines:
+                    if po_line.part_id is not None:
+                        continue
+                    label = (po_line.label or "").strip()
+                    if not label:
+                        continue
+                    # Search inventory by name (case-insensitive).
+                    from app.modules.parts.models import Part as PartModel
+                    from sqlalchemy import func as _sa_func2
+                    p_res = await db.execute(
+                        _sa_sel2(PartModel).where(
+                            PartModel.garage_id == document.garage_id,
+                            _sa_func2.lower(PartModel.name) == label.lower(),
+                            PartModel.deleted_at.is_(None),
+                        )
+                    )
+                    part = p_res.scalar_one_or_none()
+                    if not part:
+                        # Auto-create a minimal catalogue part from the label.
+                        import uuid as _uuid
+                        part = PartModel(
+                            public_id=_uuid.uuid4(),
+                            garage_id=document.garage_id,
+                            sku_code=label[:50].upper().replace(" ", "_"),
+                            name=label,
+                            unit_of_measure="unité",
+                            purchase_price_minor=0,
+                            selling_price_minor=0,
+                        )
+                        db.add(part)
+                        await db.flush()
+                    po_line.part_id = part.id
+                await db.flush()
+
+                # Auto-receive the PO — the invoice acts as the delivery note.
+                recv_lines = [
+                    {"line_id": ln.id, "quantity_received": ln.quantity_ordered}
+                    for ln in po.lines
+                    if ln.quantity_ordered > ln.quantity_received
+                ]
+                if recv_lines:
+                    try:
+                        po = await receive_po(
+                            db,
+                            document.garage_id,
+                            str(po.public_id),
+                            po.version,
+                            recv_lines,
+                            reviewer_id,
+                        )
+                        logger.info(
+                            "supplier_invoice_ocr_auto_received_po",
+                            po_public_id=str(po.public_id),
+                            garage_id=document.garage_id,
+                        )
+                    except Exception as exc:
+                        # Auto-reception is best-effort; don't block invoice creation.
+                        logger.warning(
+                            "supplier_invoice_ocr_auto_receive_failed",
+                            error=str(exc),
+                            garage_id=document.garage_id,
+                        )
+
         si = await create_supplier_invoice_from_ocr(
             db,
             garage_id=document.garage_id,
             number=prefill.number or "(sans numéro)",
             total_ht=prefill.total_ht_cents or 0,
             total_ttc=prefill.total_ttc_cents or 0,
+            supplier_id=supplier_id,
+            purchase_order_id=po_db_id,
+            lines=si_lines if si_lines else None,
             due_date=due,
             notes="Importé depuis l'OCR",
             created_by=reviewer_id,
         )
         # get_db does not auto-commit; persist the new invoice explicitly.
         await db.commit()
+        # Store the created SI public_id in structured_fields so the OCR review
+        # page can load live SI lines on future revisits instead of the OCR snapshot.
+        linked_fields = {**extraction.structured_fields, "__linked_si_id__": str(si.public_id)}
+        from app.modules.ocr import repository as _ocr_repo
+        from app.modules.ocr.models import OcrStatus as _OcrStatus
+        await _ocr_repo.update_status(
+            db,
+            extraction_id=extraction.id,
+            status=_OcrStatus.completed,
+            structured_fields=linked_fields,
+        )
+        await db.commit()
         return IngestionResult(
             target="supplier_invoice",
             prefill=prefill,
             created_id=str(si.public_id),
         )
+
+    if category == DocumentCategory.service_invoice:
+        from datetime import date as _date2
+        from app.modules.supplier_invoice.service import create_supplier_invoice_from_ocr as _create_si
+
+        prefill = _build_invoice_prefill(merged, "fournisseur")
+        due = None
+        if prefill.due_date:
+            try:
+                due = _date2.fromisoformat(prefill.due_date)
+            except ValueError:
+                due = None
+        si_lines = _si_lines_from_prefill(prefill)
+
+        # Resolve supplier by name — look up or create if document is linked to a supplier.
+        supplier_id = None
+        if prefill.party:
+            from app.modules.supplier.models import Supplier as _SupModel
+            from sqlalchemy import select as _sel3, func as _func3
+            sup_res = await db.execute(
+                _sel3(_SupModel).where(
+                    _SupModel.garage_id == document.garage_id,
+                    _func3.lower(_SupModel.name) == prefill.party.lower().strip(),
+                    _SupModel.deleted_at.is_(None),
+                )
+            )
+            sup = sup_res.scalar_one_or_none()
+            if sup:
+                supplier_id = sup.id
+
+        # If document is filed under a supplier, inherit that link.
+        if not supplier_id and document.owner_entity_type == OwnerEntityType.supplier.value and document.owner_entity_id:
+            supplier_id = document.owner_entity_id
+
+        si = await _create_si(
+            db,
+            garage_id=document.garage_id,
+            number=prefill.number or "(sans numéro)",
+            total_ht=prefill.total_ht_cents or 0,
+            total_ttc=prefill.total_ttc_cents or 0,
+            supplier_id=supplier_id,
+            purchase_order_id=None,       # service invoices are never PO-linked
+            invoice_type="services",
+            lines=si_lines if si_lines else None,
+            due_date=due,
+            notes="Facture de service — importée depuis l'OCR",
+            created_by=reviewer_id,
+        )
+        await db.commit()
+        logger.info(
+            "service_invoice_created_from_ocr",
+            si_public_id=str(si.public_id),
+            garage_id=document.garage_id,
+        )
+
+        # Enrich the linked supplier with email / phone extracted from the invoice
+        # if those fields are currently blank (safe — only fills empty columns).
+        if supplier_id:
+            from app.modules.supplier.models import Supplier as _SupEnrich
+            from sqlalchemy import select as _sel_enrich
+            enrich_res = await db.execute(
+                _sel_enrich(_SupEnrich).where(_SupEnrich.id == supplier_id)
+            )
+            sup_enrich = enrich_res.scalar_one_or_none()
+            if sup_enrich:
+                changed = False
+                ocr_email = merged.get("email", (None,))[0]
+                ocr_phone = merged.get("telephone", (None,))[0]
+                if ocr_email and not sup_enrich.email:
+                    sup_enrich.email = ocr_email
+                    changed = True
+                if ocr_phone and not sup_enrich.phone:
+                    sup_enrich.phone = ocr_phone
+                    changed = True
+                if changed:
+                    await db.commit()
+                    logger.info(
+                        "supplier_contact_enriched_from_service_invoice",
+                        supplier_id=supplier_id,
+                        email=ocr_email,
+                        phone=ocr_phone,
+                    )
+
+        # Store the created SI public_id in structured_fields so the OCR review
+        # page can load live SI lines on future revisits instead of the OCR snapshot.
+        linked_fields = {**extraction.structured_fields, "__linked_si_id__": str(si.public_id)}
+        from app.modules.ocr import repository as _ocr_repo2
+        from app.modules.ocr.models import OcrStatus as _OcrStatus2
+        await _ocr_repo2.update_status(
+            db,
+            extraction_id=extraction.id,
+            status=_OcrStatus2.completed,
+            structured_fields=linked_fields,
+        )
+        await db.commit()
+
+        return IngestionResult(
+            target="supplier_invoice",   # reuses the supplier_invoice target → navigates to services page
+            prefill=prefill,
+            created_id=str(si.public_id),
+        )
+
     if category == DocumentCategory.invoice:
         from app.modules.invoice.service import create_invoice_from_ocr
 
@@ -411,6 +669,7 @@ async def ocr_region(
     *,
     extraction_public_id: uuid.UUID,
     box: tuple[int, int, int, int],
+    page: int = 0,
 ) -> str:
     """Run OCR on a sub-region of the extraction's source document."""
     extraction = await ocr_repo.get_by_public_id(db, public_id=extraction_public_id)
@@ -424,7 +683,7 @@ async def ocr_region(
         bucket=cfg.s3_bucket_documents, key=document.storage_key
     )
     engine = get_ocr_engine()
-    return await engine.run_ocr_region(data, box)
+    return await engine.run_ocr_region(data, box, max(0, page))
 
 
 async def get_page_image(

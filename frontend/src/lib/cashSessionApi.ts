@@ -9,6 +9,19 @@ export interface PaymentMethodTally {
   total_minor: number
 }
 
+export interface SessionPaymentOut {
+  id: number
+  paid_at: string
+  amount_minor: number
+  payment_method: PaymentMethod
+  reference: string | null
+  notes: string | null
+  invoice_id: number
+  invoice_number: string | null
+  customer_name: string | null
+  created_by_name: string | null
+}
+
 export interface ZReportData {
   session_id: number
   garage_id: number
@@ -87,5 +100,9 @@ export const cashSessionApi = {
 
   getZReportPdfUrl(sessionId: number): string {
     return `/cash-sessions/${sessionId}/z-report/pdf`
+  },
+
+  listPayments(sessionId: number): Promise<SessionPaymentOut[]> {
+    return apiClient.get(`/cash-sessions/${sessionId}/payments`).then(r => r.data)
   },
 }

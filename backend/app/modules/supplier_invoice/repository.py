@@ -36,6 +36,7 @@ class SupplierInvoiceRepository:
         db: AsyncSession,
         garage_id: int,
         status: Optional[SupplierInvoiceStatus] = None,
+        invoice_type: Optional[str] = None,
         supplier_id: Optional[int] = None,
         po_id: Optional[int] = None,
         search: Optional[str] = None,
@@ -48,6 +49,8 @@ class SupplierInvoiceRepository:
             base = base.where(SupplierInvoice.deleted_at.is_(None))
         if status is not None:
             base = base.where(SupplierInvoice.status == status.value)
+        if invoice_type is not None:
+            base = base.where(SupplierInvoice.invoice_type == invoice_type)
         if supplier_id is not None:
             base = base.where(SupplierInvoice.supplier_id == supplier_id)
         if po_id is not None:
@@ -80,12 +83,14 @@ class SupplierInvoiceRepository:
         due_date: Optional[object],
         notes: Optional[str],
         created_by: Optional[int],
+        invoice_type: str = "parts",
     ) -> SupplierInvoice:
         si = SupplierInvoice(
             garage_id=garage_id,
             supplier_id=supplier_id,
             purchase_order_id=purchase_order_id,
             number=number,
+            invoice_type=invoice_type,
             lines=lines,
             total_ht=total_ht,
             total_ttc=total_ttc,

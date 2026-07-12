@@ -180,3 +180,38 @@ async def delete_document(
             detail=str(exc),
         ) from exc
 
+
+@router.get(
+    "/{document_id}/owner-supplier",
+    dependencies=[require_permission("document.read")],
+    summary="Resolve the supplier linked as owner of a document (service_invoice flow)",
+)
+async def get_document_owner_supplier(
+    document_id: uuid.UUID,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the supplier name when the document is filed under a supplier entity."""
+    from sqlalchemy import select as sa_select
+    from app.modules.supplier.models import Supplier
+    from app.modules.documents import repository as doc_repo
+
+    doc = await doc_repo.get_by_public_id(db, public_id=document_id, garage_id=user.garage_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    if doc.owner_entity_type != OwnerEntityType.supplier or not doc.owner_entity_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document is not filed under a supplier")
+    sup_res = await db.execute(
+        sa_select(Supplier).where(
+            Supplier.id == doc.owner_entity_id,
+            Supplier.garage_id == user.garage_id,
+        )
+    )
+    sup = sup_res.scalar_one_or_none()
+    if sup is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    return {
+        "supplier_id": str(sup.public_id),
+        "supplier_int_id": sup.id,
+        "supplier_name": sup.name,
+    }

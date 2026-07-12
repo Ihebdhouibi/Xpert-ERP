@@ -164,6 +164,12 @@ export const navSections: NavSection[] = [
         permission: 'supplier_invoice.read',
       },
       {
+        label: 'Services externes',
+        path: '/supplier-services',
+        icon: ReceiptLongRoundedIcon,
+        permission: 'supplier_invoice.read',
+      },
+      {
         label: 'Bons de retour',
         path: '/bon-retour',
         icon: AssignmentReturnRoundedIcon,

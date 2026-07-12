@@ -11,6 +11,7 @@ export type DocumentCategory =
   | 'repair_attachment'
   | 'invoice'
   | 'supplier_invoice'
+  | 'supplier_delivery_note'
   | 'generic'
 
 export type OwnerEntityType =
@@ -19,6 +20,8 @@ export type OwnerEntityType =
   | 'repair_order'
   | 'invoice'
   | 'supplier_invoice'
+  | 'supplier'
+  | 'purchase_order'
   | 'generic'
 
 export interface DocumentOut {
@@ -91,5 +94,9 @@ export const documentsApi = {
 
   delete(id: string): Promise<void> {
     return apiClient.delete(`/documents/${id}`).then(() => undefined)
+  },
+
+  getOwnerSupplier(documentPublicId: string): Promise<{ supplier_id: string; supplier_int_id: number; supplier_name: string }> {
+    return apiClient.get(`/documents/${documentPublicId}/owner-supplier`).then((r) => r.data)
   },
 }

@@ -4,7 +4,6 @@ Xpert-ERP FastAPI application factory and lifespan.
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,15 +17,9 @@ from app.core.redis import close_redis
 settings = get_settings()
 _app_logger = get_logger("app")
 
-# Resolve log directory relative to the project root (two levels up from app/)
-# so logs always land in <project-root>/logs/ regardless of the CWD when
-# uvicorn is launched.
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_LOG_DIR = str(
-    Path(settings.log_dir)
-    if Path(settings.log_dir).is_absolute()
-    else _PROJECT_ROOT / settings.log_dir
-)
+# Log directory is resolved by logging.py relative to the repo root.
+# Pass the raw settings value; configure_logging calls resolve_log_dir().
+_LOG_DIR = settings.log_dir
 
 
 @asynccontextmanager
@@ -150,6 +143,9 @@ def create_app() -> FastAPI:
     from app.modules.credit_note.router import router as credit_note_router, refund_router
     from app.modules.supplier.router import router as supplier_router
     from app.modules.purchase_order.router import router as purchase_order_router
+    from app.modules.supplier_delivery_note.router import (
+        router as supplier_delivery_note_router,
+    )
     from app.modules.supplier_invoice.router import router as supplier_invoice_router
     from app.modules.notification.router import router as notification_router
     from app.modules.notification.inbox_router import router as notification_inbox_router
@@ -185,6 +181,7 @@ def create_app() -> FastAPI:
     app.include_router(refund_router, prefix="/api/v1")
     app.include_router(supplier_router, prefix="/api/v1")
     app.include_router(purchase_order_router, prefix="/api/v1")
+    app.include_router(supplier_delivery_note_router, prefix="/api/v1")
     app.include_router(supplier_invoice_router, prefix="/api/v1")
     app.include_router(notification_router, prefix="/api/v1")
     app.include_router(notification_inbox_router, prefix="/api/v1")

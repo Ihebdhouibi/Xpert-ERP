@@ -23,6 +23,7 @@ export interface SupplierInvoice {
   supplier_name: string | null
   purchase_order_id: number
   number: string
+  invoice_type: 'parts' | 'services'
   status: SIStatus
   lines: SILine[]
   total_ht: number
@@ -119,6 +120,7 @@ export const MATCH_STATUS_LABELS: Record<SIMatchStatus, string> = {
 export const supplierInvoiceApi = {
   list(params?: {
     status?: SIStatus
+    invoice_type?: 'parts' | 'services'
     search?: string
     page?: number
     page_size?: number

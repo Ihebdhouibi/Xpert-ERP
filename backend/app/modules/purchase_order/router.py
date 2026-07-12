@@ -37,13 +37,18 @@ logger = get_logger("purchase_order.router")
 
 
 async def _enrich_part_names(db: AsyncSession, summary: "POSummary", po: Any) -> None:
-    part_ids = list({line.part_id for line in po.lines})
-    if not part_ids:
-        return
-    parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
-    parts_map = {p.id: p.name for p in parts_res.scalars()}
+    part_ids = [line.part_id for line in po.lines if line.part_id is not None]
+    parts_map: dict[int, str] = {}
+    if part_ids:
+        parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
+        parts_map = {p.id: p.name for p in parts_res.scalars()}
     for line_resp, line_orm in zip(summary.lines, po.lines):
-        line_resp.part_name = parts_map.get(line_orm.part_id)
+        # "Autre" lines have no part_id — fall back to the free-text label.
+        line_resp.part_name = (
+            parts_map.get(line_orm.part_id)
+            if line_orm.part_id is not None
+            else line_orm.label
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -52,9 +57,22 @@ async def _enrich_part_names(db: AsyncSession, summary: "POSummary", po: Any) ->
 
 
 class POLineInput(BaseModel):
-    part_public_id: str
+    # Either a catalogue part (part_public_id) OR a free-text label for an
+    # "Autre" (uncatalogued) line.  Both label and unit_price_ht are optional
+    # when the part details are not yet known at order time — they will be
+    # backfilled from the BL OCR data on reception.
+    part_public_id: Optional[str] = None
+    label: Optional[str] = None
     quantity_ordered: int = Field(..., gt=0)
-    unit_price_ht: int = Field(..., ge=0)
+    unit_price_ht: int = Field(0, ge=0)
+
+    @model_validator(mode="after")
+    def _need_part_or_autre(self) -> "POLineInput":
+        if not self.part_public_id and self.label is None:
+            # Treat a fully-empty line as an "Autre" with no label yet.
+            # The label will be filled from BL data on reception.
+            self.label = ""
+        return self
 
 
 class POCreateRequest(BaseModel):
@@ -93,7 +111,8 @@ class POLineResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    part_id: int
+    part_id: Optional[int] = None
+    label: Optional[str] = None
     part_name: Optional[str] = None
     quantity_ordered: int
     unit_price_ht: int
@@ -106,6 +125,9 @@ class POSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    # Internal numeric id — needed when a document is filed under a PO via the
+    # GED owner pointer (document.owner_entity_id is an integer).
+    int_id: int
     supplier_id: int
     supplier_name: Optional[str] = None
     supplier_public_id: Optional[str] = None
@@ -123,6 +145,7 @@ class POSummary(BaseModel):
     @classmethod
     def _remap(cls, data: Any) -> Any:
         if hasattr(data, "public_id"):
+            data.__dict__["int_id"] = data.id  # capture before id is overwritten
             data.__dict__["id"] = str(data.public_id)
         return data
 
@@ -178,7 +201,9 @@ async def list_purchase_orders(
             suppliers_map[s.id] = s.name
             suppliers_public_id_map[s.id] = str(s.public_id)
 
-    all_part_ids = list({line.part_id for po in items for line in po.lines})
+    all_part_ids = list(
+        {line.part_id for po in items for line in po.lines if line.part_id is not None}
+    )
     parts_map: dict[int, str] = {}
     if all_part_ids:
         parts_res = await db.execute(select(Part).where(Part.id.in_(all_part_ids)))
@@ -190,7 +215,11 @@ async def list_purchase_orders(
         s.supplier_name = suppliers_map.get(po.supplier_id)
         s.supplier_public_id = suppliers_public_id_map.get(po.supplier_id)
         for line_resp, line_orm in zip(s.lines, po.lines):
-            line_resp.part_name = parts_map.get(line_orm.part_id)
+            line_resp.part_name = (
+                parts_map.get(line_orm.part_id)
+                if line_orm.part_id is not None
+                else line_orm.label
+            )
         summaries.append(s)
 
     return POListResponse(items=summaries, total=total, page=page, page_size=page_size)
@@ -249,7 +278,7 @@ async def get_purchase_order(
     supplier_res = await db.execute(select(Supplier).where(Supplier.id == po.supplier_id))
     supplier = supplier_res.scalar_one_or_none()
 
-    part_ids = list({line.part_id for line in po.lines})
+    part_ids = list({line.part_id for line in po.lines if line.part_id is not None})
     parts_map: dict[int, str] = {}
     if part_ids:
         parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
@@ -259,7 +288,11 @@ async def get_purchase_order(
     summary.supplier_name = supplier.name if supplier else None
     summary.supplier_public_id = str(supplier.public_id) if supplier else None
     for line_resp, line_orm in zip(summary.lines, po.lines):
-        line_resp.part_name = parts_map.get(line_orm.part_id)
+        line_resp.part_name = (
+            parts_map.get(line_orm.part_id)
+            if line_orm.part_id is not None
+            else line_orm.label
+        )
     return summary
 
 

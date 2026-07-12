@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -27,7 +29,9 @@ import {
   Typography,
   Paper,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import DownloadIcon from '@mui/icons-material/Download'
 import PageviewIcon from '@mui/icons-material/Pageview'
 import SearchIcon from '@mui/icons-material/Search'
@@ -35,27 +39,61 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import type { DocumentCategory, DocumentOut, OwnerEntityType } from '../../lib/documentsApi'
 import { documentsApi } from '../../lib/documentsApi'
 import { ocrApi } from '../../lib/ocrApi'
+import {
+  purchaseOrderApi,
+  PurchaseOrder,
+  STATUS_LABELS,
+} from '../../lib/purchaseOrderApi'
+import { vehiclesApi, VehicleOut } from '../../lib/vehiclesApi'
+import { customerApi, CustomerSummary } from '../../lib/customerApi'
+import { supplierApi, Supplier } from '../../lib/supplierApi'
+import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 
+// Complete labels for DISPLAY — covers every enum value (including legacy ones
+// no longer offered in the dropdowns) so existing documents always render a
+// proper French label.
+const CATEGORY_LABELS: Record<DocumentCategory, string> = {
+  registration_card: 'Carte grise',
+  supplier_invoice: 'Facture fournisseur',
+  supplier_delivery_note: 'Bon de livraison',
+  service_invoice: 'Facture service',
+  invoice: 'Facture',
+  id_doc: "Pièce d'identité",
+  insurance: 'Assurance',
+  accident_photo: 'Photo accident',
+  repair_attachment: 'Annexe OR',
+  generic: 'Générique',
+}
+
+const OWNER_LABELS: Record<OwnerEntityType, string> = {
+  vehicle: 'Véhicule',
+  supplier: 'Fournisseur',
+  purchase_order: 'Bon de commande',
+  supplier_invoice: 'Facture fournisseur',
+  customer: 'Client',
+  repair_order: 'Ordre de réparation',
+  invoice: 'Facture',
+  generic: 'Générique',
+}
+
+// Options OFFERED in the upload + filter dropdowns — scoped to the document
+// flows we currently handle (Carte grise, Facture fournisseur, Bon de livraison).
 const CATEGORIES: { value: DocumentCategory | ''; label: string }[] = [
   { value: '', label: 'Toutes les catégories' },
-  { value: 'registration_card', label: 'Carte grise' },
-  { value: 'id_doc', label: 'Pièce d\'identité' },
-  { value: 'insurance', label: 'Assurance' },
-  { value: 'accident_photo', label: 'Photo accident' },
-  { value: 'repair_attachment', label: 'Annexe OR' },
-  { value: 'invoice', label: 'Facture' },
-  { value: 'supplier_invoice', label: 'Facture fournisseur' },
-  { value: 'generic', label: 'Générique' },
+  { value: 'registration_card', label: CATEGORY_LABELS.registration_card },
+  { value: 'supplier_invoice', label: CATEGORY_LABELS.supplier_invoice },
+  { value: 'service_invoice', label: CATEGORY_LABELS.service_invoice },
+  { value: 'supplier_delivery_note', label: CATEGORY_LABELS.supplier_delivery_note },
+  { value: 'generic', label: CATEGORY_LABELS.generic },
 ]
 
 const OWNER_TYPES: { value: OwnerEntityType | ''; label: string }[] = [
   { value: '', label: 'Tous les types' },
-  { value: 'customer', label: 'Client' },
-  { value: 'vehicle', label: 'Véhicule' },
-  { value: 'repair_order', label: 'Ordre de réparation' },
-  { value: 'invoice', label: 'Facture' },
-  { value: 'supplier_invoice', label: 'Facture fournisseur' },
-  { value: 'generic', label: 'Générique' },
+  { value: 'vehicle', label: OWNER_LABELS.vehicle },
+  { value: 'supplier', label: OWNER_LABELS.supplier },
+  { value: 'purchase_order', label: OWNER_LABELS.purchase_order },
+  { value: 'supplier_invoice', label: OWNER_LABELS.supplier_invoice },
+  { value: 'generic', label: OWNER_LABELS.generic },
 ]
 
 function formatBytes(bytes: number): string {
@@ -65,7 +103,356 @@ function formatBytes(bytes: number): string {
 }
 
 function categoryLabel(cat: DocumentCategory): string {
-  return CATEGORIES.find((c) => c.value === cat)?.label ?? cat
+  return CATEGORY_LABELS[cat] ?? cat
+}
+
+function ownerLabel(owner: OwnerEntityType): string {
+  return OWNER_LABELS[owner] ?? owner
+}
+
+// ---------------------------------------------------------------------------
+// Purchase order picker (searchable + create-new)
+// ---------------------------------------------------------------------------
+interface PurchaseOrderPickerProps {
+  value: PurchaseOrder | null
+  onChange: (po: PurchaseOrder | null) => void
+}
+
+function PurchaseOrderPicker({ value, onChange }: PurchaseOrderPickerProps) {
+  const [inputValue, setInputValue] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [options, setOptions] = useState<PurchaseOrder[]>([])
+  const [fetching, setFetching] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+
+  // Debounce the typed search text.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(inputValue), 300)
+    return () => clearTimeout(t)
+  }, [inputValue])
+
+  useEffect(() => {
+    let cancelled = false
+    setFetching(true)
+    purchaseOrderApi
+      .list({ search: debounced || undefined, page_size: 20 })
+      .then((r) => { if (!cancelled) setOptions(r.items) })
+      .catch(() => { if (!cancelled) setOptions([]) })
+      .finally(() => { if (!cancelled) setFetching(false) })
+    return () => { cancelled = true }
+  }, [debounced])
+
+  const getLabel = (po: PurchaseOrder) =>
+    `${po.doc_number ?? 'Brouillon'} — ${po.supplier_name ?? ''} — ${STATUS_LABELS[po.status]}`
+
+  return (
+    <>
+      <Autocomplete
+        value={value}
+        onChange={(_, newValue) => onChange(newValue)}
+        inputValue={inputValue}
+        onInputChange={(_, v) => setInputValue(v)}
+        options={options}
+        getOptionLabel={getLabel}
+        isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+        loading={fetching}
+        size="small"
+        noOptionsText="Aucun bon de commande trouvé"
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Bon de commande *"
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {fetching ? <CircularProgress size={16} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.int_id}>
+            {getLabel(option)}
+          </Box>
+        )}
+      />
+      <Box>
+        <Button size="small" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+          Créer un nouveau bon de commande
+        </Button>
+      </Box>
+      <PurchaseOrderCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(po) => {
+          onChange(po)
+          setCreateOpen(false)
+        }}
+      />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Supplier picker for service invoice uploads
+// ---------------------------------------------------------------------------
+interface SupplierPickerProps {
+  value: Supplier | null
+  onChange: (s: Supplier | null) => void
+}
+
+// Sentinel object used as the "create new" option in the autocomplete list.
+const CREATE_SENTINEL = '__CREATE__'
+type SupplierOption = Supplier | typeof CREATE_SENTINEL
+
+function SupplierPicker({ value, onChange }: SupplierPickerProps) {
+  const [options, setOptions] = useState<Supplier[]>([])
+  const [inputValue, setInputValue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    supplierApi.list({ search: inputValue || undefined, page_size: 50, status: 'active' })
+      .then((r) => { if (!cancelled) setOptions(r?.items ?? []) })
+      .catch(() => { if (!cancelled) setOptions([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [inputValue])
+
+  // Show "create" sentinel when there is typed text and no exact match.
+  const trimmed = inputValue.trim()
+  const hasExactMatch = options.some((o) => o.name.toLowerCase() === trimmed.toLowerCase())
+  const displayOptions: SupplierOption[] = [
+    ...options,
+    ...(trimmed && !hasExactMatch ? [CREATE_SENTINEL as typeof CREATE_SENTINEL] : []),
+  ]
+
+  const handleChange = async (_: React.SyntheticEvent, v: SupplierOption | null) => {
+    if (v === CREATE_SENTINEL) {
+      setCreating(true)
+      try {
+        const newSupplier = await supplierApi.create({ name: trimmed, payment_terms_days: 30 })
+        setOptions((prev) => [newSupplier, ...prev])
+        onChange(newSupplier)
+        setInputValue(newSupplier.name)
+      } catch {
+        // leave picker unchanged — user can retry or type manually in OCR
+      } finally {
+        setCreating(false)
+      }
+    } else {
+      onChange(v as Supplier | null)
+    }
+  }
+
+  return (
+    <Autocomplete
+      value={value}
+      onChange={handleChange}
+      inputValue={inputValue}
+      onInputChange={(_, v) => setInputValue(v)}
+      options={displayOptions}
+      getOptionLabel={(o) => (o === CREATE_SENTINEL ? trimmed : (o as Supplier).name)}
+      isOptionEqualToValue={(a, b) => a !== CREATE_SENTINEL && b !== CREATE_SENTINEL && (a as Supplier).id === (b as Supplier).id}
+      loading={loading || creating}
+      size="small"
+      filterOptions={(x) => x}
+      noOptionsText="Aucun fournisseur trouvé"
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label="Fournisseur (optionnel)"
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {(loading || creating) ? <CircularProgress size={16} /> : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+      renderOption={(props, option) =>
+        option === CREATE_SENTINEL ? (
+          <Box component="li" {...props} key="__create__" sx={{ color: 'primary.main', fontStyle: 'italic' }}>
+            + Créer le fournisseur &laquo;{trimmed}&raquo;
+          </Box>
+        ) : (
+          <Box component="li" {...props} key={(option as Supplier).id}>{(option as Supplier).name}</Box>
+        )
+      }
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle picker for carte grise uploads (only vehicles without one)
+// ---------------------------------------------------------------------------
+interface VehicleRegistrationPickerProps {
+  value: VehicleOut | null
+  onChange: (v: VehicleOut | null) => void
+}
+
+function VehicleRegistrationPicker({ value, onChange }: VehicleRegistrationPickerProps) {
+  const [allVehicles, setAllVehicles] = useState<VehicleOut[]>([])
+  const [takenIds, setTakenIds] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null)
+  const [customers, setCustomers] = useState<CustomerSummary[]>([])
+  const [custSearch, setCustSearch] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  // inline create form state
+  const [newMake, setNewMake] = useState('')
+  const [newModel, setNewModel] = useState('')
+  const [newReg, setNewReg] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.all([
+      vehiclesApi.list({ status: 'active', page_size: 200 }),
+      documentsApi.list({ category: 'registration_card', owner_entity_type: 'vehicle', limit: 500 }),
+    ])
+      .then(([vRes, dRes]) => {
+        if (cancelled) return
+        const ids = new Set<number>(
+          (dRes?.items ?? []).map((d) => d.owner_entity_id).filter((id): id is number => id != null)
+        )
+        setTakenIds(ids)
+        setAllVehicles(vRes?.items ?? [])
+      })
+      .catch(() => { setAllVehicles([]); setTakenIds(new Set()) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Load customers for the client filter (debounced search).
+  useEffect(() => {
+    let cancelled = false
+    customerApi.list({ q: custSearch || undefined, page_size: 50 })
+      .then((r) => { if (!cancelled) setCustomers(r?.items ?? []) })
+      .catch(() => { if (!cancelled) setCustomers([]) })
+    return () => { cancelled = true }
+  }, [custSearch])
+
+  const available = (allVehicles ?? []).filter((v) => {
+    if (takenIds.has(v.id)) return false
+    if (selectedCustomer && v.customer_id !== selectedCustomer.int_id) return false
+    return true
+  })
+
+  const getLabel = (v: VehicleOut) =>
+    `${v.make} ${v.model}${v.registration ? ` — ${v.registration}` : ''}${v.year ? ` (${v.year})` : ''}`
+
+  const handleCreate = async () => {
+    if (!newMake.trim() || !newModel.trim()) return
+    setCreating(true)
+    try {
+      const created = await vehiclesApi.create({
+        make: newMake.trim(),
+        model: newModel.trim(),
+        registration: newReg.trim() || null,
+        // Link to the selected client so the vehicle appears on their profile.
+        customer_id: selectedCustomer?.int_id ?? null,
+      })
+      setAllVehicles((prev) => [created, ...prev])
+      onChange(created)
+      setCreateOpen(false)
+      setNewMake(''); setNewModel(''); setNewReg('')
+    } catch {
+      /* ignore */
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <>
+      {/* Client filter — narrows the vehicle list to one client's fleet */}
+      <Autocomplete
+        value={selectedCustomer}
+        onChange={(_, v) => { setSelectedCustomer(v); onChange(null) }}
+        inputValue={custSearch}
+        onInputChange={(_, v) => setCustSearch(v)}
+        options={customers ?? []}
+        getOptionLabel={(c) => (c ? (c.company_name || c.full_name) : '')}
+        isOptionEqualToValue={(a, b) => a.int_id === b.int_id}
+        size="small"
+        clearOnEscape
+        noOptionsText="Aucun client trouvé"
+        renderInput={(params) => <TextField {...params} label="Filtrer par client (optionnel)" />}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.int_id}>
+            {option.company_name || option.full_name}
+          </Box>
+        )}
+      />
+      {/* Vehicle autocomplete filtered by client + no existing CG */}
+      <Autocomplete
+        value={value}
+        onChange={(_, v) => onChange(v)}
+        options={available ?? []}
+        getOptionLabel={getLabel}
+        isOptionEqualToValue={(a, b) => a.id === b.id}
+        loading={loading}
+        size="small"
+        noOptionsText="Aucun véhicule sans carte grise"
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Véhicule *"
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {loading ? <CircularProgress size={16} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+        renderOption={(props, option) => (
+          <Box component="li" {...props} key={option.id}>{getLabel(option)}</Box>
+        )}
+      />
+      <Box>
+        <Button size="small" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+          Créer un nouveau véhicule
+        </Button>
+      </Box>
+      {createOpen && (
+        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
+          <Typography variant="caption" fontWeight={600} display="block" mb={1}>
+            Nouveau véhicule
+          </Typography>
+          <Stack spacing={1}>
+            <TextField size="small" label="Marque * (ex: Renault)" value={newMake} onChange={(e) => setNewMake(e.target.value)} />
+            <TextField size="small" label="Modèle * (ex: Clio 6)" value={newModel} onChange={(e) => setNewModel(e.target.value)} />
+            <TextField size="small" label="Immatriculation (optionnel)" value={newReg} onChange={(e) => setNewReg(e.target.value)} />
+            <Stack direction="row" spacing={1}>
+              <Button size="small" onClick={() => setCreateOpen(false)}>Annuler</Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={!newMake.trim() || !newModel.trim() || creating}
+                onClick={handleCreate}
+              >
+                {creating ? <CircularProgress size={16} /> : 'Créer'}
+              </Button>
+            </Stack>
+          </Stack>
+        </Box>
+      )}
+    </>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -82,20 +469,37 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
   const [category, setCategory] = useState<DocumentCategory>('generic')
   const [ownerType, setOwnerType] = useState<OwnerEntityType>('generic')
   const [ownerId, setOwnerId] = useState('')
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleOut | null>(null)
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const isRegistrationCard = category === 'registration_card'
+  const isServiceInvoice = category === 'service_invoice'
+  const isPurchaseOrder = ownerType === 'purchase_order'
 
   const handleUpload = async () => {
     if (!file) return
     setLoading(true)
     setError('')
     try {
+      const effectiveOwnerType: OwnerEntityType = isRegistrationCard
+        ? 'vehicle'
+        : isServiceInvoice
+        ? (selectedSupplier ? 'supplier' : 'generic')
+        : ownerType
+      const effectiveOwnerId = isRegistrationCard
+        ? (selectedVehicle ? selectedVehicle.id : undefined)
+        : isServiceInvoice
+        ? (selectedSupplier ? selectedSupplier.int_id : undefined)
+        : (ownerId ? Number(ownerId) : undefined)
       const doc = await documentsApi.upload(
         file,
         category,
-        ownerType,
-        ownerId ? Number(ownerId) : undefined,
+        effectiveOwnerType,
+        effectiveOwnerId,
       )
       onUploaded(doc)
       onClose()
@@ -137,7 +541,26 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             <Select
               value={category}
               label="Catégorie"
-              onChange={(e) => setCategory(e.target.value as DocumentCategory)}
+              onChange={(e) => {
+                const next = e.target.value as DocumentCategory
+                setCategory(next)
+                // Carte grise is always linked to a vehicle — reset other pickers.
+                if (next === 'registration_card') {
+                  setOwnerType('vehicle')
+                  setOwnerId('')
+                  setSelectedPO(null)
+                  setSelectedVehicle(null)
+                  setSelectedSupplier(null)
+                }
+                // Service invoice is always linked to a supplier — reset other pickers.
+                if (next === 'service_invoice') {
+                  setOwnerType('supplier')
+                  setOwnerId('')
+                  setSelectedPO(null)
+                  setSelectedVehicle(null)
+                  setSelectedSupplier(null)
+                }
+              }}
             >
               {CATEGORIES.filter((c) => c.value !== '').map((c) => (
                 <MenuItem key={c.value} value={c.value}>
@@ -147,31 +570,61 @@ function UploadDialog({ open, onClose, onUploaded }: UploadDialogProps) {
             </Select>
           </FormControl>
 
-          <FormControl fullWidth size="small">
-            <InputLabel>Type propriétaire</InputLabel>
-            <Select
-              value={ownerType}
-              label="Type propriétaire"
-              onChange={(e) => setOwnerType(e.target.value as OwnerEntityType)}
-            >
-              {OWNER_TYPES.filter((o) => o.value !== '').map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {o.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {/* Carte grise: locked to vehicle, show dedicated picker */}
+          {isRegistrationCard ? (
+            <VehicleRegistrationPicker
+              value={selectedVehicle}
+              onChange={setSelectedVehicle}
+            />
+          ) : isServiceInvoice ? (
+            <SupplierPicker
+              value={selectedSupplier}
+              onChange={setSelectedSupplier}
+            />
+          ) : (
+            <>
+              <FormControl fullWidth size="small">
+                <InputLabel>Type propriétaire</InputLabel>
+                <Select
+                  value={ownerType}
+                  label="Type propriétaire"
+                  onChange={(e) => {
+                    const next = e.target.value as OwnerEntityType
+                    setOwnerType(next)
+                    setOwnerId('')
+                    setSelectedPO(null)
+                  }}
+                >
+                  {OWNER_TYPES.filter((o) => o.value !== '').map((o) => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          <TextField
-            label="ID propriétaire (optionnel)"
-            size="small"
-            value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
-          />
+              {isPurchaseOrder ? (
+                <PurchaseOrderPicker
+                  value={selectedPO}
+                  onChange={(po) => {
+                    setSelectedPO(po)
+                    setOwnerId(po ? String(po.int_id) : '')
+                  }}
+                />
+              ) : (
+                <TextField
+                  label="ID propriétaire (optionnel)"
+                  size="small"
+                  value={ownerId}
+                  onChange={(e) => setOwnerId(e.target.value)}
+                />
+              )}
+            </>
+          )}
 
           <Button
             variant="contained"
-            disabled={!file || loading}
+            disabled={!file || loading || (isPurchaseOrder && !selectedPO) || (isRegistrationCard && !selectedVehicle)}
             onClick={handleUpload}
           >
             {loading ? <CircularProgress size={20} /> : 'Télécharger'}
@@ -201,6 +654,45 @@ export function DocumentsPage() {
   const [deleting, setDeleting] = useState(false)
   const [enqueuingId, setEnqueuingId] = useState<string | null>(null)
 
+  // Batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchDeleting, setBatchDeleting] = useState(false)
+
+  const allSelected = docs.length > 0 && selectedIds.size === docs.length
+  const someSelected = selectedIds.size > 0 && !allSelected
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(docs.map((d) => d.id)))
+    }
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleBatchDelete = async () => {
+    setBatchDeleting(true)
+    try {
+      await Promise.all([...selectedIds].map((id) => documentsApi.delete(id)))
+      setDocs((prev) => prev.filter((d) => !selectedIds.has(d.id)))
+      setSelectedIds(new Set())
+    } catch {
+      alert('Certains documents n\'ont pas pu être supprimés.')
+    } finally {
+      setBatchDeleting(false)
+      setBatchDeleteOpen(false)
+    }
+  }
+
   const handleLaunchOcr = async (doc: DocumentOut) => {
     setEnqueuingId(doc.id)
     try {
@@ -218,6 +710,7 @@ export function DocumentsPage() {
   const fetchDocs = async () => {
     setLoading(true)
     setError('')
+    setSelectedIds(new Set())
     try {
       const res = await documentsApi.list({
         q: q || undefined,
@@ -270,13 +763,25 @@ export function DocumentsPage() {
     <Box p={3}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Documents</Typography>
-        <Button
-          variant="contained"
-          startIcon={<UploadFileIcon />}
-          onClick={() => setUploadOpen(true)}
-        >
-          Télécharger
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => setBatchDeleteOpen(true)}
+            >
+              Supprimer la sélection ({selectedIds.size})
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setUploadOpen(true)}
+          >
+            Télécharger
+          </Button>
+        </Stack>
       </Stack>
 
       {/* Filters */}
@@ -344,6 +849,14 @@ export function DocumentsPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    indeterminate={someSelected}
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    size="small"
+                  />
+                </TableCell>
                 <TableCell>Nom du fichier</TableCell>
                 <TableCell>Catégorie</TableCell>
                 <TableCell>Type</TableCell>
@@ -356,22 +869,47 @@ export function DocumentsPage() {
             <TableBody>
               {docs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={8} align="center">
                     Aucun document trouvé.
                   </TableCell>
                 </TableRow>
               )}
               {docs.map((doc) => (
-                <TableRow key={doc.id} hover>
+                <TableRow
+                  key={doc.id}
+                  hover
+                  selected={selectedIds.has(doc.id)}
+                  sx={{ cursor: 'pointer' }}
+                  onClick={(e) => {
+                    // Don't navigate when clicking the checkbox or action icons.
+                    const target = e.target as HTMLElement
+                    if (target.closest('input[type="checkbox"]') || target.closest('button')) return
+                    handleLaunchOcr(doc)
+                  }}
+                >
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      size="small"
+                      checked={selectedIds.has(doc.id)}
+                      onChange={() => toggleSelect(doc.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </TableCell>
                   <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <Tooltip title={doc.filename}>
-                      <span>{doc.filename}</span>
+                      <Typography
+                        variant="body2"
+                        component="span"
+                        sx={{ color: 'primary.main', fontWeight: 500 }}
+                      >
+                        {doc.filename}
+                      </Typography>
                     </Tooltip>
                   </TableCell>
                   <TableCell>
                     <Chip label={categoryLabel(doc.category)} size="small" variant="outlined" />
                   </TableCell>
-                  <TableCell>{doc.owner_entity_type}</TableCell>
+                  <TableCell>{ownerLabel(doc.owner_entity_type)}</TableCell>
                   <TableCell>{formatBytes(doc.size_bytes)}</TableCell>
                   <TableCell>{new Date(doc.uploaded_at).toLocaleDateString('fr-FR')}</TableCell>
                   <TableCell>
@@ -436,6 +974,29 @@ export function DocumentsPage() {
             </Button>
             <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}>
               {deleting ? <CircularProgress size={18} /> : 'Supprimer'}
+            </Button>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch delete confirm dialog */}
+      <Dialog open={batchDeleteOpen} onClose={() => setBatchDeleteOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirmer la suppression groupée</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Supprimer <strong>{selectedIds.size}</strong> document{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''} ? Cette action est irréversible.
+          </Typography>
+          <Stack direction="row" spacing={2} justifyContent="flex-end" mt={2}>
+            <Button onClick={() => setBatchDeleteOpen(false)} disabled={batchDeleting}>
+              Annuler
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleBatchDelete}
+              disabled={batchDeleting}
+            >
+              {batchDeleting ? <CircularProgress size={18} /> : `Supprimer ${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''}`}
             </Button>
           </Stack>
         </DialogContent>

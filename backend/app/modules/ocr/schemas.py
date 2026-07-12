@@ -55,11 +55,13 @@ class ConfirmFieldsRequest(BaseModel):
 
 
 class OcrRegionRequest(BaseModel):
-    """A rectangle (original-image pixel coords) to OCR on demand."""
+    """A rectangle (rendered-page pixel coords) to OCR on demand."""
     x1: int
     y1: int
     x2: int
     y2: int
+    # 0-based page index the rectangle was drawn on (multi-page PDFs).
+    page: int = 0
 
 
 class SuggestFieldRequest(BaseModel):

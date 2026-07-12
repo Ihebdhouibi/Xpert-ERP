@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -31,18 +32,18 @@ import CancelIcon from '@mui/icons-material/Cancel'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import ReceiptIcon from '@mui/icons-material/Receipt'
+import DocumentScannerIcon from '@mui/icons-material/DocumentScanner'
 import {
   purchaseOrderApi,
   PurchaseOrder,
   POStatus,
-  POCreatePayload,
   STATUS_LABELS,
   MATCH_FLAG_LABELS,
   POMatchFlag,
 } from '../../lib/purchaseOrderApi'
-import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { supplierInvoiceApi } from '../../lib/supplierInvoiceApi'
-import { partsApi } from '../../lib/partsApi'
+import { supplierDeliveryNoteApi, SupplierDeliveryNote } from '../../lib/supplierDeliveryNoteApi'
+import { PurchaseOrderCreateDialog } from '../../components/purchase-order/PurchaseOrderCreateDialog'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -65,202 +66,6 @@ function formatMoney(minor: number) {
 }
 
 // ---------------------------------------------------------------------------
-// CreateDialog
-// ---------------------------------------------------------------------------
-
-interface CreateDialogProps {
-  open: boolean
-  onClose: () => void
-  onCreated: (po: PurchaseOrder) => void
-}
-
-interface LineForm {
-  part_public_id: string
-  part_name: string
-  quantity_ordered: number
-  unit_price_ht: number
-}
-
-function CreateDialog({ open, onClose, onCreated }: CreateDialogProps) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [parts, setParts] = useState<{ id: string; name: string; sku_code: string }[]>([])
-  const [supplierPublicId, setSupplierPublicId] = useState('')
-  const [expectedDate, setExpectedDate] = useState('')
-  const [notes, setNotes] = useState('')
-  const [lines, setLines] = useState<LineForm[]>([
-    { part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 },
-  ])
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!open) return
-    supplierApi.list({ status: 'active', page_size: 100 }).then((r) => setSuppliers(r.items))
-    partsApi.list({ page_size: 200 }).then((r) => setParts(r.items)).catch(() => setError('Impossible de charger les pièces'))
-  }, [open])
-
-  const handleAddLine = () =>
-    setLines((l) => [...l, { part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 }])
-
-  const handleRemoveLine = (i: number) =>
-    setLines((l) => l.filter((_, idx) => idx !== i))
-
-  const updateLine = (i: number, field: keyof LineForm, value: string | number) =>
-    setLines((l) => l.map((ln, idx) => (idx === i ? { ...ln, [field]: value } : ln)))
-
-  const totalHt = lines.reduce((s, l) => s + l.quantity_ordered * l.unit_price_ht, 0)
-
-  const handleSubmit = async () => {
-    setError('')
-    if (!supplierPublicId) { setError('Veuillez sélectionner un fournisseur'); return }
-    if (lines.some((l) => !l.part_public_id)) { setError('Toutes les lignes doivent avoir une pièce'); return }
-
-    setSaving(true)
-    try {
-      const payload: POCreatePayload = {
-        supplier_public_id: supplierPublicId,
-        expected_delivery_date: expectedDate || undefined,
-        notes: notes || undefined,
-        lines: lines.map((l) => ({
-          part_public_id: l.part_public_id,
-          quantity_ordered: l.quantity_ordered,
-          unit_price_ht: Math.round(l.unit_price_ht * 100),
-        })),
-      }
-      const po = await purchaseOrderApi.create(payload)
-      onCreated(po)
-      setSupplierPublicId('')
-      setExpectedDate('')
-      setNotes('')
-      setLines([{ part_public_id: '', part_name: '', quantity_ordered: 1, unit_price_ht: 0 }])
-    } catch (e: unknown) {
-      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'Erreur lors de la création')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Nouveau bon de commande</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} mt={1}>
-          {error && <Alert severity="error">{error}</Alert>}
-
-          <FormControl fullWidth>
-            <InputLabel>Fournisseur *</InputLabel>
-            <Select
-              value={supplierPublicId}
-              label="Fournisseur *"
-              onChange={(e) => setSupplierPublicId(e.target.value)}
-            >
-              {suppliers.map((s) => (
-                <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <TextField
-            label="Date de livraison prévue"
-            type="date"
-            value={expectedDate}
-            onChange={(e) => setExpectedDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-
-          <TextField
-            label="Notes"
-            multiline
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-
-          <Typography variant="subtitle2" fontWeight={600}>Lignes</Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Pièce</TableCell>
-                <TableCell width={100}>Qté</TableCell>
-                <TableCell width={130}>Prix HT</TableCell>
-                <TableCell width={40} />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {lines.map((ln, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <Select
-                      size="small"
-                      fullWidth
-                      value={ln.part_public_id}
-                      onChange={(e) => updateLine(i, 'part_public_id', e.target.value)}
-                      displayEmpty
-                    >
-                      <MenuItem value="" disabled>Sélectionner…</MenuItem>
-                      {parts.map((p) => (
-                        <MenuItem key={p.id} value={p.id}>{p.name} ({p.sku_code})</MenuItem>
-                      ))}
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={ln.quantity_ordered}
-                      onChange={(e) => updateLine(i, 'quantity_ordered', parseInt(e.target.value) || 1)}
-                      inputProps={{ min: 1 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      size="small"
-                      type="number"
-                      value={ln.unit_price_ht || ''}
-                      onChange={(e) => {
-                        const raw = e.target.value
-                        if (raw === '') return
-                        const num = parseFloat(raw)
-                        if (!isNaN(num) && num >= 0) updateLine(i, 'unit_price_ht', num)
-                      }}
-                      onBlur={() => updateLine(i, 'unit_price_ht', Math.round(ln.unit_price_ht * 100) / 100)}
-                      inputProps={{ min: 0, step: 1 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {lines.length > 1 && (
-                      <IconButton size="small" onClick={() => handleRemoveLine(i)}>
-                        <CancelIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Box>
-            <Button size="small" startIcon={<AddIcon />} onClick={handleAddLine}>
-              Ajouter une ligne
-            </Button>
-          </Box>
-
-          <Typography variant="body2" fontWeight={600}>
-            Total HT : {totalHt.toFixed(2)} €
-          </Typography>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Annuler</Button>
-        <Button variant="contained" onClick={handleSubmit} disabled={saving}>
-          {saving ? <CircularProgress size={20} /> : 'Créer'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // ReceptionDialog
 // ---------------------------------------------------------------------------
 
@@ -272,6 +77,7 @@ interface ReceptionDialogProps {
 }
 
 function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps) {
+  const navigate = useNavigate()
   const [qtys, setQtys] = useState<Record<number, number>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -308,10 +114,25 @@ function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Réception — {po.doc_number}</DialogTitle>
+      <DialogTitle>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <span>Réception — {po.doc_number}</span>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<DocumentScannerIcon />}
+            onClick={() => { onClose(); navigate('/documents') }}
+          >
+            Scanner un BL via OCR
+          </Button>
+        </Stack>
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} mt={1}>
           {error && <Alert severity="error">{error}</Alert>}
+          <Typography variant="body2" color="text.secondary">
+            Saisie manuelle des quantités. Pour lier un bon de livraison scanné, utilisez le bouton ci-dessus.
+          </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -326,7 +147,7 @@ function ReceptionDialog({ open, po, onClose, onReceived }: ReceptionDialogProps
                 const remaining = l.quantity_ordered - l.quantity_received
                 return (
                   <TableRow key={l.id}>
-                    <TableCell>#{l.part_id}</TableCell>
+                    <TableCell>{l.part_name ?? l.label ?? `Ligne #${l.id}`}</TableCell>
                     <TableCell>{l.quantity_ordered}</TableCell>
                     <TableCell>{l.quantity_received}</TableCell>
                     <TableCell>
@@ -485,12 +306,14 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
   const [notes, setNotes] = useState('')
   const [linesForms, setLinesForms] = useState<SILineForm[]>([])
   const [formError, setFormError] = useState('')
+  const [linkedBls, setLinkedBls] = useState<SupplierDeliveryNote[]>([])
 
   useEffect(() => {
     if (po && open) {
       setDueDate('')
       setNotes('')
       setFormError('')
+      setLinkedBls([])
       setLinesForms(
         po.lines
           .filter((l) => l.quantity_received > 0)
@@ -501,6 +324,8 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
             unit_price_ht: l.unit_price_ht,
           }))
       )
+      // Load associated BLs for display
+      supplierDeliveryNoteApi.listByPo(po.id).then(setLinkedBls).catch(() => {})
     }
   }, [po, open])
 
@@ -561,6 +386,24 @@ function CreateSupplierInvoiceDialog({ open, po, onClose, onCreated }: CreateSID
             rows={2}
             fullWidth
           />
+          {linkedBls.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Bons de livraison liés ({linkedBls.length})
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {linkedBls.map((bl) => (
+                  <Chip
+                    key={bl.id}
+                    size="small"
+                    label={bl.bl_number ? `BL ${bl.bl_number}` : `BL du ${new Date(bl.created_at).toLocaleDateString('fr-FR')}`}
+                    color={bl.has_discrepancy ? 'warning' : 'success'}
+                    variant="outlined"
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
           <Typography variant="subtitle2">Lignes facturées</Typography>
           {linesForms.length === 0 ? (
             <Alert severity="warning">Aucune pièce reçue sur ce bon de commande.</Alert>
@@ -695,7 +538,7 @@ function PODetail({ po, onBack, onUpdated }: PODetailProps) {
         </Button>
         {canSend && (
           <Button variant="outlined" startIcon={<SendIcon />} onClick={handleSend} disabled={actioning}>
-            Envoyer au fournisseur
+            Confirmer la commande
           </Button>
         )}
         {canReceive && (
@@ -942,7 +785,7 @@ export function PurchaseOrderPage() {
         emptyDescription="Créez votre premier bon de commande."
       />
 
-      <CreateDialog
+      <PurchaseOrderCreateDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(po) => { setCreateOpen(false); setSelectedPO(po); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }}

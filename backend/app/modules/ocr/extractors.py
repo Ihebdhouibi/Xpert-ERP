@@ -39,6 +39,7 @@ _KW_PROPRIETAIRE = re.compile(r"propri[eé]taire|titulaire|nom", re.IGNORECASE)
 _KW_MARQUE = re.compile(r"\bmarque\b|\bD\.1\b", re.IGNORECASE)
 _KW_MODELE = re.compile(r"\bmod[eè]le\b|\bD\.3\b|\btype\b", re.IGNORECASE)
 _KW_DATE_MEC = re.compile(r"1[eè]re\s+immatriculation|mise\s+en\s+circulation|date\s+d.immatriculation|B\b", re.IGNORECASE)
+_KW_COULEUR = re.compile(r"\bcouleur\b|\bC\.2\b|\bcolor\b", re.IGNORECASE)
 
 
 def _best_line_after_keyword(lines, keyword_re: re.Pattern) -> Optional[tuple[str, float]]:
@@ -75,19 +76,26 @@ def extract_carte_grise(result: RawOcrResult) -> FieldMap:
             fields["vin"] = (m.group(1).upper(), line.confidence)
             break
 
-    # Date mise en circulation
-    for line in lines:
+    # Date mise en circulation (field B on French/Tunisian registration cards).
+    # OCR often splits the field code "B", the label "Date de 1ère immatriculation"
+    # and the value "05/01/1998" across separate lines. We enumerate with an index
+    # so we can look 1–2 lines ahead without re-scanning from the start (which was
+    # the old bug: re-scanning returned the label line, not the date).
+    for idx, line in enumerate(lines):
         if _KW_DATE_MEC.search(line.text):
+            # Try the same line first (e.g. "B  05/01/1998" all on one line).
             m = _RE_DATE.search(line.text)
             if m:
                 fields["date_mise_en_circulation"] = (m.group(1), line.confidence)
                 break
-            # value might be on the next line
-            result_next = _best_line_after_keyword(lines, _KW_DATE_MEC)
-            if result_next:
-                m2 = _RE_DATE.search(result_next[0])
-                if m2:
-                    fields["date_mise_en_circulation"] = (m2.group(1), result_next[1])
+            # Try the next 1–2 lines (label then value may be on separate lines).
+            for offset in range(1, 3):
+                if idx + offset < len(lines):
+                    nxt = lines[idx + offset]
+                    m2 = _RE_DATE.search(nxt.text)
+                    if m2:
+                        fields["date_mise_en_circulation"] = (m2.group(1), nxt.confidence)
+                        break
             break
 
     # Marque
@@ -104,6 +112,11 @@ def extract_carte_grise(result: RawOcrResult) -> FieldMap:
     after_prop = _best_line_after_keyword(lines, _KW_PROPRIETAIRE)
     if after_prop:
         fields["proprietaire"] = after_prop
+
+    # Couleur (field C.2 on French/Tunisian registration cards)
+    after_couleur = _best_line_after_keyword(lines, _KW_COULEUR)
+    if after_couleur:
+        fields["couleur"] = after_couleur
 
     return fields
 
@@ -186,6 +199,9 @@ _KW_TOTAL_HT = re.compile(
 )
 _KW_TOTAL_TTC = re.compile(r"total\s*t\.?t\.?c\.?|net\s*[àa]\s*payer|montant\s*[àa]\s*payer", re.IGNORECASE)
 _KW_TVA = re.compile(r"\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
+# The TVA *amount* label, excluding the "%T.V.A." rate column (whose value is the
+# rate, e.g. 20,00 — not the tax amount). A leading "%" disqualifies the cell.
+_KW_TVA_AMOUNT = re.compile(r"(?<!%)\bt\.?v\.?a\.?\b|taxe", re.IGNORECASE)
 _KW_FOURNISSEUR = re.compile(r"fournisseur|[ée]metteur|vendeur|raison\s*sociale", re.IGNORECASE)
 _KW_CLIENT = re.compile(r"\bclient\b|destinataire|factur[ée]\s*[àa]|adress[ée]\s*[àa]", re.IGNORECASE)
 
@@ -345,6 +361,66 @@ def _value_near_keyword(lines, keyword_re: re.Pattern, value_re: re.Pattern):
     return best
 
 
+def _amount_near_keyword(
+    lines, keyword_re: re.Pattern, band_y: Optional[float] = None, tol: float = 100
+):
+    """Layout-aware amount: the value physically nearest the label (below/right).
+
+    When ``band_y`` is given, only label cells whose vertical centre is within
+    ``tol`` of it are considered — this restricts matching to the totals band and
+    ignores same-named column headers higher up the page (e.g. a "Montant HT"
+    line-item header vs the grand "Total H.T." at the bottom).
+
+    Kept in the document's own format (comma decimals). Falls back to the flat
+    keyword-line scan when no spatial match is found — this is what makes totals
+    work on exploded-cell tables where the amount is never on the label's line.
+    """
+    def cy(box):
+        return (box[1] + box[3]) / 2
+
+    kw_lines = [ln for ln in lines if keyword_re.search(ln.text)]
+    if band_y is not None:
+        kw_lines = [
+            ln for ln in kw_lines if ln.box and abs(cy(ln.box) - band_y) <= tol
+        ]
+
+    # 1. Amount on the same line as the label.
+    for kw in kw_lines:
+        m = _RE_AMOUNT_NO_PCT.search(kw.text)
+        if m:
+            return _match_value(m), kw.confidence
+    # 2. Spatially nearest amount below or to the right of any label line.
+    best = None
+    best_score: Optional[float] = None
+    for kw in kw_lines:
+        if not kw.box:
+            continue
+        kx1, ky1, kx2, ky2 = kw.box
+        kcx, kcy = (kx1 + kx2) / 2, (ky1 + ky2) / 2
+        for cand in lines:
+            if cand is kw or not cand.box:
+                continue
+            m = _RE_AMOUNT_NO_PCT.search(cand.text)
+            if not m:
+                continue
+            cx1, cy1, cx2, cy2 = cand.box
+            x_overlap = min(kx2, cx2) - max(kx1, cx1)
+            y_overlap = min(ky2, cy2) - max(ky1, cy1)
+            score: Optional[float] = None
+            if cy1 >= ky2 - 4 and x_overlap > -8:            # value below the label
+                score = (cy1 - ky2) + abs((cx1 + cx2) / 2 - kcx)
+            elif cx1 >= kx2 - 4 and y_overlap > -4:           # value to the right
+                score = (cx1 - kx2) + abs((cy1 + cy2) / 2 - kcy)
+            if score is not None and (best_score is None or score < best_score):
+                best_score = score
+                best = (_match_value(m), cand.confidence)
+    if best:
+        return best
+    if band_y is None:
+        return _amount_on_keyword_line(lines, keyword_re)
+    return None
+
+
 def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, party_field: str) -> FieldMap:
     """Shared header extraction for customer and supplier invoices."""
     fields: FieldMap = {}
@@ -387,10 +463,43 @@ def _extract_invoice_common(result: RawOcrResult, party_keyword: re.Pattern, par
     if ttc:
         fields["total_ttc"] = ttc
 
+    # Fallback: derive TVA = TTC − HT when the keyword search found nothing.
+    # Invoices often place the TVA amount in a table column where the label
+    # ("TVA") and the value ("9.97") are on different OCR lines with no clean
+    # pairing, so the pattern-based search misses it.
+    if "tva" not in fields and "total_ttc" in fields and "total_ht" in fields:
+        try:
+            ttc_val = float(fields["total_ttc"][0])
+            ht_val = float(fields["total_ht"][0])
+            diff = round(ttc_val - ht_val, 2)
+            if diff > 0:
+                conf = round(min(fields["total_ttc"][1], fields["total_ht"][1]) * 0.95, 4)
+                fields["tva"] = (f"{diff:.2f}", conf)
+        except (TypeError, ValueError):
+            pass
+
     # Best-effort line items (JSON string, low confidence)
     items = _extract_line_items(lines)
     if items:
         fields["lignes"] = items
+
+    # Supplier contact info — first email / phone found in the upper half of the
+    # document (supplier header area, before the "to" block).
+    for line in lines:
+        if "email" not in fields:
+            m = _RE_EMAIL.search(line.text)
+            if m:
+                fields["email"] = (m.group(0), line.confidence)
+        if "telephone" not in fields:
+            m = _RE_PHONE.search(line.text)
+            if m:
+                # Strip label prefix that sometimes merges into the matched text
+                # (e.g. "Tel0491503437" from an OCR line "Tel: 0491503437").
+                phone_raw = m.group(0).strip()
+                phone_clean = re.sub(r"^(?:t[ée]l(?:[ée]phone)?|phone|mob)[.\s:]*", "", phone_raw, flags=re.IGNORECASE).strip()
+                fields["telephone"] = (phone_clean, line.confidence)
+        if "email" in fields and "telephone" in fields:
+            break
 
     return fields
 
@@ -405,6 +514,164 @@ def extract_supplier_invoice(result: RawOcrResult) -> FieldMap:
     return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")
 
 
+def extract_service_invoice(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a service invoice (facture de service).
+
+    Service invoices are like supplier invoices but for non-parts services
+    (repairs, audits, registrations, …). The same header fields apply; the
+    line items are free-text service descriptions rather than part codes.
+    """
+    return _extract_invoice_common(result, _KW_FOURNISSEUR, "fournisseur")
+
+
+# ---------------------------------------------------------------------------
+# Bon de livraison (supplier delivery note)
+# ---------------------------------------------------------------------------
+
+# BL number: a letter-prefixed code with >=3 digits (BL027543) or >=4 digits
+# (24639). The >=4-digit floor avoids matching 3-digit amounts like "120".
+_RE_BL_NUMBER = re.compile(r"\b([A-Z]{1,4}\d{3,}[A-Z0-9]*|\d{4,})\b", re.IGNORECASE)
+# The BL number is the value under "N° de la pièce". The degree sign is optional
+# because OCR frequently drops it ("N de la piece" / "Nde la piece").
+_KW_BL_NUMBER = re.compile(
+    r"bon\s*de\s*livraison|n[°ºo]?\s*de\s*la\s*pi[eè]ce|num[ée]ro|\bBL\b", re.IGNORECASE
+)
+_KW_DATE_BL = re.compile(r"date\s*(de\s*)?livraison|\bdate\b", re.IGNORECASE)
+_KW_REF_COMMANDE = re.compile(
+    r"r[ée]f[ée]rence|bon\s*de\s*commande|n[°ºo]\s*commande|\bcommande\b|\bref\b",
+    re.IGNORECASE,
+)
+_KW_IMMAT_BL = re.compile(r"immatriculation|immat", re.IGNORECASE)
+_RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# French/international phone — 10-digit local (0X XX XX XX XX) or +33 form, allowing spaces/dots/hyphens
+_RE_PHONE = re.compile(r"(?:\+33|0033|0)[1-9](?:[\s.\-]?\d{2}){4}")
+# Tolerant date: no word boundaries (OCR often glues the date to text/time, e.g.
+# "le26/06/202616:47"); prefer a 4-digit year, else a 2-digit year.
+_RE_DATE_LOOSE = re.compile(
+    r"(\d{1,2}[./\-]\d{1,2}[./\-]\d{4}|\d{1,2}[./\-]\d{1,2}[./\-]\d{2})"
+)
+# Our own garage / the delivery company — never the supplier on a received BL.
+_KW_OWN_PARTY = re.compile(r"garage\s*motors|al\s*delivery", re.IGNORECASE)
+_KW_BL_TITLE = re.compile(r"bon\s*de\s*livraison", re.IGNORECASE)
+
+
+def _guess_supplier_from_top(lines, top_n: int = 6) -> Optional[tuple[str, float]]:
+    """Heuristic: the issuer (supplier) is the letterhead near the top.
+
+    Skips our own garage / the delivery company, dates, the document title and
+    mostly-numeric (address/phone/SIREN) lines. Confidence is lowered — it is a
+    hint that the reviewer confirms (supplier HITL).
+    """
+    for line in lines[:top_n]:
+        t = line.text.strip()
+        if len(t) < 3:
+            continue
+        if _KW_OWN_PARTY.search(t) or _KW_BL_TITLE.search(t):
+            continue
+        if _RE_DATE_ANY.search(t):
+            continue
+        if sum(c.isdigit() for c in t) > len(t) / 2:
+            continue
+        if any(c.isalpha() for c in t):
+            return t, round(line.confidence * 0.7, 4)
+    return None
+
+
+def extract_bon_de_livraison(result: RawOcrResult) -> FieldMap:
+    """Extract structured fields from a supplier Bon de livraison.
+
+    Header fields are reasonably reliable; line items are a best-effort,
+    low-confidence hint (BL tables vary and OCR splits cells across lines).
+    """
+    fields: FieldMap = {}
+    lines = result.lines
+
+    # BL number — value near a "bon de livraison / n° / numéro" label, else a
+    # code-with-digit on such a line.
+    num = _value_near_keyword(lines, _KW_BL_NUMBER, _RE_BL_NUMBER)
+    if not num:
+        for line in lines:
+            if _KW_BL_NUMBER.search(line.text) and not _KW_EXCLUDE_NUM.search(line.text):
+                tok = _first_code_with_digit(line.text)
+                if tok:
+                    num = (tok, line.confidence)
+                    break
+    if num:
+        fields["numero_bl"] = num
+
+    # Delivery date — labelled, else the first date in the document. Uses the
+    # tolerant pattern so a date glued to text/time still matches.
+    d = _value_near_keyword(lines, _KW_DATE_BL, _RE_DATE_LOOSE)
+    if not d:
+        for line in lines:
+            m = _RE_DATE_LOOSE.search(line.text)
+            if m:
+                d = (m.group(1), line.confidence)
+                break
+    if d:
+        fields["date_bl"] = d
+
+    # Order reference, if the BL prints the PO/commande number.
+    ref = _value_near_keyword(lines, _KW_REF_COMMANDE, _RE_NUM_TOKEN)
+    if ref:
+        fields["reference_commande"] = ref
+
+    # Vehicle plate (parts ordered for a specific repair). _RE_IMMATRICULATION
+    # has two alternation groups, so read group(1) or group(2) explicitly.
+    for line in lines:
+        if not _KW_IMMAT_BL.search(line.text):
+            continue
+        m = _RE_IMMATRICULATION.search(line.text)
+        if not m:
+            after = _best_line_after_keyword(lines, _KW_IMMAT_BL)
+            m = _RE_IMMATRICULATION.search(after[0]) if after else None
+            conf = after[1] if after else line.confidence
+        else:
+            conf = line.confidence
+        if m:
+            val = (m.group(1) or m.group(2) or "").upper().replace(" ", "-")
+            if val:
+                fields["immatriculation"] = (val, conf)
+        break
+
+    # Supplier (issuer) — letterhead heuristic; confirmed via HITL on review.
+    fournisseur = _guess_supplier_from_top(lines)
+    if fournisseur:
+        fields["fournisseur"] = fournisseur
+
+    # Supplier email — first email on the document (associated to the supplier).
+    for line in lines:
+        m = _RE_EMAIL.search(line.text)
+        if m:
+            fields["email"] = (m.group(0), line.confidence)
+            break
+
+    # Totals (valued BLs). Anchor on the unique, bottom-most "TOTAL T.T.C." label
+    # so HT/TVA/TTC are read from the same totals band — not the line-item column
+    # headers ("Montant HT", …) higher up the page. The amount sits in the cell
+    # below the label; the TVA amount excludes the "%T.V.A." rate column.
+    ttc_kw = [ln for ln in lines if _KW_TOTAL_TTC.search(ln.text) and ln.box]
+    band_y = (
+        max(((ln.box[1] + ln.box[3]) / 2) for ln in ttc_kw) if ttc_kw else None
+    )
+    ht = _amount_near_keyword(lines, _KW_TOTAL_HT, band_y)
+    if ht:
+        fields["total_ht"] = ht
+    tva = _amount_near_keyword(lines, _KW_TVA_AMOUNT, band_y)
+    if tva:
+        fields["tva"] = tva
+    ttc = _amount_near_keyword(lines, _KW_TOTAL_TTC, band_y)
+    if ttc:
+        fields["total_ttc"] = ttc
+
+    # Line items — best-effort JSON hint (low confidence).
+    items = _extract_line_items(lines)
+    if items:
+        fields["lignes"] = items
+
+    return fields
+
+
 # ---------------------------------------------------------------------------
 # On-demand single-field suggestion ("AI auto-match" from the recognised text)
 # ---------------------------------------------------------------------------
@@ -417,9 +684,14 @@ _SUGGEST_SPECS: dict[str, tuple[Optional[re.Pattern], Optional[re.Pattern]]] = {
     "date_echeance": (_KW_DATE_ECHEANCE, _RE_DATE_ANY),
     "total_ht": (_KW_TOTAL_HT, _RE_AMOUNT_NO_PCT),
     "total_ttc": (_KW_TOTAL_TTC, _RE_AMOUNT_NO_PCT),
-    "tva": (_KW_TVA, _RE_AMOUNT_NO_PCT),
+    "tva": (_KW_TVA_AMOUNT, _RE_AMOUNT_NO_PCT),
     "client": (_KW_CLIENT, None),
     "fournisseur": (_KW_FOURNISSEUR, None),
+    # Bon de livraison
+    "numero_bl": (_KW_BL_NUMBER, _RE_BL_NUMBER),
+    "date_bl": (_KW_DATE_BL, _RE_DATE_LOOSE),
+    "reference_commande": (_KW_REF_COMMANDE, _RE_NUM_TOKEN),
+    "email": (None, _RE_EMAIL),
     # Carte grise
     "immatriculation": (None, _RE_IMMATRICULATION),
     "vin": (None, _RE_VIN),

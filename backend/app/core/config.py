@@ -1,4 +1,4 @@
-﻿"""
+"""
 Core configuration loader.
 
 All tuneable values come from environment variables (infrastructure settings)

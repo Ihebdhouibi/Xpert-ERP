@@ -121,10 +121,9 @@ async def upload_document(
     )
 
     # 6. Enqueue OCR for documents that benefit from structured extraction
-    if background_tasks is not None and category in (
-        DocumentCategory.registration_card,
-        DocumentCategory.id_doc,
-    ):
+    from app.modules.ocr.service import OCR_TRIGGER_CATEGORIES
+
+    if background_tasks is not None and category in OCR_TRIGGER_CATEGORIES:
         from app.modules.ocr.service import enqueue_ocr, process_ocr_job
 
         async def _ocr_pipeline() -> None:

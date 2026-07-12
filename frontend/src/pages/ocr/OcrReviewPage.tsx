@@ -31,17 +31,26 @@ import {
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CropFreeIcon from '@mui/icons-material/CropFree'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
+import ZoomInIcon from '@mui/icons-material/ZoomIn'
+import ZoomOutIcon from '@mui/icons-material/ZoomOut'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ocrApi, OcrExtractionOut } from '../../lib/ocrApi'
+import { documentsApi } from '../../lib/documentsApi'
+import { supplierDeliveryNoteApi } from '../../lib/supplierDeliveryNoteApi'
+import { supplierInvoiceApi } from '../../lib/supplierInvoiceApi'
+import { BonLivraisonReceptionDialog } from '../../components/supplier-delivery-note/BonLivraisonReceptionDialog'
 
 // ---------------------------------------------------------------------------
 // Friendly labels for the structured field keys produced by the extractors
@@ -53,6 +62,7 @@ const FIELD_LABELS: Record<string, string> = {
   marque: 'Marque',
   modele: 'Modèle',
   proprietaire: 'Propriétaire',
+  couleur: 'Couleur',
   numero_cin: 'N° CIN',
   nom: 'Nom',
   prenom: 'Prénom',
@@ -65,6 +75,11 @@ const FIELD_LABELS: Record<string, string> = {
   total_ht: 'Total HT',
   tva: 'TVA',
   total_ttc: 'Total TTC',
+  numero_bl: 'N° de bon de livraison',
+  date_bl: 'Date de livraison',
+  reference_commande: 'Référence commande',
+  email: 'Email fournisseur',
+  telephone: 'Téléphone fournisseur',
   lignes: 'Lignes détectées (brut)',
 }
 
@@ -83,6 +98,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   repair_attachment: 'Annexe OR',
   invoice: 'Facture',
   supplier_invoice: 'Facture fournisseur',
+  service_invoice: 'Facture service',
+  supplier_delivery_note: 'Bon de livraison',
   generic: 'Générique',
 }
 
@@ -93,6 +110,7 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'date_mise_en_circulation',
     'marque',
     'modele',
+    'couleur',
     'proprietaire',
   ],
   id_doc: ['numero_cin', 'nom', 'prenom', 'date_naissance'],
@@ -104,7 +122,18 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'total_ht',
     'tva',
     'total_ttc',
-    'lignes',
+    // 'lignes' intentionally omitted — the dedicated grid below replaces the raw blob.
+  ],
+  service_invoice: [
+    'numero_facture',
+    'date_facture',
+    'date_echeance',
+    'fournisseur',
+    'email',
+    'telephone',
+    'total_ht',
+    'tva',
+    'total_ttc',
   ],
   invoice: [
     'numero_facture',
@@ -116,6 +145,20 @@ const CATEGORY_SCHEMA: Record<string, string[]> = {
     'total_ttc',
     'lignes',
   ],
+  supplier_delivery_note: [
+    // Reference first — it is auto-filled from the linked PO (authoritative).
+    'reference_commande',
+    'numero_bl',
+    'date_bl',
+    'fournisseur',
+    'email',
+    'immatriculation',
+    'total_ht',
+    'tva',
+    'total_ttc',
+    // 'lignes' is intentionally omitted — the editable per-line grid below
+    // replaces the raw blob (it still seeds from edited.lignes).
+  ],
 }
 
 const LAYOUT_KEY = '__layout__'
@@ -125,10 +168,194 @@ const confPct = (v: number) => `${Math.round(v * 100)}%`
 // Normalise text for fuzzy matching of a field value to a recognised line
 const norm = (s: string) => (s || '').toLowerCase().replace(/[\s.,€%]/g, '')
 
+/** Field-specific cleanup applied to raw crop-OCR text before storing it. */
+function cleanCropText(fieldKey: string, raw: string): string {
+  const key = fieldKey.toLowerCase()
+  if (key.includes('telephone') || key.includes('phone') || key.includes('tel')) {
+    // Strip common label prefixes: "Tel:", "Tél.", "Tel ", "Phone:", etc.
+    let t = raw.replace(/^(?:t[ée]l(?:[ée]phone)?|phone|mob(?:ile)?)[.\s:]*\s*/i, '')
+    // Keep only valid phone characters: digits, +, spaces, hyphens, dots, parentheses.
+    t = t.replace(/[^\d+\s\-.()/]/g, '').trim()
+    return t
+  }
+  return raw
+}
+
 interface Layout {
   width: number
   height: number
   boxes: Record<string, number[]>
+}
+
+// ---------------------------------------------------------------------------
+// Per-line "Bon de livraison" capture grid
+// ---------------------------------------------------------------------------
+interface BlLine {
+  code: string
+  designation: string
+  quantite: string
+  pu_brut: string
+  pu_net: string
+  montant: string
+}
+
+type BlLineField = keyof BlLine
+
+const BL_LINE_COLUMNS: { field: BlLineField; label: string }[] = [
+  { field: 'code', label: 'Code' },
+  { field: 'designation', label: 'Désignation' },
+  { field: 'quantite', label: 'Qté' },
+  { field: 'pu_brut', label: 'PU Brut' },
+  { field: 'pu_net', label: 'PU Net' },
+  { field: 'montant', label: 'Montant' },
+]
+
+const emptyBlLine = (): BlLine => ({
+  code: '',
+  designation: '',
+  quantite: '',
+  pu_brut: '',
+  pu_net: '',
+  montant: '',
+})
+
+// Prefix used to arm a crop targeting a single grid cell: `bl-line:${i}:${field}`.
+const BL_CROP_PREFIX = 'bl-line:'
+
+// Build the initial grid by parsing the raw `lignes` JSON string the extractor
+// produced. Each item ~ { description, quantity, unit_price, line_total }.
+function seedBlLinesFromRaw(rawLignes: string | undefined): BlLine[] {
+  if (!rawLignes) return [emptyBlLine()]
+  try {
+    const parsed = JSON.parse(rawLignes)
+    if (!Array.isArray(parsed) || parsed.length === 0) return [emptyBlLine()]
+    const toStr = (v: unknown) =>
+      v === null || v === undefined ? '' : String(v)
+    return parsed.map((item) => {
+      const obj = (item ?? {}) as Record<string, unknown>
+      return {
+        code: '',
+        designation: toStr(obj.description),
+        quantite: toStr(obj.quantity),
+        pu_brut: '',
+        pu_net: toStr(obj.unit_price),
+        montant: toStr(obj.line_total),
+      }
+    })
+  } catch {
+    return [emptyBlLine()]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Client-side reconstruction of the BL line table from the OCR cell boxes.
+//
+// PaddleOCR emits each *cell* of the table as a separate detection (columns are
+// far apart), so the flat line extractor can't rebuild rows. But within a single
+// column the rows are cleanly separated vertically, and money cells carry a
+// decimal ("8,33") while quantities / the trailing "T" column don't. So we type
+// each cell by content, cluster the money/text cells into columns by x, then
+// align rows by each column's own top-to-bottom order. Deterministic, no LLM.
+// ---------------------------------------------------------------------------
+const RE_MONEY = /^\d{1,4}[.,]\d{2}$/
+const RE_INT = /^\d{1,3}$/
+const hasAlpha = (s: string) => /[a-zA-Z]/.test(s)
+
+interface DocCell {
+  text: string
+  cx: number
+  cy: number
+}
+
+// Group cells into columns: split wherever the x-gap to the next cell exceeds `gap`.
+function clusterByX(items: DocCell[], gap = 80): DocCell[][] {
+  const sorted = [...items].sort((a, b) => a.cx - b.cx)
+  const clusters: DocCell[][] = []
+  let cur: DocCell[] = []
+  for (const c of sorted) {
+    if (cur.length && c.cx - cur[cur.length - 1].cx > gap) {
+      clusters.push(cur)
+      cur = []
+    }
+    cur.push(c)
+  }
+  if (cur.length) clusters.push(cur)
+  return clusters
+}
+
+const meanCx = (cl: DocCell[]) => cl.reduce((s, c) => s + c.cx, 0) / cl.length
+const sortByCy = (cl: DocCell[]) => [...cl].sort((a, b) => a.cy - b.cy)
+
+function reconstructBlRows(
+  rawLines: [string, unknown][],
+  boxes: Record<string, number[]>,
+): BlLine[] {
+  const cells: DocCell[] = []
+  for (const [k, t] of rawLines) {
+    const b = boxes[k]
+    if (!b) continue
+    cells.push({ text: String(t).trim(), cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2 })
+  }
+  if (!cells.length) return []
+
+  // Vertical band of the line-item table: below the "Code" header, above the
+  // totals block (Montant H.T. / Total H.T. / T.V.A. / T.T.C.).
+  const codeHdr = cells.find((c) => c.text.toLowerCase() === 'code')
+  const headerY = codeHdr ? codeHdr.cy : 0
+  const totRe = /montant\s*h|total\s*h|t\.?t\.?c|t\.?v\.?a/i
+  const totYs = cells
+    .filter((c) => totRe.test(c.text) && c.cy > headerY + 100)
+    .map((c) => c.cy)
+  const totalsY = totYs.length ? Math.min(...totYs) : Infinity
+
+  const band = cells.filter((c) => c.cy > headerY && c.cy < totalsY - 5)
+  const money = band.filter((c) => RE_MONEY.test(c.text))
+  const ints = band.filter((c) => RE_INT.test(c.text))
+  const letters = band.filter((c) => hasAlpha(c.text))
+
+  // Money columns: cluster by x, then assign from the RIGHT (Montant is always
+  // rightmost, then PU Net, then PU Brut) so a plain BL missing a column degrades
+  // gracefully. The trailing "T" column is a bare "0" (no decimal) → excluded.
+  const moneyCols = clusterByX(money).sort((a, b) => meanCx(a) - meanCx(b)).map(sortByCy)
+  const mont = moneyCols[moneyCols.length - 1] ?? []
+  const net = moneyCols[moneyCols.length - 2] ?? []
+  const brut = moneyCols[moneyCols.length - 3] ?? []
+
+  // Text columns: leftmost = code, next = désignation.
+  const letterCols = clusterByX(letters).sort((a, b) => meanCx(a) - meanCx(b))
+  const codeCol = letterCols[0] ? sortByCy(letterCols[0]) : []
+  const desCol = letterCols[1] ? sortByCy(letterCols[1]) : []
+
+  // Quantity is a bare integer; OCR often misses it. Attach the nearest one (by y)
+  // to a row's désignation, if close enough.
+  const nearestQte = (cy: number): string => {
+    let best = ''
+    let bestDist = 20
+    for (const c of ints) {
+      const d = Math.abs(c.cy - cy)
+      if (d < bestDist) {
+        bestDist = d
+        best = c.text
+      }
+    }
+    return best
+  }
+
+  const at = (col: DocCell[], i: number) => (i < col.length ? col[i].text : '')
+  const n = Math.max(codeCol.length, desCol.length, brut.length, net.length, mont.length)
+  const rows: BlLine[] = []
+  for (let i = 0; i < n; i++) {
+    const des = desCol[i]
+    rows.push({
+      code: at(codeCol, i),
+      designation: at(desCol, i),
+      quantite: des ? nearestQte(des.cy) : '',
+      pu_brut: at(brut, i),
+      pu_net: at(net, i),
+      montant: at(mont, i),
+    })
+  }
+  return rows
 }
 
 // ---------------------------------------------------------------------------
@@ -147,15 +374,21 @@ function DocumentPreview({
   highlight,
   drawMode,
   onRegionDrawn,
+  zoom = 1,
 }: {
   url: string | null
   layout: Layout | null
   highlight: number[][]
   drawMode: boolean
   onRegionDrawn: (rect: DrawRect) => void
+  zoom?: number
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [renderW, setRenderW] = useState(0)
+  // Natural width of the displayed page image — drives the display→image scale so
+  // cropping works on ANY page (PDFs render every page at the same DPI), not just
+  // page 1 where the OCR layout is known.
+  const [imgNaturalW, setImgNaturalW] = useState(0)
   const [imgError, setImgError] = useState(false)
   const startRef = useRef<{ x: number; y: number } | null>(null)
   const [draw, setDraw] = useState<DrawRect | null>(null)
@@ -163,6 +396,7 @@ function DocumentPreview({
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
+    setImgNaturalW(0) // reset until the new page image reports its natural size
     // Guard against the ResizeObserver feedback loop: a synchronous setState in
     // the observer can re-trigger layout (e.g. when a scrollbar toggles), which
     // makes the preview jitter. Debounce via rAF and skip no-op width changes.
@@ -205,10 +439,19 @@ function DocumentPreview({
   }
 
   const isPdf = /\.pdf(\?|$)/i.test(url)
-  const scale = layout && layout.width ? renderW / layout.width : 1
+  // Prefer the actual image natural width (works on every page); fall back to the
+  // OCR layout width (page 1) so highlight overlays keep aligning.
+  const baseW = imgNaturalW || (layout && layout.width ? layout.width : 0)
+  // renderW is tracked by ResizeObserver on wrapRef — the zoomed inner div.
+  // Since wrapRef has width = zoom × containerWidth, renderW already bakes in
+  // the zoom factor.  No need to multiply by zoom again here; doing so would
+  // square it and map crop boxes to the wrong image region.
+  const scale = baseW ? renderW / baseW : 1
 
   const localPoint = (e: ReactMouseEvent) => {
     const r = wrapRef.current!.getBoundingClientRect()
+    // getBoundingClientRect() returns viewport-relative coords, which already
+    // account for all ancestor scroll offsets.  No manual scrollLeft correction.
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
   const handleDown = (e: ReactMouseEvent) => {
@@ -253,31 +496,37 @@ function DocumentPreview({
           Aperçu indisponible. Utilisez le lien ci-dessous pour ouvrir le document.
         </Alert>
       ) : (
-        <Box
-          ref={wrapRef}
-          onMouseDown={handleDown}
-          onMouseMove={handleMove}
-          onMouseUp={handleUp}
-          onMouseLeave={() => {
-            startRef.current = null
-            setDraw(null)
-          }}
-          sx={{
-            position: 'relative',
-            width: '100%',
-            lineHeight: 0,
-            cursor: drawMode ? 'crosshair' : 'default',
-            userSelect: 'none',
-          }}
-        >
+        // Scrollable container so the zoomed image can be panned horizontally.
+        <Box sx={{ overflowX: 'auto', overflowY: 'hidden' }}>
           <Box
-            component="img"
-            src={url}
-            alt="Aperçu du document"
-            draggable={false}
-            onError={() => setImgError(true)}
-            sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
-          />
+            ref={wrapRef}
+            onMouseDown={handleDown}
+            onMouseMove={handleMove}
+            onMouseUp={handleUp}
+            onMouseLeave={() => {
+              startRef.current = null
+              setDraw(null)
+            }}
+            sx={{
+              position: 'relative',
+              width: `${zoom * 100}%`,
+              minWidth: '100%',
+              lineHeight: 0,
+              cursor: drawMode ? 'crosshair' : 'default',
+              userSelect: 'none',
+            }}
+          >
+            <Box
+              component="img"
+              src={url}
+              alt="Aperçu du document"
+              draggable={false}
+              onLoad={(e) =>
+                setImgNaturalW((e.currentTarget as HTMLImageElement).naturalWidth)
+              }
+              onError={() => setImgError(true)}
+              sx={{ width: '100%', display: 'block', borderRadius: 1, bgcolor: 'grey.100' }}
+            />
           {draw && (
             <Box
               sx={{
@@ -316,6 +565,7 @@ function DocumentPreview({
                 />
               )
             })}
+          </Box>
         </Box>
       )}
       <Box sx={{ mt: 1, textAlign: 'right' }}>
@@ -354,6 +604,17 @@ export function OcrReviewPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [blDialogOpen, setBlDialogOpen] = useState(false)
+  // Zoom level for the document preview (1 = 100%, range 0.5–3).
+  const [zoom, setZoom] = useState(1)
+  const zoomIn = () => setZoom((z) => Math.min(3, Math.round((z + 0.25) * 4) / 4))
+  const zoomOut = () => setZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 4) / 4))
+  // Per-line BL capture grid (supplier_delivery_note only). Pre-seeded once from
+  // the raw `lignes` field; not overwritten after the user starts editing.
+  const [blLines, setBlLines] = useState<BlLine[]>([])
+  const blSeededRef = useRef(false)
+  // The BL supplier is authoritative from the linked PO (resolved once).
+  const supplierResolvedRef = useRef(false)
 
   useEffect(() => {
     if (!extractionId) return
@@ -394,7 +655,11 @@ export function OcrReviewPage() {
 
         const semantic: Record<string, string> = {}
         for (const [k, v] of Object.entries(data.structured_fields ?? {})) {
-          if (!isRawKey(k) && !isReservedKey(k)) semantic[k] = v as string
+          if (!isRawKey(k) && !isReservedKey(k)) {
+            // Apply the same field-specific cleanup used for manual crops so that
+            // OCR-auto-detected values are also normalised (e.g. "Tel0491503437" → "0491503437").
+            semantic[k] = cleanCropText(k, v as string)
+          }
         }
         setEdited(semantic)
       } catch {
@@ -412,6 +677,58 @@ export function OcrReviewPage() {
       cache.clear()
     }
   }, [extractionId])
+
+  const updateBlLine = (i: number, field: BlLineField, value: string) =>
+    setBlLines((prev) =>
+      prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)),
+    )
+
+  const addBlLine = () => setBlLines((prev) => [...prev, emptyBlLine()])
+
+  const removeBlLine = (i: number) =>
+    setBlLines((prev) => prev.filter((_, idx) => idx !== i))
+
+  // AI auto-match for one BL line: reconstruct the document's line table from the
+  // OCR boxes and fill this row. If the row already has a code/désignation, use
+  // the matching reconstructed row; otherwise fall back to the row at this index.
+  // Detected values fill empty cells but never clobber what the user already typed.
+  const suggestBlLine = (i: number) => {
+    const rows = reconstructBlRows(rawLines, layout?.boxes ?? {})
+    if (!rows.length) {
+      setError('Aucune ligne détectée automatiquement sur le document.')
+      return
+    }
+    setError(null)
+    const cur = blLines[i]
+    const anchor = norm(cur.designation || cur.code)
+    let pick = -1
+    if (anchor.length >= 3) {
+      pick = rows.findIndex((r) => {
+        const d = norm(r.designation)
+        const c = norm(r.code)
+        return (
+          (d && (d.includes(anchor) || anchor.includes(d))) ||
+          (c && (c.includes(anchor) || anchor.includes(c)))
+        )
+      })
+    }
+    if (pick < 0) pick = Math.min(i, rows.length - 1)
+    const r = rows[pick]
+    setBlLines((prev) =>
+      prev.map((row, idx) =>
+        idx === i
+          ? {
+              code: cur.code || r.code,
+              designation: cur.designation || r.designation,
+              quantite: cur.quantite || r.quantite,
+              pu_brut: cur.pu_brut || r.pu_brut,
+              pu_net: cur.pu_net || r.pu_net,
+              montant: cur.montant || r.montant,
+            }
+          : row,
+      ),
+    )
+  }
 
   // Navigate the multi-page preview (PDFs). Field localisation / cropping is
   // page-1 only, so any active field/crop/highlight is cleared when leaving it.
@@ -451,6 +768,109 @@ export function OcrReviewPage() {
     () => Object.keys(fields).filter((k) => !isRawKey(k) && !isReservedKey(k)),
     [fields],
   )
+
+  // Pre-seed the per-line capture grid once, after extraction is loaded.
+  // For supplier_delivery_note: reconstruct rows from OCR cell boxes.
+  // For supplier_invoice / service_invoice: load live lines from the linked SI
+  // (stored as __linked_si_id__ in structured_fields) or fall back to the OCR
+  // lignes blob. IMPORTANT: read from `fields` (synchronous useMemo from
+  // extraction.structured_fields), NOT from `edited` (async-initialised state),
+  // to avoid a race where the grid seeds before edited is populated.
+  useEffect(() => {
+    if (blSeededRef.current) return
+    const cat = extraction?.document_category
+    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice' && cat !== 'service_invoice') return
+    if (extraction?.status === 'pending' || extraction?.status === 'processing') return
+    blSeededRef.current = true
+    if (cat === 'supplier_delivery_note') {
+      const reconstructed = reconstructBlRows(rawLines, layout?.boxes ?? {})
+      setBlLines(
+        reconstructed.length ? reconstructed : seedBlLinesFromRaw(fields.lignes as string | undefined),
+      )
+    } else {
+      // supplier_invoice / service_invoice: if a linked SI was created from this
+      // extraction, load its lines directly from the DB (live, not a snapshot).
+      const linkedSiId = fields['__linked_si_id__'] as string | undefined
+      if (linkedSiId) {
+        supplierInvoiceApi.get(linkedSiId)
+          .then((si) => {
+            const liveLines: BlLine[] = si.lines.map((l) => ({
+              designation: l.description || '',
+              quantite: String(l.quantity ?? ''),
+              pu_brut: l.unit_price_ht != null ? String((l.unit_price_ht / 100).toFixed(2)) : '',
+              pu_net: '',
+              montant: l.line_total_ht != null ? String((l.line_total_ht / 100).toFixed(2)) : '',
+              code: '',
+            }))
+            setBlLines(liveLines.length ? liveLines : [emptyBlLine()])
+          })
+          .catch(() => {
+            // Fallback to OCR snapshot if SI fetch fails.
+            setBlLines(seedBlLinesFromRaw(fields.lignes as string | undefined))
+          })
+      } else {
+        // No linked SI yet (first visit before validation) — seed from OCR blob or empty row.
+        setBlLines(seedBlLinesFromRaw(fields.lignes as string | undefined))
+      }
+    }
+  }, [extraction, fields, rawLines, layout])
+
+  // Supplier and order reference are authoritative from the linked PO (not OCR).
+  // Fill both the Fournisseur and Référence commande fields from the PO once the
+  // extraction is ready. Works for both supplier_delivery_note and supplier_invoice
+  // documents that are filed under a purchase order.
+  useEffect(() => {
+    if (supplierResolvedRef.current) return
+    if (!extractionId) return
+    const cat = extraction?.document_category
+    if (cat !== 'supplier_delivery_note' && cat !== 'supplier_invoice') return
+    if (extraction?.status === 'pending' || extraction?.status === 'processing') return
+    supplierResolvedRef.current = true
+    let cancelled = false
+    supplierDeliveryNoteApi
+      .poForExtraction(extractionId)
+      .then((r) => {
+        if (cancelled) return
+        setEdited((prev) => {
+          const next = { ...prev }
+          // Only fill if the field is not already persisted from a previous validation.
+          if (r.supplier_name && !prev.fournisseur) next.fournisseur = r.supplier_name
+          if (r.purchase_order_number && !prev.reference_commande) next.reference_commande = r.purchase_order_number
+          return next
+        })
+      })
+      .catch(() => {
+        // Document not filed under a PO — supplier stays as OCR extracted or blank.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [extraction, extractionId])
+
+  // For service_invoice: auto-fill fournisseur from the document's linked supplier
+  // (set when the user chose a supplier in the upload dialog).
+  const serviceSupplierResolvedRef = useRef(false)
+  useEffect(() => {
+    if (serviceSupplierResolvedRef.current) return
+    if (extraction?.document_category !== 'service_invoice') return
+    if (extraction.status === 'pending' || extraction.status === 'processing') return
+    if (!extraction.document_public_id) return
+    serviceSupplierResolvedRef.current = true
+    let cancelled = false
+    documentsApi
+      .getOwnerSupplier(extraction.document_public_id)
+      .then((r) => {
+        if (cancelled) return
+        setEdited((prev) => {
+          if (prev.fournisseur) return prev  // already filled
+          return { ...prev, fournisseur: r.supplier_name }
+        })
+      })
+      .catch(() => {
+        // Not linked to a supplier — leave fournisseur for OCR or manual entry.
+      })
+    return () => { cancelled = true }
+  }, [extraction])
 
   // Boxes for a recognised line key
   const boxFor = (lineKey: string): number[][] => {
@@ -515,9 +935,20 @@ export function OcrReviewPage() {
     setCropLoading(true)
     setError(null)
     try {
-      const { text } = await ocrApi.ocrRegion(extractionId!, box)
+      const { text } = await ocrApi.ocrRegion(extractionId!, box, pageIndex)
       if (text) {
-        setEdited((prev) => ({ ...prev, [target]: text }))
+        // Field-specific cleanup of cropped text.
+        const cleanedText = cleanCropText(target, text)
+        if (target.startsWith(BL_CROP_PREFIX)) {
+          // Convention: `bl-line:${i}:${field}` — write into the capture grid.
+          const [, idxStr, field] = target.split(':')
+          const i = Number(idxStr)
+          if (!Number.isNaN(i) && field) {
+            updateBlLine(i, field as BlLineField, cleanedText)
+          }
+        } else {
+          setEdited((prev) => ({ ...prev, [target]: cleanedText }))
+        }
         setHighlight([[box.x1, box.y1, box.x2, box.y2]])
       } else {
         setError('Aucun texte reconnu dans la zone sélectionnée.')
@@ -556,7 +987,20 @@ export function OcrReviewPage() {
     setSaving(true)
     setError(null)
     try {
-      const result = await ocrApi.ingest(extractionId, { confirmed_fields: edited })
+      // For supplier invoices with OCR-captured part lines, serialize them into
+      // confirmed_fields.lignes so the backend can persist them on the invoice.
+      const fieldsToSend: Record<string, string> = { ...edited }
+      if ((isSupplierInvoice || isServiceInvoice) && blLines.length > 0 && blLines.some((l) => l.designation || l.montant)) {
+        fieldsToSend.lignes = JSON.stringify(
+          blLines.map((l) => ({
+            description: l.designation || null,
+            quantity: l.quantite || null,
+            unit_price: l.pu_net || l.pu_brut || null,
+            line_total: l.montant || null,
+          }))
+        )
+      }
+      const result = await ocrApi.ingest(extractionId, { confirmed_fields: fieldsToSend })
       switch (result.target) {
         case 'supplier_invoice':
           // The supplier invoice draft was created server-side — go to the list.
@@ -631,17 +1075,32 @@ export function OcrReviewPage() {
   const isReviewed = extraction.reviewed_at !== null
   const category = extraction.document_category ?? ''
   const ingestLabel = INGEST_LABEL[category] ?? 'Valider'
+  // supplier_delivery_note uses a dedicated BL reception dialog.
+  const isDeliveryNote = category === 'supplier_delivery_note'
+  // supplier_invoice may also contain part lines (it can act as a BL itself).
+  const isSupplierInvoice = category === 'supplier_invoice'
+  const isServiceInvoice = category === 'service_invoice'
+  // Show the per-line capture grid for BL, supplier invoice and service invoice.
+  const showLineGrid = isDeliveryNote || isSupplierInvoice || isServiceInvoice
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
+  // 'lignes' is handled by the dedicated line-item grid for these categories;
+  // suppress it from the free-form field list to avoid the raw JSON blob appearing.
+  const gridCategory = isDeliveryNote || isSupplierInvoice || isServiceInvoice
   const fieldsToShow = [
     ...schemaFields,
-    ...semanticKeys.filter((k) => !schemaFields.includes(k)),
+    ...semanticKeys.filter((k) => !schemaFields.includes(k) && !(gridCategory && k === 'lignes')),
   ]
   const canHighlight = Boolean(layout && layout.boxes)
 
   return (
     <Box sx={{ p: 3 }}>
       <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+        <Tooltip title="Retour aux documents">
+          <IconButton onClick={() => navigate('/documents')} size="small">
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
         <Typography variant="h5">Extraction automatique</Typography>
         {category && <Chip size="small" label={categoryLabel} variant="outlined" />}
         {/* Progress lives in the fixed-height header row, so it appears and
@@ -673,15 +1132,39 @@ export function OcrReviewPage() {
         <Paper sx={{ flex: 1, p: 2, position: { md: 'sticky' }, top: 16, width: '100%' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Typography variant="subtitle1">Aperçu du document</Typography>
-            {highlight.length > 0 && (
-              <Link
-                component="button"
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <Tooltip title="Zoom arrière">
+                <span>
+                  <IconButton size="small" onClick={zoomOut} disabled={zoom <= 0.5}>
+                    <ZoomOutIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Typography
                 variant="caption"
-                onClick={() => setHighlight([])}
+                sx={{ minWidth: 36, textAlign: 'center', cursor: 'pointer' }}
+                onClick={() => setZoom(1)}
               >
-                Effacer la sélection
-              </Link>
-            )}
+                {Math.round(zoom * 100)}%
+              </Typography>
+              <Tooltip title="Zoom avant">
+                <span>
+                  <IconButton size="small" onClick={zoomIn} disabled={zoom >= 3}>
+                    <ZoomInIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              {highlight.length > 0 && (
+                <Link
+                  component="button"
+                  variant="caption"
+                  onClick={() => setHighlight([])}
+                  sx={{ ml: 1 }}
+                >
+                  Effacer la sélection
+                </Link>
+              )}
+            </Stack>
           </Stack>
           {cropTarget && (
             <Alert severity="info" sx={{ mb: 1 }} icon={<CropFreeIcon fontSize="small" />}>
@@ -733,11 +1216,12 @@ export function OcrReviewPage() {
             layout={pageIndex === 0 ? layout : null}
             highlight={pageIndex === 0 ? highlight : []}
             drawMode={
-              pageIndex === 0 &&
-              canHighlight &&
-              (activeField !== null || cropTarget !== null)
+              // Crop-to-OCR works on every page; assign-from-layout is page-1 only.
+              cropTarget !== null ||
+              (pageIndex === 0 && canHighlight && activeField !== null)
             }
             onRegionDrawn={handleRegionDrawn}
+            zoom={zoom}
           />
         </Paper>
 
@@ -894,16 +1378,129 @@ export function OcrReviewPage() {
             </Stack>
           )}
 
+          {showLineGrid && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ mb: 1 }}
+              >
+                <Typography variant="subtitle1">
+                  {isDeliveryNote ? 'Lignes du bon de livraison' : isServiceInvoice ? 'Lignes de services' : 'Lignes de la facture fournisseur'}
+                </Typography>
+                <Button size="small" startIcon={<AddIcon />} onClick={addBlLine}>
+                  Ajouter une ligne
+                </Button>
+              </Stack>
+              {canHighlight && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mb: 1 }}
+                >
+                  Pour chaque cellule, cliquez sur l'icône de recadrage puis dessinez
+                  la zone correspondante sur le document.
+                </Typography>
+              )}
+              <Box sx={{ overflowX: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {BL_LINE_COLUMNS.map((col) => (
+                        <TableCell key={col.field}>{col.label}</TableCell>
+                      ))}
+                      <TableCell sx={{ width: 88 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {blLines.map((row, i) => (
+                      <TableRow key={i}>
+                        {BL_LINE_COLUMNS.map((col) => {
+                          const cropKey = `${BL_CROP_PREFIX}${i}:${col.field}`
+                          return (
+                            <TableCell key={col.field} sx={{ p: 0.5 }}>
+                              <Stack direction="row" spacing={0.25} alignItems="center">
+                                <TextField
+                                  size="small"
+                                  fullWidth
+                                  variant="standard"
+                                  value={row[col.field]}
+                                  onChange={(e) =>
+                                    updateBlLine(i, col.field, e.target.value)
+                                  }
+                                  sx={{ minWidth: col.field === 'designation' ? 140 : 60 }}
+                                />
+                                {canHighlight && (
+                                  <Tooltip title="Recadrer et reconnaître cette cellule">
+                                    <IconButton
+                                      size="small"
+                                      color={cropTarget === cropKey ? 'primary' : 'default'}
+                                      disabled={cropLoading}
+                                      onClick={() => {
+                                        setActiveField(null)
+                                        setCropTarget((prev) =>
+                                          prev === cropKey ? null : cropKey,
+                                        )
+                                      }}
+                                    >
+                                      <CropFreeIcon fontSize="inherit" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </Stack>
+                            </TableCell>
+                          )
+                        })}
+                        <TableCell sx={{ p: 0.5 }}>
+                          <Stack direction="row" spacing={0} alignItems="center">
+                            {canHighlight && (
+                              <Tooltip title="Remplir automatiquement cette ligne (IA) depuis le document">
+                                <IconButton
+                                  size="small"
+                                  color="secondary"
+                                  onClick={() => suggestBlLine(i)}
+                                >
+                                  <AutoAwesomeIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            <Tooltip title="Supprimer la ligne">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  disabled={blLines.length <= 1}
+                                  onClick={() => removeBlLine(i)}
+                                >
+                                  <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </>
+          )}
+
           <Divider sx={{ my: 2 }} />
 
-          {isReviewed ? (
-            <Alert severity="success">
+          {isReviewed && (
+            <Alert severity="success" sx={{ mb: 1 }}>
               Extraction validée le{' '}
               {new Date(extraction.reviewed_at!).toLocaleString('fr-FR')}.
+              {' '}Vous pouvez modifier les champs et re-valider.
             </Alert>
-          ) : (
-            !isPending && (
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
+          )}
+
+          {!isPending && (
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              {!isReviewed && (
                 <Button
                   variant="outlined"
                   color="error"
@@ -913,26 +1510,42 @@ export function OcrReviewPage() {
                 >
                   Rejeter
                 </Button>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={
-                    saving ? (
-                      <CircularProgress size={16} color="inherit" />
-                    ) : (
-                      <CheckCircleOutlineIcon />
-                    )
-                  }
-                  onClick={handleIngest}
-                  disabled={saving}
-                >
-                  {ingestLabel}
-                </Button>
-              </Stack>
-            )
+              )}
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={
+                  saving ? (
+                    <CircularProgress size={16} color="inherit" />
+                  ) : (
+                    <CheckCircleOutlineIcon />
+                  )
+                }
+                onClick={isDeliveryNote ? () => setBlDialogOpen(true) : handleIngest}
+                disabled={saving}
+              >
+                {isDeliveryNote ? 'Réceptionner' : isReviewed ? 'Re-valider' : ingestLabel}
+              </Button>
+            </Stack>
           )}
         </Paper>
       </Stack>
+
+      {isDeliveryNote && extractionId && (
+        <BonLivraisonReceptionDialog
+          open={blDialogOpen}
+          onClose={() => setBlDialogOpen(false)}
+          extractionId={extractionId}
+          defaultBlNumber={edited.numero_bl}
+          defaultBlDate={edited.date_bl}
+          defaultEmail={edited.email}
+          blLines={blLines}
+          onConfirmed={() => {
+            setBlDialogOpen(false)
+            navigate('/purchase-orders')
+          }}
+        />
+      )}
     </Box>
   )
 }

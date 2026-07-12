@@ -91,9 +91,14 @@ class PurchaseOrderLine(Base):
     purchase_order_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("purchase_order.id", ondelete="CASCADE"), nullable=False
     )
-    part_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("part.id", ondelete="RESTRICT"), nullable=False
+    # Nullable: an "Autre" line is for a part not (yet) in the catalogue. Its
+    # free-text name is held in ``label``; once the client validates the BL, the
+    # line is reassigned to a real part (part_id set).
+    part_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("part.id", ondelete="RESTRICT"), nullable=True
     )
+    # Free-text designation for an "Autre" (uncatalogued) line.
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     quantity_ordered: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price_ht: Mapped[int] = mapped_column(BigInteger, nullable=False)
     quantity_received: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
