@@ -11,7 +11,6 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import { navSections, type NavItem } from './navConfig'
 import { useAuth } from '../../contexts/AuthContext'
@@ -106,21 +105,24 @@ function NavItemWithPermission({
 }
 
 function LogoBadge({ size = 32 }: { size?: number }) {
+  // Small collapsed-state version: show just the car portion of the logo
   return (
     <Box
       sx={{
         width: size,
         height: size,
-        borderRadius: '10px',
-        background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
+        overflow: 'hidden',
       }}
     >
-      <DirectionsCarRoundedIcon sx={{ color: '#fff', fontSize: size * 0.55 }} />
+      <img
+        src="/assets/logo-blanc.png"
+        alt="Motors Utilitaires"
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
     </Box>
   )
 }
@@ -171,31 +173,12 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           <LogoBadge />
         ) : (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <LogoBadge />
-              <Box>
-                <Typography
-                  sx={{
-                    color: '#F8FAFC',
-                    fontWeight: 700,
-                    fontSize: '0.9375rem',
-                    lineHeight: 1.2,
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  Xpert ERP
-                </Typography>
-                <Typography
-                  sx={{
-                    color: T.sectionLabel,
-                    fontSize: '0.6875rem',
-                    lineHeight: 1.3,
-                    fontWeight: 500,
-                  }}
-                >
-                  Atelier automobile
-                </Typography>
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+              <img
+                src="/assets/logo-blanc.png"
+                alt="Motors Utilitaires"
+                style={{ height: 44, maxWidth: 180, objectFit: 'contain' }}
+              />
             </Box>
             <Tooltip title="Réduire le menu" placement="right">
               <Box

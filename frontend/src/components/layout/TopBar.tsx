@@ -44,7 +44,7 @@ function getPageTitle(pathname: string): string {
       }
     }
   }
-  return 'Xpert ERP'
+  return 'Motors Utilitaires'
 }
 
 interface TopBarProps {

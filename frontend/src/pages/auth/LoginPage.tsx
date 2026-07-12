@@ -63,9 +63,13 @@ export function LoginPage() {
     >
       <Container maxWidth="xs">
         <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h5" fontWeight={700} gutterBottom>
-            Xpert ERP
-          </Typography>
+          <Box sx={{ mb: 2, textAlign: 'center' }}>
+            <img
+              src="/assets/logo.png"
+              alt="Motors Utilitaires"
+              style={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain' }}
+            />
+          </Box>
           <Typography variant="body2" color="text.secondary" mb={3}>
             Connectez-vous a votre espace
           </Typography>
