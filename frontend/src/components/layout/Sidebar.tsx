@@ -192,7 +192,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               <img
                 src="/assets/logo-blanc.png"
                 alt="Motors Utilitaires"
-                style={{ display: 'block', width: '100%', height: 'auto', maxHeight: 48 }}
+                style={{ display: 'block', width: '82%', height: 'auto', maxHeight: 44 }}
               />
             </Box>
             <Tooltip title="Réduire le menu" placement="right">

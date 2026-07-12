@@ -3,16 +3,16 @@ import { createTheme } from '@mui/material/styles'
 export const sidebarTokens = {
   width: 260,
   collapsedWidth: 64,
-  bg: '#0F172A',
-  hover: 'rgba(255,255,255,0.05)',
-  activeBg: 'rgba(59,130,246,0.13)',
+  bg: '#1a2744',
+  hover: 'rgba(255,255,255,0.06)',
+  activeBg: 'rgba(59,130,246,0.15)',
   activeBorder: '#3B82F6',
   text: '#94A3B8',
   activeText: '#E2E8F0',
-  sectionLabel: '#475569',
+  sectionLabel: '#4e6080',
   iconColor: '#64748B',
   activeIconColor: '#60A5FA',
-  divider: 'rgba(255,255,255,0.07)',
+  divider: 'rgba(255,255,255,0.08)',
 }
 
 export const theme = createTheme({
