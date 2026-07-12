@@ -4,16 +4,16 @@ Tracks which (invoice, tier_days) pre-due reminder pairs have already been
 sent, so the scheduler fires each tier (J-30/J-14/J-7) exactly once per
 invoice regardless of how many times the job ticks.
 
-Revision ID: 0055
-Revises: 0054
+Revision ID: 0062
+Revises: 0061
 """
 from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0055"
-down_revision = "0054"
+revision = "0062"
+down_revision = "0061"
 branch_labels = None
 depends_on = None
 
