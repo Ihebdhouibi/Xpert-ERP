@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Box,
   Drawer,
@@ -105,9 +105,11 @@ function NavItemWithPermission({
 }
 
 function LogoBadge({ size = 32 }: { size?: number }) {
+  const navigate = useNavigate()
   // Small collapsed-state version: show just the car portion of the logo
   return (
     <Box
+      onClick={(e) => { e.stopPropagation(); navigate('/') }}
       sx={{
         width: size,
         height: size,
@@ -116,6 +118,7 @@ function LogoBadge({ size = 32 }: { size?: number }) {
         justifyContent: 'center',
         flexShrink: 0,
         overflow: 'hidden',
+        cursor: 'pointer',
       }}
     >
       <img
@@ -135,6 +138,7 @@ interface SidebarContentProps {
 
 function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps) {
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const initials =
     user?.full_name
@@ -173,11 +177,22 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           <LogoBadge />
         ) : (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', py: 1 }}>
+            <Box
+              onClick={(e) => { e.stopPropagation(); navigate('/') }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                py: 1,
+                flex: 1,
+                minWidth: 0,
+                cursor: 'pointer',
+                mr: 1,
+              }}
+            >
               <img
                 src="/assets/logo-blanc.png"
                 alt="Motors Utilitaires"
-                style={{ height: 44, maxWidth: 180, objectFit: 'contain' }}
+                style={{ height: 44, width: '100%', objectFit: 'contain', objectPosition: 'left center' }}
               />
             </Box>
             <Tooltip title="Réduire le menu" placement="right">
