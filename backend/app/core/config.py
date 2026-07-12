@@ -34,8 +34,9 @@ class Settings(BaseSettings):
     database_pool_size: int = 10
     database_max_overflow: int = 20
     # Pre-deployment: echo SQL so every query + params lands in
-    # backend-fastapi.log (via the sqlalchemy.engine logger). Turn off for prod.
-    database_echo: bool = True
+    # backend-fastapi.log (via the sqlalchemy.engine logger). Must be false
+    # in production (leaks data + hammers disk I/O). Override via DATABASE_ECHO=false.
+    database_echo: bool = False
 
     # -------------------------------------------------------------------------
     # Redis
@@ -77,8 +78,9 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Logging
     # -------------------------------------------------------------------------
-    # Pre-deployment: DEBUG captures data-flow everywhere. Raise before prod.
-    log_level: str = "DEBUG"
+    # Pre-deployment: DEBUG captures data-flow everywhere. Set to WARNING/INFO
+    # in production to avoid leaking data and reduce I/O pressure.
+    log_level: str = "WARNING"
     log_dir: str = "logs"
     # Accept both LOG_MAX_BYTES and CFG_LOG_MAX_BYTES env-var spellings
     log_max_bytes: int = Field(

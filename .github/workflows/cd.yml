@@ -1,0 +1,154 @@
+# Continuous Deployment
+#
+# Triggered when staging or deployment branch is updated.
+# Builds Docker images, pushes to ghcr.io, then calls the Dokploy
+# redeploy webhook so the server pulls the new image automatically.
+#
+# Branch → Environment mapping:
+#   staging    →  Staging  (staging.motors-utilitaires.fr)
+#   deployment →  Production (motors-utilitaires.fr)
+#
+# Required repository secrets:
+#   DOKPLOY_STAGING_WEBHOOK    — Dokploy redeploy URL for the staging app
+#   DOKPLOY_PRODUCTION_WEBHOOK — Dokploy redeploy URL for the production app
+#
+# The GITHUB_TOKEN is automatically available — no extra secret needed for ghcr.io.
+
+name: CD
+
+on:
+  push:
+    branches: [staging, deployment]
+
+concurrency:
+  group: cd-${{ github.ref_name }}
+  cancel-in-progress: false   # never cancel an in-flight deployment
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve which environment this push targets
+  # ---------------------------------------------------------------------------
+  resolve-env:
+    name: Resolve target environment
+    runs-on: ubuntu-22.04
+    outputs:
+      env_name:   ${{ steps.vars.outputs.env_name }}
+      image_tag:  ${{ steps.vars.outputs.image_tag }}
+      webhook_url: ${{ steps.vars.outputs.webhook_url }}
+
+    steps:
+      - id: vars
+        run: |
+          if [ "${{ github.ref_name }}" = "deployment" ]; then
+            echo "env_name=production"          >> $GITHUB_OUTPUT
+            echo "image_tag=latest"             >> $GITHUB_OUTPUT
+            echo "webhook_url=${{ secrets.DOKPLOY_PRODUCTION_WEBHOOK }}" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=staging"             >> $GITHUB_OUTPUT
+            echo "image_tag=staging"            >> $GITHUB_OUTPUT
+            echo "webhook_url=${{ secrets.DOKPLOY_STAGING_WEBHOOK }}"    >> $GITHUB_OUTPUT
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Build + push backend image
+  # ---------------------------------------------------------------------------
+  build-backend:
+    name: Build backend image (${{ needs.resolve-env.outputs.env_name }})
+    runs-on: ubuntu-22.04
+    needs: resolve-env
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./infra/Dockerfile.backend
+          push: true
+          build-args: |
+            OCR_BACKEND=onnx
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/xpert-erp-backend:${{ needs.resolve-env.outputs.image_tag }}
+            ghcr.io/${{ github.repository_owner }}/xpert-erp-backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Build + push frontend image
+  # ---------------------------------------------------------------------------
+  build-frontend:
+    name: Build frontend image (${{ needs.resolve-env.outputs.env_name }})
+    runs-on: ubuntu-22.04
+    needs: resolve-env
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./infra/Dockerfile.frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/xpert-erp-frontend:${{ needs.resolve-env.outputs.image_tag }}
+            ghcr.io/${{ github.repository_owner }}/xpert-erp-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Trigger Dokploy redeploy (fires after both images are pushed)
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Trigger Dokploy redeploy (${{ needs.resolve-env.outputs.env_name }})
+    runs-on: ubuntu-22.04
+    needs: [resolve-env, build-backend, build-frontend]
+    environment: ${{ needs.resolve-env.outputs.env_name }}
+
+    steps:
+      - name: Notify Dokploy
+        run: |
+          WEBHOOK="${{ needs.resolve-env.outputs.webhook_url }}"
+          if [ -z "$WEBHOOK" ]; then
+            echo "::warning ::No Dokploy webhook configured for ${{ needs.resolve-env.outputs.env_name }} — skipping."
+            exit 0
+          fi
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json")
+          echo "Dokploy response: $HTTP_CODE"
+          [ "$HTTP_CODE" = "200" ] || (echo "Webhook failed with $HTTP_CODE" && exit 1)
+
+      - name: Deployment summary
+        run: |
+          echo "### Deployment summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ needs.resolve-env.outputs.env_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image tag | \`${{ needs.resolve-env.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
