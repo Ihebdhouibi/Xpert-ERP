@@ -171,6 +171,9 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           py: 0,
           minHeight: 64,
           borderBottom: `1px solid ${T.divider}`,
+          position: 'relative',
+          zIndex: 10,
+          bgcolor: T.bg,
         }}
       >
         {collapsed ? (
@@ -192,7 +195,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               <img
                 src="/assets/logo-blanc.png"
                 alt="Motors Utilitaires"
-                style={{ display: 'block', width: '82%', height: 'auto', maxHeight: 44 }}
+                style={{ display: 'block', width: '75%', height: 'auto', maxHeight: 48 }}
               />
             </Box>
             <Tooltip title="Réduire le menu" placement="right">
