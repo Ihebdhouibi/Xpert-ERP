@@ -151,6 +151,29 @@ async def process_ocr_job(db: AsyncSession, *, extraction_id: int) -> OcrExtract
             raw_result, document.category, cfg
         )
 
+        # For supplier_delivery_note documents that are linked to a purchase order,
+        # inject the PO reference number as reference_commande upfront so it is
+        # persisted in structured_fields from the very first extraction — no async
+        # UI side-effect required to populate it.
+        if (
+            document.category == DocumentCategory.supplier_delivery_note
+            and document.owner_entity_type == OwnerEntityType.purchase_order.value
+            and document.owner_entity_id
+            and "reference_commande" not in structured
+        ):
+            from app.modules.purchase_order.models import PurchaseOrder as _PO
+            from sqlalchemy import select as _sel_po
+            _po_res = await db.execute(
+                _sel_po(_PO).where(
+                    _PO.id == document.owner_entity_id,
+                    _PO.deleted_at.is_(None),
+                )
+            )
+            _po = _po_res.scalar_one_or_none()
+            if _po and _po.doc_number:
+                structured["reference_commande"] = _po.doc_number
+                scores["reference_commande"] = 1.0  # authoritative — from the PO record
+
         if not structured:
             final_status = OcrStatus.completed
         else:
