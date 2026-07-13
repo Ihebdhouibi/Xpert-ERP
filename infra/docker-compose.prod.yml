@@ -139,6 +139,9 @@ services:
     logging: *default-logging
     ports:
       - "5173:80"
+    networks:
+      - default
+      - dokploy-network
     depends_on:
       api:
         condition: service_healthy
@@ -173,3 +176,8 @@ volumes:
   minio_data:
   pg_wal_archive:
   app_logs:
+
+networks:
+  default:
+  dokploy-network:
+    external: true
