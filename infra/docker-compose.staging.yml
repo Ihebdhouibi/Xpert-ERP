@@ -1,0 +1,156 @@
+# Staging Docker Compose — used by Dokploy for the staging environment.
+#
+# Key differences from docker-compose.prod.yml:
+#   - No host port bindings — Traefik routes by domain, no port conflicts with prod
+#   - Separate named volumes (staging_* prefix) — completely isolated data
+#   - mailpit included for email testing (catches outbound emails, never sends real ones)
+#   - Container names use _staging suffix to avoid collisions with production
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: xpert_erp_db_staging
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=3
+      -c wal_keep_size=64
+    volumes:
+      - staging_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: xpert_erp_redis_staging
+    restart: unless-stopped
+    logging: *default-logging
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - staging_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: xpert_erp_minio_staging
+    restart: unless-stopped
+    logging: *default-logging
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - staging_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    # Catches outbound emails on staging — nothing is actually sent to real addresses.
+    image: axllent/mailpit:latest
+    container_name: xpert_erp_mailpit_staging
+    restart: unless-stopped
+    logging: *default-logging
+    # Web UI accessible at http://51.210.2.5:8025 for inspecting test emails
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.backend
+      args:
+        OCR_BACKEND: onnx
+    container_name: xpert_erp_api_staging
+    restart: unless-stopped
+    user: root
+    logging: *default-logging
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      S3_ENDPOINT_URL: "http://minio:9000"
+      PDF_GARAGE_LOGO_PATH: "/app/assets/logo.png"
+      # SMTP → Mailpit (catches emails, never sends)
+      SMTP_HOST: "mailpit"
+      SMTP_PORT: "1025"
+      SMTP_USE_TLS: "false"
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      # All other vars come from Dokploy's environment injection
+      SECRET_KEY: "${SECRET_KEY}"
+      S3_ACCESS_KEY_ID: "${S3_ACCESS_KEY_ID}"
+      S3_SECRET_ACCESS_KEY: "${S3_SECRET_ACCESS_KEY}"
+      S3_BUCKET_DOCUMENTS: "${S3_BUCKET_DOCUMENTS}"
+      S3_BUCKET_MEDIA: "${S3_BUCKET_MEDIA}"
+      S3_PUBLIC_ENDPOINT_URL: "${S3_PUBLIC_ENDPOINT_URL}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS}"
+      FRONTEND_BASE_URL: "${FRONTEND_BASE_URL}"
+      ENVIRONMENT: "staging"
+      DATABASE_ECHO: "false"
+      LOG_LEVEL: "${LOG_LEVEL}"
+    volumes:
+      - staging_app_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v1/health\")' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    command: gunicorn app.main:app -c gunicorn.conf.py
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infra/Dockerfile.frontend
+    container_name: xpert_erp_frontend_staging
+    restart: unless-stopped
+    logging: *default-logging
+    # No host port binding — Traefik routes staging.motorsutilitaires.fr → this container
+    networks:
+      - default
+      - dokploy-network
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  staging_pg_data:
+  staging_redis_data:
+  staging_minio_data:
+  staging_app_logs:
+
+networks:
+  default:
+  dokploy-network:
+    external: true
