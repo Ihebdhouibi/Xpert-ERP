@@ -143,7 +143,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ | grep -q '<html' || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 80 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

@@ -78,9 +78,9 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Logging
     # -------------------------------------------------------------------------
-    # Pre-deployment: DEBUG captures data-flow everywhere. Set to WARNING/INFO
-    # in production to avoid leaking data and reduce I/O pressure.
-    log_level: str = "WARNING"
+    # INFO shows OCR events, migrations, transactions and errors in Docker logs
+    # without the DEBUG SQL/body noise. Override via LOG_LEVEL env var.
+    log_level: str = "INFO"
     log_dir: str = "logs"
     # Accept both LOG_MAX_BYTES and CFG_LOG_MAX_BYTES env-var spellings
     log_max_bytes: int = Field(
