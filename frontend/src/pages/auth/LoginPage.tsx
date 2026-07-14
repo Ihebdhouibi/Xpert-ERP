@@ -93,7 +93,7 @@ export function LoginPage() {
           <img
             src="/assets/logo-blanc.png"
             alt="Motors Utilitaires"
-            style={{ width: 220, maxWidth: '100%', objectFit: 'contain' }}
+            style={{ width: 260, maxWidth: '100%', objectFit: 'contain' }}
           />
         </Box>
 
@@ -106,10 +106,39 @@ export function LoginPage() {
         </Typography>
         <Typography
           variant="body2"
-          sx={{ color: 'rgba(255,255,255,0.55)', textAlign: 'center', zIndex: 1, maxWidth: 280, lineHeight: 1.7 }}
+          sx={{ color: 'rgba(255,255,255,0.55)', textAlign: 'center', zIndex: 1, maxWidth: 280, lineHeight: 1.7, mb: 4 }}
         >
           Gestion des réparations, facturation, stock et bien plus — tout en un seul endroit.
         </Typography>
+
+        {/* Feature list */}
+        <Box sx={{ zIndex: 1, width: '100%', maxWidth: 280 }}>
+          {[
+            'Ordres de réparation & suivi atelier',
+            'Facturation, devis et avoirs',
+            'Gestion du stock & pièces',
+            'Bons de livraison fournisseurs',
+            'OCR automatique des documents',
+          ].map((feature) => (
+            <Box
+              key={feature}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}
+            >
+              <Box
+                sx={{
+                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                  bgcolor: 'rgba(255,255,255,0.12)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Box component="span" sx={{ color: '#F59E0B', fontSize: 12, fontWeight: 700 }}>✓</Box>
+              </Box>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)', lineHeight: 1.4 }}>
+                {feature}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
 
         {/* Bottom version */}
         <Typography
