@@ -14,7 +14,6 @@ import { RepairOrderCreatePage } from './pages/repair-orders/RepairOrderCreatePa
 import { RepairOrderDetailPage } from './pages/repair-orders/RepairOrderDetailPage'
 import { RepairOrderEditPage } from './pages/repair-orders/RepairOrderEditPage'
 import { WorkshopKanbanPage } from './pages/workshop/WorkshopKanbanPage'
-import { TabletViewPage } from './pages/tablet/TabletViewPage'
 import { PartsPage } from './pages/parts/PartsPage'
 import { StockPage } from './pages/parts/StockPage'
 import { SupplierPage } from './pages/suppliers/SupplierPage'
@@ -75,16 +74,6 @@ export const router = createBrowserRouter(
   {
     path: '/approve/:token',
     element: <InspectionApprovalPage />,
-  },
-
-  // Tablet view — full screen, no shell
-  {
-    path: '/tablet',
-    element: (
-      <ProtectedRoute>
-        <TabletViewPage />
-      </ProtectedRoute>
-    ),
   },
 
   // Main app — protected layout with AppShell
