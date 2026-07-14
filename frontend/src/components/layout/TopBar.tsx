@@ -26,7 +26,6 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
-import TabletAndroidRoundedIcon from '@mui/icons-material/TabletAndroidRounded'
 import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
@@ -252,17 +251,6 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
         </IconButton>
 
         <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
-
-        {/* Tablet view shortcut */}
-        <Tooltip title="Vue mécanicien (tablette)" placement="bottom">
-          <IconButton
-            size="small"
-            onClick={() => navigate('/tablet')}
-            sx={{ color: 'text.secondary', display: { xs: 'none', sm: 'flex' } }}
-          >
-            <TabletAndroidRoundedIcon sx={{ fontSize: 20 }} />
-          </IconButton>
-        </Tooltip>
 
         {/* Notifications */}
         <Tooltip title="Notifications" placement="bottom">
