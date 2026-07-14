@@ -235,7 +235,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           py: 1.5,
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': {
-            background: '#1E293B',
+            background: 'rgba(255,255,255,0.15)',
             borderRadius: 2,
           },
         }}
@@ -305,12 +305,12 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
             width: 32,
             height: 32,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(37,99,235,0.35)',
+            boxShadow: '0 2px 8px rgba(245,158,11,0.35)',
           }}
         >
           <Typography sx={{ color: '#fff', fontSize: '0.6875rem', fontWeight: 700 }}>
@@ -321,7 +321,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           <Box sx={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
             <Typography
               sx={{
-                color: '#E2E8F0',
+                color: T.activeText,
                 fontSize: '0.8125rem',
                 fontWeight: 500,
                 overflow: 'hidden',

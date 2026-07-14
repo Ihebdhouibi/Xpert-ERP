@@ -3,15 +3,15 @@ import { createTheme } from '@mui/material/styles'
 export const sidebarTokens = {
   width: 260,
   collapsedWidth: 64,
-  bg: '#1a2744',
+  bg: '#14161B',
   hover: 'rgba(255,255,255,0.06)',
-  activeBg: 'rgba(59,130,246,0.15)',
-  activeBorder: '#3B82F6',
-  text: '#94A3B8',
-  activeText: '#E2E8F0',
-  sectionLabel: '#4e6080',
-  iconColor: '#64748B',
-  activeIconColor: '#60A5FA',
+  activeBg: 'rgba(245,158,11,0.16)',
+  activeBorder: '#F59E0B',
+  text: '#9CA3AF',
+  activeText: '#F5F5F4',
+  sectionLabel: '#6B7280',
+  iconColor: '#82888F',
+  activeIconColor: '#FBBF24',
   divider: 'rgba(255,255,255,0.08)',
 }
 
