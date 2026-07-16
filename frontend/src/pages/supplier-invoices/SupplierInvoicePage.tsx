@@ -668,6 +668,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   // Repair order link
   const isDraft = si.status === 'draft'
   const [linkOn, setLinkOn] = useState(!!si.repair_order_id)
+  const [editingLink, setEditingLink] = useState(!si.repair_order_id)
   const [linkCustomer, setLinkCustomer] = useState<CustomerSummary | null>(null)
   const [linkCustomerSearch, setLinkCustomerSearch] = useState('')
   const [debouncedLinkCustomerSearch, setDebouncedLinkCustomerSearch] = useState('')
@@ -682,7 +683,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   const { data: linkCustomersData, isFetching: linkCustomersLoading } = useQuery({
     queryKey: ['customers-for-si-link', debouncedLinkCustomerSearch],
     queryFn: () => customerApi.list({ status: 'active', q: debouncedLinkCustomerSearch || undefined, page_size: 50 }),
-    enabled: linkOn,
+    enabled: linkOn && editingLink,
     placeholderData: keepPreviousData,
   })
   const linkCustomers = linkCustomersData?.items ?? []
@@ -690,7 +691,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   const { data: linkROsData, isFetching: linkROsLoading } = useQuery({
     queryKey: ['repair-orders-for-si-link', linkCustomer?.int_id],
     queryFn: () => repairOrderApi.list({ customer_id: linkCustomer!.int_id, page_size: 50 }),
-    enabled: linkOn && !!linkCustomer,
+    enabled: linkOn && editingLink && !!linkCustomer,
   })
   const linkROs = linkROsData?.items ?? []
 
@@ -707,6 +708,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
       onUpdated(updated)
       setLinkCustomer(null)
       setSelectedRO(null)
+      setEditingLink(!pendingRepairOrderId)
       showSnack(pendingRepairOrderId ? 'Ordre de réparation lié.' : 'Lien retiré.')
     } catch (e: unknown) {
       showSnack((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur', 'error')
@@ -841,9 +843,11 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
             checked={linkOn}
             disabled={!isDraft}
             onChange={(e) => {
-              setLinkOn(e.target.checked)
+              const checked = e.target.checked
+              setLinkOn(checked)
               setLinkCustomer(null)
               setSelectedRO(null)
+              setEditingLink(checked ? !si.repair_order_id : false)
             }}
           />
           <Typography fontWeight={600}>Lié à un ordre de réparation</Typography>
@@ -852,7 +856,18 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
           )}
         </Stack>
 
-        {linkOn && (
+        {linkOn && !editingLink && (
+          <Stack direction="row" alignItems="center" spacing={2} mt={1.5}>
+            <Typography variant="body2" color="text.secondary">
+              Lié à : <strong>{si.repair_order_label}</strong>
+            </Typography>
+            {isDraft && (
+              <Button size="small" onClick={() => setEditingLink(true)}>Modifier</Button>
+            )}
+          </Stack>
+        )}
+
+        {linkOn && editingLink && (
           <Stack spacing={1.5} mt={2}>
             {si.repair_order_label && (
               <Typography variant="body2" color="text.secondary">
@@ -890,6 +905,14 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
                   />
                 )}
               />
+              {si.repair_order_id != null && (
+                <Button
+                  size="small"
+                  onClick={() => { setLinkCustomer(null); setSelectedRO(null); setEditingLink(false) }}
+                >
+                  Annuler
+                </Button>
+              )}
             </Stack>
           </Stack>
         )}
