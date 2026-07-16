@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   Alert,
   Autocomplete,
@@ -21,6 +21,7 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -59,6 +60,8 @@ import {
 } from '../../lib/supplierInvoiceApi'
 import { supplierApi, Supplier } from '../../lib/supplierApi'
 import { purchaseOrderApi, PurchaseOrder } from '../../lib/purchaseOrderApi'
+import { customerApi, type CustomerSummary } from '../../lib/customerApi'
+import { repairOrderApi, type RepairOrderSummary } from '../../lib/repairOrderApi'
 import type { InvoicePrefill } from '../../lib/ocrApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { apiClient } from '../../lib/apiClient'
@@ -662,6 +665,56 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
     else toastError(message)
   }
 
+  // Repair order link
+  const isDraft = si.status === 'draft'
+  const [linkOn, setLinkOn] = useState(!!si.repair_order_id)
+  const [linkCustomer, setLinkCustomer] = useState<CustomerSummary | null>(null)
+  const [linkCustomerSearch, setLinkCustomerSearch] = useState('')
+  const [debouncedLinkCustomerSearch, setDebouncedLinkCustomerSearch] = useState('')
+  const [selectedRO, setSelectedRO] = useState<RepairOrderSummary | null>(null)
+  const [linkSaving, setLinkSaving] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedLinkCustomerSearch(linkCustomerSearch), 300)
+    return () => clearTimeout(t)
+  }, [linkCustomerSearch])
+
+  const { data: linkCustomersData, isFetching: linkCustomersLoading } = useQuery({
+    queryKey: ['customers-for-si-link', debouncedLinkCustomerSearch],
+    queryFn: () => customerApi.list({ status: 'active', q: debouncedLinkCustomerSearch || undefined, page_size: 50 }),
+    enabled: linkOn,
+    placeholderData: keepPreviousData,
+  })
+  const linkCustomers = linkCustomersData?.items ?? []
+
+  const { data: linkROsData, isFetching: linkROsLoading } = useQuery({
+    queryKey: ['repair-orders-for-si-link', linkCustomer?.int_id],
+    queryFn: () => repairOrderApi.list({ customer_id: linkCustomer!.int_id, page_size: 50 }),
+    enabled: linkOn && !!linkCustomer,
+  })
+  const linkROs = linkROsData?.items ?? []
+
+  const pendingRepairOrderId = linkOn ? (selectedRO ? selectedRO.int_id : si.repair_order_id) : null
+  const hasLinkChange = pendingRepairOrderId !== si.repair_order_id
+
+  const handleSaveLink = async () => {
+    setLinkSaving(true)
+    try {
+      const updated = await supplierInvoiceApi.update(si.id, {
+        version: si.version,
+        repair_order_id: pendingRepairOrderId,
+      })
+      onUpdated(updated)
+      setLinkCustomer(null)
+      setSelectedRO(null)
+      showSnack(pendingRepairOrderId ? 'Ordre de réparation lié.' : 'Lien retiré.')
+    } catch (e: unknown) {
+      showSnack((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Erreur', 'error')
+    } finally {
+      setLinkSaving(false)
+    }
+  }
+
   const doAction = async (fn: () => Promise<SupplierInvoice>, successMsg: string) => {
     setActing(true)
     try {
@@ -779,6 +832,87 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
             </Box>
           )}
         </Stack>
+      </Paper>
+
+      {/* Repair order link */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Switch
+            checked={linkOn}
+            disabled={!isDraft}
+            onChange={(e) => {
+              setLinkOn(e.target.checked)
+              setLinkCustomer(null)
+              setSelectedRO(null)
+            }}
+          />
+          <Typography fontWeight={600}>Lié à un ordre de réparation</Typography>
+          {!linkOn && si.repair_order_label && (
+            <Typography variant="body2" color="text.secondary">— actuellement : {si.repair_order_label}</Typography>
+          )}
+        </Stack>
+
+        {linkOn && (
+          <Stack spacing={1.5} mt={2}>
+            {si.repair_order_label && (
+              <Typography variant="body2" color="text.secondary">
+                Actuellement lié à : <strong>{si.repair_order_label}</strong>. Choisissez un client puis un OT pour changer le lien.
+              </Typography>
+            )}
+            <Stack direction="row" spacing={2}>
+              <Autocomplete
+                sx={{ minWidth: 260 }}
+                options={linkCustomers}
+                getOptionLabel={(c) => c.company_name ? `${c.full_name} (${c.company_name})` : c.full_name}
+                isOptionEqualToValue={(c, val) => c.int_id === val.int_id}
+                value={linkCustomer}
+                loading={linkCustomersLoading}
+                disabled={!isDraft}
+                onChange={(_, val) => { setLinkCustomer(val); setSelectedRO(null) }}
+                onInputChange={(_, val) => setLinkCustomerSearch(val)}
+                renderInput={(params) => <TextField {...params} label="Client" size="small" />}
+              />
+              <Autocomplete
+                sx={{ minWidth: 320 }}
+                options={linkROs}
+                getOptionLabel={(ro) => `${ro.description || 'Sans description'} (#${ro.id.slice(-8).toUpperCase()})`}
+                isOptionEqualToValue={(ro, val) => ro.int_id === val.int_id}
+                value={selectedRO}
+                loading={linkROsLoading}
+                disabled={!isDraft || !linkCustomer}
+                onChange={(_, val) => setSelectedRO(val)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Ordre de réparation"
+                    size="small"
+                    placeholder={linkCustomer ? undefined : 'Choisissez un client d\'abord'}
+                  />
+                )}
+              />
+            </Stack>
+          </Stack>
+        )}
+
+        {!linkOn && si.repair_order_id != null && (
+          <Typography variant="body2" color="text.secondary" mt={1}>
+            Le lien sera retiré à l'enregistrement.
+          </Typography>
+        )}
+
+        {hasLinkChange && (
+          <Stack direction="row" justifyContent="flex-end" mt={1.5}>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={linkSaving}
+              onClick={handleSaveLink}
+              startIcon={linkSaving ? <CircularProgress size={14} /> : undefined}
+            >
+              Enregistrer le lien
+            </Button>
+          </Stack>
+        )}
       </Paper>
 
       {/* Override reason banner */}

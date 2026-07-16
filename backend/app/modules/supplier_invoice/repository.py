@@ -39,6 +39,7 @@ class SupplierInvoiceRepository:
         invoice_type: Optional[str] = None,
         supplier_id: Optional[int] = None,
         po_id: Optional[int] = None,
+        repair_order_id: Optional[int] = None,
         search: Optional[str] = None,
         include_deleted: bool = False,
         page: int = 1,
@@ -55,6 +56,8 @@ class SupplierInvoiceRepository:
             base = base.where(SupplierInvoice.supplier_id == supplier_id)
         if po_id is not None:
             base = base.where(SupplierInvoice.purchase_order_id == po_id)
+        if repair_order_id is not None:
+            base = base.where(SupplierInvoice.repair_order_id == repair_order_id)
         if search:
             base = base.where(SupplierInvoice.number.ilike(f"%{search}%"))
 
@@ -84,11 +87,13 @@ class SupplierInvoiceRepository:
         notes: Optional[str],
         created_by: Optional[int],
         invoice_type: str = "parts",
+        repair_order_id: Optional[int] = None,
     ) -> SupplierInvoice:
         si = SupplierInvoice(
             garage_id=garage_id,
             supplier_id=supplier_id,
             purchase_order_id=purchase_order_id,
+            repair_order_id=repair_order_id,
             number=number,
             invoice_type=invoice_type,
             lines=lines,

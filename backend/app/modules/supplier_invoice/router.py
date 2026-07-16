@@ -74,6 +74,7 @@ class SIUpdateRequest(BaseModel):
     received_at: Optional[datetime] = None
     due_date: Optional[date] = None
     notes: Optional[str] = None
+    repair_order_id: Optional[int] = None
 
 
 class SIVersionRequest(BaseModel):
@@ -105,6 +106,8 @@ class SISummary(BaseModel):
     id: str
     supplier_id: Optional[int]
     purchase_order_id: Optional[int]
+    repair_order_id: Optional[int] = None
+    repair_order_label: Optional[str] = None
     number: str
     status: str
     lines: list[dict[str, Any]]
@@ -134,6 +137,32 @@ class SIListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+async def _ro_label_map(db: AsyncSession, ro_ids: list[int]) -> dict[int, str]:
+    """Build {repair_order.id: "Customer — description"} for display purposes."""
+    if not ro_ids:
+        return {}
+    from sqlalchemy import select as sa_select
+    from app.modules.repair_order.models import RepairOrder
+    from app.modules.customer.models import Customer
+
+    rows = await db.execute(
+        sa_select(RepairOrder.id, RepairOrder.description, Customer.full_name)
+        .join(Customer, Customer.id == RepairOrder.customer_id)
+        .where(RepairOrder.id.in_(ro_ids))
+    )
+    return {
+        ro_id: f"{full_name} — {description or 'Sans description'}"
+        for ro_id, description, full_name in rows
+    }
+
+
+async def _resolve_ro_label(db: AsyncSession, repair_order_id: Optional[int]) -> Optional[str]:
+    if repair_order_id is None:
+        return None
+    labels = await _ro_label_map(db, [repair_order_id])
+    return labels.get(repair_order_id)
 
 
 # ---------------------------------------------------------------------------
@@ -326,10 +355,14 @@ async def list_supplier_invoices(
         sup_res = await db.execute(sa_select(Supplier).where(Supplier.id.in_(supplier_ids)))
         suppliers_map = {s.id: s.name for s in sup_res.scalars()}
 
+    ro_ids = list({si.repair_order_id for si in items if si.repair_order_id})
+    ro_label_map = await _ro_label_map(db, ro_ids)
+
     summaries = []
     for si in items:
         s = SISummary.model_validate(si)
         s.supplier_name = suppliers_map.get(si.supplier_id) if si.supplier_id else None
+        s.repair_order_label = ro_label_map.get(si.repair_order_id) if si.repair_order_id else None
         summaries.append(s)
 
     return SIListResponse(items=summaries, total=total, page=page, page_size=page_size)
@@ -384,7 +417,9 @@ async def get_supplier_invoice(
     si = await SupplierInvoiceRepository.get_by_public_id(db, user.garage_id, public_id)
     if not si:
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
-    return SISummary.model_validate(si)
+    summary = SISummary.model_validate(si)
+    summary.repair_order_label = await _resolve_ro_label(db, si.repair_order_id)
+    return summary
 
 
 @router.put(
@@ -409,9 +444,12 @@ async def update_supplier_invoice_endpoint(
             received_at=body.received_at,
             due_date=body.due_date,
             notes=body.notes,
+            repair_order_id=body.repair_order_id,
         )
         await db.commit()
-        return SISummary.model_validate(si)
+        summary = SISummary.model_validate(si)
+        summary.repair_order_label = await _resolve_ro_label(db, si.repair_order_id)
+        return summary
     except SINotFoundError:
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
     except SIVersionConflictError as e:

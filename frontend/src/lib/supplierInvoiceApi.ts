@@ -22,6 +22,8 @@ export interface SupplierInvoice {
   supplier_id: number
   supplier_name: string | null
   purchase_order_id: number
+  repair_order_id: number | null
+  repair_order_label: string | null
   number: string
   invoice_type: 'parts' | 'services'
   status: SIStatus
@@ -71,6 +73,7 @@ export interface SIUpdatePayload {
   received_at?: string | null
   due_date?: string | null
   notes?: string | null
+  repair_order_id?: number | null
 }
 
 export interface SIVersionPayload {

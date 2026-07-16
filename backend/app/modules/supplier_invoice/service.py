@@ -272,6 +272,7 @@ async def create_supplier_invoice_from_ocr(
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
     created_by: Optional[int] = None,
+    repair_order_id: Optional[int] = None,
 ) -> SupplierInvoice:
     """Create a standalone draft supplier invoice from OCR data."""
     logger.info("create_supplier_invoice_from_ocr_start", number=number, garage_id=garage_id)
@@ -289,9 +290,13 @@ async def create_supplier_invoice_from_ocr(
         due_date=due_date,
         notes=notes,
         created_by=created_by,
+        repair_order_id=repair_order_id,
     )
     logger.info("supplier_invoice_created_from_ocr", si_public_id=str(si.public_id), garage_id=garage_id)
     return si
+
+
+_UNSET: Any = object()
 
 
 async def update_supplier_invoice(
@@ -304,6 +309,7 @@ async def update_supplier_invoice(
     received_at: Optional[datetime] = None,
     due_date: Optional[date] = None,
     notes: Optional[str] = None,
+    repair_order_id: Optional[int] = _UNSET,
 ) -> SupplierInvoice:
     logger.info("update_supplier_invoice_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
@@ -325,6 +331,10 @@ async def update_supplier_invoice(
         updates["due_date"] = due_date
     if notes is not None:
         updates["notes"] = notes
+    # repair_order_id is nullable and explicitly clearable (toggle off), so it uses
+    # a sentinel default rather than the "None means unchanged" convention above.
+    if repair_order_id is not _UNSET:
+        updates["repair_order_id"] = repair_order_id
 
     if lines_data is not None:
         if not lines_data:
