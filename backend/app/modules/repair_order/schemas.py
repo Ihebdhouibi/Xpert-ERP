@@ -29,7 +29,7 @@ class RepairOrderCreateRequest(BaseModel):
     """Request to create a repair order."""
     customer_id: int = Field(..., gt=0)
     vehicle_id: Optional[int] = Field(None, gt=0)
-    description: str = Field(..., min_length=1)
+    description: Optional[str] = None
     priority: Optional[str] = Field(None, max_length=20)
     estimated_cost_minor: Optional[int] = Field(None, ge=0)
     estimated_cost_currency: Optional[str] = Field(None, min_length=3, max_length=3)
@@ -45,7 +45,7 @@ class RepairOrderCreateRequest(BaseModel):
 
 class RepairOrderUpdateRequest(BaseModel):
     """Request to update a repair order."""
-    description: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = None
     priority: Optional[str] = Field(None, max_length=20)
     estimated_cost_minor: Optional[int] = Field(None, ge=0)
     estimated_cost_currency: Optional[str] = Field(None, min_length=3, max_length=3)
@@ -121,7 +121,7 @@ class RepairOrderSummary(BaseModel):
     customer_id: int
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
-    description: str
+    description: Optional[str]
     status: ROStatus
     priority: Optional[str]
     estimated_cost_minor: Optional[int]
@@ -185,7 +185,7 @@ class RepairOrderDetail(BaseModel):
     customer_id: int
     customer_name: Optional[str] = None
     vehicle_id: Optional[int]
-    description: str
+    description: Optional[str]
     status: ROStatus
     priority: Optional[str]
     estimated_cost_minor: Optional[int]

@@ -54,6 +54,10 @@ class SupplierInvoice(Base):
     purchase_order_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("purchase_order.id", ondelete="RESTRICT"), nullable=True
     )
+    # Optional link for service invoices tied to a repair order.
+    repair_order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("repair_order.id", ondelete="SET NULL"), nullable=True
+    )
     number: Mapped[str] = mapped_column(String(100), nullable=False)
     # 'parts'    → linked to a purchase order (classic 3-way match flow)
     # 'services' → standalone service invoice, no BL or PO required
@@ -98,4 +102,5 @@ class SupplierInvoice(Base):
         Index("ix_si_garage_status", "garage_id", "status"),
         Index("ix_si_supplier_id", "supplier_id"),
         Index("ix_si_po_id", "purchase_order_id"),
+        Index("ix_si_repair_order_id", "repair_order_id"),
     )

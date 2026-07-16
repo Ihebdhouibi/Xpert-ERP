@@ -41,7 +41,7 @@ export interface RepairOrderSummary {
   customer_id: number
   customer_name?: string | null
   vehicle_id: number | null
-  description: string
+  description: string | null
   status: ROStatus
   priority: string | null
   estimated_cost_minor: number | null
@@ -81,7 +81,7 @@ export interface RepairOrderListResponse {
 export interface RepairOrderCreateInput {
   customer_id: number
   vehicle_id?: number | null
-  description: string
+  description?: string
   priority?: string | null
   estimated_cost_minor?: number | null
   estimated_cost_currency?: string | null

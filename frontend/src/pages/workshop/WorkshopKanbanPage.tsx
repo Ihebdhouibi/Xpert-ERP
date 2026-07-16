@@ -96,8 +96,8 @@ function KanbanCard({
         <Typography variant="caption" color="text.disabled" fontFamily="monospace">
           #{ro.id.slice(-8).toUpperCase()}
         </Typography>
-        <Typography variant="body2" fontWeight={600} noWrap title={ro.description}>
-          {ro.description}
+        <Typography variant="body2" fontWeight={600} noWrap title={ro.description || undefined}>
+          {ro.description || 'Sans description'}
         </Typography>
         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
           {ro.priority && ro.priority !== 'normal' && (
@@ -265,7 +265,7 @@ function MobileGroupedList({ grouped }: { grouped: Record<ROStatus, RepairOrderS
               >
                 <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <Box flex={1} minWidth={0} mr={1}>
-                    <Typography variant="body2" fontWeight={600} noWrap>{ro.description}</Typography>
+                    <Typography variant="body2" fontWeight={600} noWrap>{ro.description || 'Sans description'}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {ro.customer_name ?? `Client #${ro.customer_id}`} · #{ro.id.slice(-6).toUpperCase()}
                     </Typography>

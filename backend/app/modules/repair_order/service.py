@@ -62,7 +62,7 @@ class RepairOrderService:
         user_id: int,
         customer_id: int,
         vehicle_id: Optional[int],
-        description: str,
+        description: Optional[str],
         priority: Optional[str] = None,
         estimated_cost_minor: Optional[int] = None,
         estimated_cost_currency: Optional[str] = None,

@@ -91,7 +91,7 @@ export function RepairOrderCreatePage() {
   const [priority, setPriority] = useState('normal')
 
   // Validation errors
-  const [fieldErrors, setFieldErrors] = useState<{ customer?: string; description?: string }>({})
+  const [fieldErrors, setFieldErrors] = useState<{ customer?: string }>({})
 
   // Debounce customer search
   useEffect(() => {
@@ -167,7 +167,6 @@ export function RepairOrderCreatePage() {
     e.preventDefault()
     const errs: typeof fieldErrors = {}
     if (!selectedCustomer) errs.customer = 'Client requis'
-    if (!description.trim()) errs.description = 'Description requise'
     setFieldErrors(errs)
     if (Object.keys(errs).length > 0) return
 
@@ -177,7 +176,7 @@ export function RepairOrderCreatePage() {
       const ro = await repairOrderApi.create({
         customer_id: selectedCustomer!.int_id,
         vehicle_id: selectedVehicle?.id ?? null,
-        description: description.trim(),
+        description: description.trim() || undefined,
         priority: priority ?? null,
       })
       navigate(`/repair-orders/${ro.id}`)
@@ -358,13 +357,12 @@ export function RepairOrderCreatePage() {
                 />
 
                 <TextField
-                  label="Description *"
+                  label="Description"
                   multiline
                   rows={4}
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  error={!!fieldErrors.description}
-                  helperText={fieldErrors.description ?? 'Décrivez le problème signalé par le client'}
+                  helperText="Décrivez le problème signalé par le client"
                   fullWidth
                 />
               </Stack>

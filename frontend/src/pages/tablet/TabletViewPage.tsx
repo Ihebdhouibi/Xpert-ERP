@@ -145,7 +145,7 @@ function ROCard({ ro }: { ro: RepairOrderSummary }) {
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
             <Box flex={1} minWidth={0}>
               <Typography variant="h6" fontWeight={700} gutterBottom={false} noWrap>
-                {ro.description}
+                {ro.description || 'Sans description'}
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center" mt={0.5} flexWrap="wrap" useFlexGap>
                 <Typography variant="caption" color="text.disabled" fontFamily="monospace">

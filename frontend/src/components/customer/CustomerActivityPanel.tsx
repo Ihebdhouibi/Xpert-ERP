@@ -132,7 +132,7 @@ function RepairOrdersTab({
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" noWrap sx={{ maxWidth: 240 }}>
-                      {ro.description}
+                      {ro.description || 'Sans description'}
                     </Typography>
                   </TableCell>
                   <TableCell>
