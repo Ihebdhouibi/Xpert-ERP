@@ -393,7 +393,7 @@ export function VehicleDetailPage() {
                       >
                         <Stack spacing={0.25}>
                           <Typography variant="body2" fontWeight={600}>
-                            {ro.description.length > 50 ? ro.description.slice(0, 50) + '…' : ro.description}
+                            {ro.description && ro.description.length > 50 ? ro.description.slice(0, 50) + '…' : ro.description || 'Sans description'}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             {new Date(ro.created_at).toLocaleDateString('fr-FR')}

@@ -82,7 +82,7 @@ export function RepairOrderEditPage() {
 
   // Populate state once RO loads
   if (ro && !initialised) {
-    setDescription(ro.description)
+    setDescription(ro.description ?? '')
     setPriority(ro.priority ?? 'normal')
     setEstimatedMinor(ro.estimated_cost_minor != null ? String(ro.estimated_cost_minor) : '')
     setEstimatedCurrency(ro.estimated_cost_currency ?? 'EUR')
@@ -149,7 +149,7 @@ export function RepairOrderEditPage() {
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <PageHeader
-        title={`Modifier — ${ro.description.length > 40 ? ro.description.slice(0, 40) + '…' : ro.description}`}
+        title={`Modifier — ${ro.description && ro.description.length > 40 ? ro.description.slice(0, 40) + '…' : ro.description || 'Sans description'}`}
         subtitle={`#${ro.id.slice(-8).toUpperCase()} · v${ro.version}`}
         breadcrumbs={[
           { label: 'Ordres de réparation', href: '/repair-orders' },

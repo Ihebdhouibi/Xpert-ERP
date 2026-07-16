@@ -505,12 +505,13 @@ async def assign_mechanic(
     if body.user_id is not None:
         from app.modules.notification.inbox_router import create_app_notification
 
+        description = ro.description or "Aucune description fournie"
         await create_app_notification(
             db,
             garage_id=user.garage_id,
             recipient_id=body.user_id,
             title="Nouvel ordre de réparation assigné",
-            body=ro.description,
+            body=description,
             link=f"/repair-orders/{ro.public_id}",
         )
         await db.commit()
@@ -518,7 +519,7 @@ async def assign_mechanic(
         mech = (await db.execute(select(AppUser).where(AppUser.id == body.user_id))).scalar_one_or_none()
         if mech and mech.email:
             background_tasks.add_task(
-                _notify_assignment, user.garage_id, mech.id, mech.email, ro.public_id, ro.description
+                _notify_assignment, user.garage_id, mech.id, mech.email, ro.public_id, description
             )
     return await _get_detail(db, user.garage_id, public_id)
 

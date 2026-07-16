@@ -66,7 +66,7 @@ class RepairOrder(Base):
         BigInteger, ForeignKey("vehicle.id", ondelete="SET NULL"), nullable=True
     )
 
-    description: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[ROStatus] = mapped_column(
         Enum(ROStatus, name="ro_status_enum"),
         nullable=False,
