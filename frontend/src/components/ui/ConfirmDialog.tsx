@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import {
   Button,
   CircularProgress,
@@ -18,6 +19,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   loading?: boolean
   dangerous?: boolean
+  confirmDisabled?: boolean
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -30,6 +33,8 @@ export function ConfirmDialog({
   cancelLabel = 'Annuler',
   loading = false,
   dangerous = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -53,6 +58,7 @@ export function ConfirmDialog({
         <Typography variant="body2" color="text.secondary" lineHeight={1.7}>
           {message}
         </Typography>
+        {children}
       </DialogContent>
       <DialogActions>
         <Button variant="outlined" onClick={onCancel} disabled={loading}>
@@ -62,7 +68,7 @@ export function ConfirmDialog({
           variant="contained"
           color={dangerous ? 'error' : 'primary'}
           onClick={onConfirm}
-          disabled={loading}
+          disabled={loading || confirmDisabled}
           startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
         >
           {confirmLabel}

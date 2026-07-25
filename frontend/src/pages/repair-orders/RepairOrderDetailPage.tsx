@@ -34,6 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
+import UndoRoundedIcon from '@mui/icons-material/UndoRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
@@ -49,6 +50,7 @@ import {
   repairOrderApi,
   STATUS_LABELS,
   ALLOWED_TRANSITIONS,
+  isBackwardTransition,
   type ROStatus,
   type RepairOrderDetail,
   type Comment,
@@ -125,18 +127,24 @@ function StatusTransitionPanel({
   const { success, error: toastError } = useToast()
   const [selectedStatus, setSelectedStatus] = useState<ROStatus | null>(null)
   const [reason, setReason] = useState('')
+  const [backwardTarget, setBackwardTarget] = useState<ROStatus | null>(null)
+  const [backwardReason, setBackwardReason] = useState('')
   const allowed = ALLOWED_TRANSITIONS[ro.status]
+  const forwardTargets = allowed.filter(s => !isBackwardTransition(ro.status, s))
+  const backwardTargets = allowed.filter(s => isBackwardTransition(ro.status, s))
 
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars: { target: ROStatus; reason: string }) =>
       repairOrderApi.transition(ro.id, {
-        new_status: selectedStatus!,
-        reason: reason || null,
+        new_status: vars.target,
+        reason: vars.reason || null,
       }),
-    onSuccess: () => {
-      success(`Statut → ${STATUS_LABELS[selectedStatus!]}`)
+    onSuccess: (_data, vars) => {
+      success(`Statut → ${STATUS_LABELS[vars.target]}`)
       setSelectedStatus(null)
       setReason('')
+      setBackwardTarget(null)
+      setBackwardReason('')
       onTransitioned()
     },
     onError: (e) => {
@@ -163,7 +171,7 @@ function StatusTransitionPanel({
         Changer le statut
       </Typography>
       <Stack spacing={0.75}>
-        {allowed.map(s => {
+        {forwardTargets.map(s => {
           const accent = STATUS_ACCENT_COLOR[s] ?? '#94A3B8'
           const isSelected = selectedStatus === s
           return (
@@ -244,7 +252,7 @@ function StatusTransitionPanel({
                     fullWidth
                     size="small"
                     disabled={mutation.isPending || blockReason(s) !== null}
-                    onClick={() => mutation.mutate()}
+                    onClick={() => mutation.mutate({ target: s, reason })}
                     sx={{
                       background: accent,
                       '&:hover': { background: accent, opacity: 0.9 },
@@ -259,6 +267,63 @@ function StatusTransitionPanel({
           )
         })}
       </Stack>
+
+      {backwardTargets.length > 0 && (
+        <>
+          <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" mt={2} mb={1}>
+            Revenir en arrière
+          </Typography>
+          <Stack spacing={0.75}>
+            {backwardTargets.map(s => (
+              <Box
+                key={s}
+                onClick={() => { setBackwardReason(''); setBackwardTarget(s) }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.25,
+                  px: 1.5,
+                  py: 1,
+                  borderRadius: 1.5,
+                  border: '1px dashed #CBD5E1',
+                  bgcolor: '#FAFAFA',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  '&:hover': { borderColor: '#94A3B8', bgcolor: '#F1F5F9' },
+                }}
+              >
+                <UndoRoundedIcon sx={{ fontSize: 16, color: '#94A3B8' }} />
+                <Typography variant="body2" fontWeight={500} color="text.secondary" flex={1}>
+                  Revenir à {STATUS_LABELS[s]}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={backwardTarget !== null}
+        title={backwardTarget ? `Revenir à « ${STATUS_LABELS[backwardTarget]} » ?` : ''}
+        message="Cette action ramène l'ordre de réparation à une étape précédente. Si des pièces avaient été engagées, le stock correspondant sera remis en réservation. Merci d'indiquer le motif de ce retour."
+        confirmLabel="Confirmer le retour"
+        dangerous
+        loading={mutation.isPending}
+        confirmDisabled={!backwardReason.trim()}
+        onConfirm={() => backwardTarget && mutation.mutate({ target: backwardTarget, reason: backwardReason })}
+        onCancel={() => { setBackwardTarget(null); setBackwardReason('') }}
+      >
+        <TextField
+          size="small"
+          fullWidth
+          required
+          autoFocus
+          placeholder="Motif du retour (obligatoire)"
+          value={backwardReason}
+          onChange={e => setBackwardReason(e.target.value)}
+          sx={{ mt: 2 }}
+        />
+      </ConfirmDialog>
     </Box>
   )
 }

@@ -318,6 +318,49 @@ async def commit_reservations_for_ref(
     return committed
 
 
+async def reverse_commit_for_ref(
+    db: AsyncSession,
+    garage_id: int,
+    ref_type: str,
+    ref_id: str,
+    created_by_user_id: Optional[int] = None,
+) -> list[StockMovement]:
+    """Undo commit_reservations_for_ref (atomic).
+
+    Called when an RO transitions backward out of in_repair.  For each part
+    with net committed stock: record an in movement to restore on_hand, then
+    re-create the reservation, in the same transaction.
+    """
+    net = await StockRepository.get_net_committed_for_ref(
+        db, garage_id, ref_type, ref_id
+    )
+    reversed_movements: list[StockMovement] = []
+    for part_id, qty in net.items():
+        await record_movement(
+            db,
+            garage_id=garage_id,
+            part_id=part_id,
+            movement_type=StockMovementType.in_,
+            quantity=qty,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            reason="Reversed on in_repair backward transition",
+            created_by_user_id=created_by_user_id,
+        )
+        mv = await reserve_for_ref(
+            db,
+            garage_id=garage_id,
+            part_id=part_id,
+            quantity=qty,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            reason="Re-reserved on in_repair backward transition",
+            created_by_user_id=created_by_user_id,
+        )
+        reversed_movements.append(mv)
+    return reversed_movements
+
+
 async def release_all_for_ref(
     db: AsyncSession,
     garage_id: int,

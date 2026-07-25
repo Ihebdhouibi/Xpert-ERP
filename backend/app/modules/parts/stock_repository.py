@@ -165,6 +165,55 @@ class StockRepository:
                 net[part_id] = net_qty
         return net
 
+    @staticmethod
+    async def get_net_committed_for_ref(
+        db: AsyncSession,
+        garage_id: int,
+        ref_type: str,
+        ref_id: str,
+    ) -> dict[int, int]:
+        """Return {part_id: net_committed} for stock committed via the
+        in_repair transition and not yet reversed, so a backward transition
+        out of in_repair knows how much to give back to reservations."""
+        out_stmt = (
+            select(
+                StockMovement.part_id,
+                func.sum(StockMovement.quantity).label("qty"),
+            )
+            .where(
+                StockMovement.garage_id == garage_id,
+                StockMovement.ref_type == ref_type,
+                StockMovement.ref_id == ref_id,
+                StockMovement.type == StockMovementType.out,
+                StockMovement.reason == "Committed on in_repair transition",
+            )
+            .group_by(StockMovement.part_id)
+        )
+        reversed_stmt = (
+            select(
+                StockMovement.part_id,
+                func.sum(StockMovement.quantity).label("qty"),
+            )
+            .where(
+                StockMovement.garage_id == garage_id,
+                StockMovement.ref_type == ref_type,
+                StockMovement.ref_id == ref_id,
+                StockMovement.type == StockMovementType.in_,
+                StockMovement.reason == "Reversed on in_repair backward transition",
+            )
+            .group_by(StockMovement.part_id)
+        )
+        out_result = await db.execute(out_stmt)
+        reversed_result = await db.execute(reversed_stmt)
+        committed = {row.part_id: row.qty for row in out_result}
+        already_reversed = {row.part_id: row.qty for row in reversed_result}
+        net: dict[int, int] = {}
+        for part_id, qty in committed.items():
+            net_qty = qty - already_reversed.get(part_id, 0)
+            if net_qty > 0:
+                net[part_id] = net_qty
+        return net
+
     # ------------------------------------------------------------------
     # Low-stock alerts
     # ------------------------------------------------------------------

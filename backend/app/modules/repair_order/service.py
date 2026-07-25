@@ -11,6 +11,7 @@ from app.modules.repair_order.models import (
     RepairOrder,
     ROStatus,
     can_transition,
+    is_backward_transition,
 )
 from app.modules.repair_order.repository import RepairOrderRepository
 
@@ -196,6 +197,12 @@ class RepairOrderService:
         if not can_transition(ro.status, new_status):
             raise InvalidStatusTransitionError(ro.status, new_status)
 
+        backward = is_backward_transition(ro.status, new_status)
+        if backward and not (reason and reason.strip()):
+            raise StepIncompleteError(
+                "Un motif est requis pour revenir au statut précédent."
+            )
+
         # Step preconditions: diagnosis can only move to repair once a mechanic
         # has accepted the job and the diagnosis form is completed.
         if ro.status == ROStatus.diagnosis and new_status == ROStatus.in_repair:
@@ -233,6 +240,17 @@ class RepairOrderService:
                 ref_id=str(ro.public_id),
                 created_by_user_id=user_id,
                 allow_negative=allow_negative_stock,
+            )
+
+        # Reverse the stock committed on in_repair entry when moving back to diagnosis
+        if old_status == ROStatus.in_repair and new_status == ROStatus.diagnosis:
+            from app.modules.parts.stock_service import reverse_commit_for_ref
+            await reverse_commit_for_ref(
+                db,
+                garage_id=garage_id,
+                ref_type="repair_order",
+                ref_id=str(ro.public_id),
+                created_by_user_id=user_id,
             )
 
         # Audit

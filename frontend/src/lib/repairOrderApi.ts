@@ -127,11 +127,24 @@ export const STATUS_LABELS: Record<ROStatus, string> = {
 
 export const ALLOWED_TRANSITIONS: Record<ROStatus, ROStatus[]> = {
   created: ['diagnosis'],
-  diagnosis: ['in_repair'],
-  in_repair: ['paused_parts', 'finished'],
-  paused_parts: ['in_repair'],
-  finished: ['delivered'],
+  diagnosis: ['in_repair', 'created'],
+  in_repair: ['paused_parts', 'finished', 'diagnosis'],
+  paused_parts: ['in_repair', 'diagnosis'],
+  finished: ['delivered', 'in_repair'],
   delivered: [],
+}
+
+// Transitions that move the repair order back to an earlier step — mirrors
+// BACKWARD_TRANSITIONS in backend/app/modules/repair_order/models.py.
+const BACKWARD_TRANSITION_PAIRS = new Set<string>([
+  'diagnosis:created',
+  'in_repair:diagnosis',
+  'finished:in_repair',
+  'paused_parts:diagnosis',
+])
+
+export function isBackwardTransition(from: ROStatus, to: ROStatus): boolean {
+  return BACKWARD_TRANSITION_PAIRS.has(`${from}:${to}`)
 }
 
 export interface TimeEntry {

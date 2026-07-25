@@ -2,11 +2,16 @@
 optimistic locking, soft delete / restore, audit hooks."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.models import AuditLog
+from app.modules.parts.models import Part, PartStatus
+from app.modules.parts.stock_repository import StockRepository
+from app.modules.parts.stock_service import reserve_for_ref
 from app.modules.repair_order.models import (
     RepairOrder,
     ROStatus,
@@ -17,6 +22,7 @@ from app.modules.repair_order.service import (
     OptimisticLockError,
     RepairOrderNotFoundError,
     RepairOrderService,
+    StepIncompleteError,
 )
 
 GARAGE = 1
@@ -207,6 +213,86 @@ class TestStatusTransition:
                 db_session, GARAGE, ACTOR,
                 "00000000-0000-0000-0000-000000000000", ROStatus.diagnosis
             )
+
+
+# ---------------------------------------------------------------------------
+# Backward transitions — going back to an earlier step
+# ---------------------------------------------------------------------------
+
+async def _advance_to_in_repair(db_session: AsyncSession, ro: RepairOrder) -> str:
+    """Move a fresh RO to in_repair, satisfying the diagnosis step preconditions."""
+    pid = str(ro.public_id)
+    await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis)
+    ro.assigned_user_id = ACTOR
+    ro.assignment_accepted_at = datetime.now()
+    ro.diagnosis_completed_at = datetime.now()
+    await db_session.flush()
+    await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.in_repair)
+    return pid
+
+
+@pytest.mark.asyncio
+class TestBackwardTransition:
+    async def test_backward_transition_requires_reason(self, db_session: AsyncSession):
+        ro = await _create_ro(db_session)
+        await db_session.flush()
+        pid = await _advance_to_in_repair(db_session, ro)
+
+        with pytest.raises(StepIncompleteError):
+            await RepairOrderService.transition_status(
+                db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis
+            )
+
+    async def test_backward_transition_with_reason_succeeds(self, db_session: AsyncSession):
+        ro = await _create_ro(db_session)
+        await db_session.flush()
+        pid = await _advance_to_in_repair(db_session, ro)
+
+        updated = await RepairOrderService.transition_status(
+            db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis, reason="Erreur de saisie"
+        )
+        assert updated.status == ROStatus.diagnosis
+
+    async def test_in_repair_to_diagnosis_reverses_committed_stock(self, db_session: AsyncSession):
+        part = Part(
+            garage_id=GARAGE,
+            sku_code="BACKWARD-TEST-001",
+            name="Test Part",
+            unit_of_measure="pcs",
+            purchase_price_minor=500,
+            selling_price_minor=1000,
+            status=PartStatus.active,
+        )
+        db_session.add(part)
+        await db_session.flush()
+
+        # Stock: 20 on hand
+        level = await StockRepository.get_or_create_level(db_session, GARAGE, part.id)
+        level.on_hand = 20
+        await db_session.flush()
+
+        ro = await _create_ro(db_session)
+        await db_session.flush()
+
+        await reserve_for_ref(
+            db_session, garage_id=GARAGE, part_id=part.id, quantity=5,
+            ref_type="repair_order", ref_id=str(ro.public_id),
+        )
+        pid = await _advance_to_in_repair(db_session, ro)
+
+        # Entering in_repair committed the reservation into a stock-out
+        level = await StockRepository.get_level(db_session, GARAGE, part.id)
+        assert level.on_hand == 15
+        assert level.reserved == 0
+
+        # Go back to diagnosis — the committed stock should be reversed
+        await RepairOrderService.transition_status(
+            db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis, reason="Retour diagnostic"
+        )
+
+        level = await StockRepository.get_level(db_session, GARAGE, part.id)
+        assert level.on_hand == 20
+        assert level.reserved == 5
 
 
 # ---------------------------------------------------------------------------
