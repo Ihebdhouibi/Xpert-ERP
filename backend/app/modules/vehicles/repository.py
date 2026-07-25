@@ -12,6 +12,8 @@ from sqlalchemy.orm import aliased
 from app.modules.customer.models import Customer
 from app.modules.vehicles.models import (
     Vehicle,
+    VehicleCustomMake,
+    VehicleCustomModel,
     VehicleOwnershipHistory,
     VehicleRegistrationAlias,
     VehicleStatus,
@@ -170,6 +172,97 @@ async def get_registration_aliases(
         .order_by(VehicleRegistrationAlias.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Custom make / model lookup (user-confirmed dropdown entries)
+# ---------------------------------------------------------------------------
+
+async def list_custom_makes(db: AsyncSession, *, garage_id: int) -> list[str]:
+    result = await db.execute(
+        select(VehicleCustomMake.name)
+        .where(VehicleCustomMake.garage_id == garage_id)
+        .order_by(VehicleCustomMake.name)
+    )
+    return list(result.scalars().all())
+
+
+async def list_custom_models(db: AsyncSession, *, garage_id: int, make: str) -> list[str]:
+    result = await db.execute(
+        select(VehicleCustomModel.name)
+        .where(
+            VehicleCustomModel.garage_id == garage_id,
+            func.lower(VehicleCustomModel.make) == make.lower(),
+        )
+        .order_by(VehicleCustomModel.name)
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_custom_make(
+    db: AsyncSession, *, garage_id: int, name: str, created_by: Optional[int]
+) -> None:
+    existing = await db.execute(
+        select(VehicleCustomMake.id).where(
+            VehicleCustomMake.garage_id == garage_id,
+            func.lower(VehicleCustomMake.name) == name.lower(),
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        return
+    db.add(VehicleCustomMake(garage_id=garage_id, name=name, created_by=created_by))
+    await db.commit()
+
+
+async def upsert_custom_model(
+    db: AsyncSession, *, garage_id: int, make: str, name: str, created_by: Optional[int]
+) -> None:
+    existing = await db.execute(
+        select(VehicleCustomModel.id).where(
+            VehicleCustomModel.garage_id == garage_id,
+            func.lower(VehicleCustomModel.make) == make.lower(),
+            func.lower(VehicleCustomModel.name) == name.lower(),
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        return
+    db.add(
+        VehicleCustomModel(garage_id=garage_id, make=make, name=name, created_by=created_by)
+    )
+    await db.commit()
+
+
+async def delete_custom_make(db: AsyncSession, *, garage_id: int, name: str) -> bool:
+    result = await db.execute(
+        select(VehicleCustomMake).where(
+            VehicleCustomMake.garage_id == garage_id,
+            func.lower(VehicleCustomMake.name) == name.lower(),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return False
+    await db.delete(row)
+    await db.commit()
+    return True
+
+
+async def delete_custom_model(
+    db: AsyncSession, *, garage_id: int, make: str, name: str
+) -> bool:
+    result = await db.execute(
+        select(VehicleCustomModel).where(
+            VehicleCustomModel.garage_id == garage_id,
+            func.lower(VehicleCustomModel.make) == make.lower(),
+            func.lower(VehicleCustomModel.name) == name.lower(),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return False
+    await db.delete(row)
+    await db.commit()
+    return True
 
 
 async def patch_from_ocr(

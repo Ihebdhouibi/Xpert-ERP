@@ -133,6 +133,47 @@ class VehicleOwnershipHistory(Base):
     )
 
 
+class VehicleCustomMake(Base):
+    """User-confirmed vehicle make not present in the frontend's static curated list."""
+
+    __tablename__ = "vehicle_custom_make"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("garage_id", "name", name="uq_vehicle_custom_make_garage_name"),
+        Index("ix_vehicle_custom_make_garage_id", "garage_id"),
+    )
+
+
+class VehicleCustomModel(Base):
+    """User-confirmed vehicle model not present in the frontend's static curated list."""
+
+    __tablename__ = "vehicle_custom_model"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    make: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "garage_id", "make", "name", name="uq_vehicle_custom_model_garage_make_name"
+        ),
+        Index("ix_vehicle_custom_model_garage_make", "garage_id", "make"),
+    )
+
+
 class VehicleRegistrationAlias(Base):
     """Previous registration plates — re-registration tracked as alias, not new record."""
 
