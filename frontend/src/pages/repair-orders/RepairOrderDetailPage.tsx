@@ -280,17 +280,26 @@ function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: (
   )
   const [notes, setNotes] = useState(ro.diagnosis?.notes ?? '')
   const completed = ro.diagnosis_completed_at !== null
+  const [editing, setEditing] = useState(false)
   const allAnswered = DIAGNOSIS_QUESTIONS.every((q) => answers[q.code] !== undefined)
+  const locked = completed && !editing
 
   const save = useMutation({
     mutationFn: (finish: boolean) =>
       repairOrderApi.saveDiagnosis(ro.id, { answers, notes: notes || null, completed: finish }),
     onSuccess: (_d, finish) => {
       success(finish ? 'Diagnostic terminé.' : 'Diagnostic enregistré.')
+      setEditing(false)
       onUpdated()
     },
     onError: () => toastError("Impossible d'enregistrer le diagnostic."),
   })
+
+  const cancelEdit = () => {
+    setAnswers(ro.diagnosis?.answers ?? {})
+    setNotes(ro.diagnosis?.notes ?? '')
+    setEditing(false)
+  }
 
   return (
     <Box>
@@ -322,6 +331,7 @@ function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: (
             <ToggleButtonGroup
               exclusive
               size="small"
+              disabled={locked}
               value={answers[q.code] === undefined ? null : answers[q.code]}
               onChange={(_e, v) => {
                 if (v === null) return
@@ -345,35 +355,83 @@ function DiagnosisPanel({ ro, onUpdated }: { ro: RepairOrderDetail; onUpdated: (
         minRows={2}
         fullWidth
         size="small"
+        disabled={locked}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         sx={{ mt: 2 }}
       />
 
-      <Stack direction="row" spacing={1.5} justifyContent="flex-end" mt={2}>
-        <Button
-          variant="outlined"
-          size="small"
-          disabled={save.isPending}
-          onClick={() => save.mutate(false)}
-          sx={{ textTransform: 'none', fontWeight: 600 }}
-        >
-          Enregistrer
-        </Button>
-        <Tooltip title={allAnswered ? '' : 'Répondez à toutes les questions (D1 à D5).'}>
-          <span>
-            <Button
-              variant="contained"
-              size="small"
-              disabled={save.isPending || !allAnswered}
-              onClick={() => save.mutate(true)}
-              sx={{ textTransform: 'none', fontWeight: 700 }}
-            >
-              Terminer le diagnostic
-            </Button>
-          </span>
-        </Tooltip>
-      </Stack>
+      {locked ? (
+        <Stack alignItems="flex-end" spacing={0.5} mt={2}>
+          {ro.status !== 'diagnosis' && (
+            <Typography variant="caption" color="text.secondary">
+              Diagnostic déjà utilisé — modifier peut désynchroniser le devis ou la réparation en cours.
+            </Typography>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setEditing(true)}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            Modifier
+          </Button>
+        </Stack>
+      ) : (
+        <Stack direction="row" spacing={1.5} justifyContent="flex-end" mt={2}>
+          {completed ? (
+            <>
+              <Button
+                variant="text"
+                size="small"
+                disabled={save.isPending}
+                onClick={cancelEdit}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                Annuler
+              </Button>
+              <Tooltip title={allAnswered ? '' : 'Répondez à toutes les questions (D1 à D5).'}>
+                <span>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={save.isPending || !allAnswered}
+                    onClick={() => save.mutate(true)}
+                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Enregistrer les modifications
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={save.isPending}
+                onClick={() => save.mutate(false)}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                Enregistrer
+              </Button>
+              <Tooltip title={allAnswered ? '' : 'Répondez à toutes les questions (D1 à D5).'}>
+                <span>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={save.isPending || !allAnswered}
+                    onClick={() => save.mutate(true)}
+                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Terminer le diagnostic
+                  </Button>
+                </span>
+              </Tooltip>
+            </>
+          )}
+        </Stack>
+      )}
     </Box>
   )
 }
