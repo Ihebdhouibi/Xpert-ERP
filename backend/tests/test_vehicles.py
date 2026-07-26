@@ -368,3 +368,69 @@ async def test_vehicle_history(auth_client: AsyncClient) -> None:
     assert len(history["registration_aliases"]) == 1
     assert history["registration_aliases"][0]["registration"] == "ABC-123"
     assert history["repair_orders"] == []
+
+
+# ---------------------------------------------------------------------------
+# Custom make / model lookup
+# ---------------------------------------------------------------------------
+
+async def test_create_vehicle_registers_custom_make_and_model(
+    auth_client: AsyncClient,
+) -> None:
+    await auth_client.post(BASE, json=CREATE_BODY)  # make="Toyota", model="Corolla"
+
+    r = await auth_client.get(f"{BASE}/makes")
+    assert r.status_code == 200
+    assert "Toyota" in r.json()
+
+    r = await auth_client.get(f"{BASE}/models", params={"make": "Toyota"})
+    assert r.status_code == 200
+    assert "Corolla" in r.json()
+
+
+async def test_create_vehicle_same_make_different_case_not_duplicated(
+    auth_client: AsyncClient,
+) -> None:
+    await auth_client.post(BASE, json=CREATE_BODY)  # "Toyota"
+    await auth_client.post(
+        BASE, json={**CREATE_BODY, "registration": "ABC-124", "make": "toyota"}
+    )
+
+    r = await auth_client.get(f"{BASE}/makes")
+    makes = [m for m in r.json() if m.lower() == "toyota"]
+    assert len(makes) == 1
+
+
+async def test_update_vehicle_make_registers_new_custom_make(
+    auth_client: AsyncClient,
+) -> None:
+    created = (await auth_client.post(BASE, json=CREATE_BODY)).json()
+    await auth_client.patch(f"{BASE}/{created['id']}", json={"make": "Skoda"})
+
+    r = await auth_client.get(f"{BASE}/makes")
+    assert "Skoda" in r.json()
+
+
+async def test_delete_custom_make(auth_client: AsyncClient) -> None:
+    await auth_client.post(BASE, json=CREATE_BODY)  # "Toyota"
+
+    r = await auth_client.delete(f"{BASE}/makes/Toyota")
+    assert r.status_code == 204
+
+    r = await auth_client.get(f"{BASE}/makes")
+    assert "Toyota" not in r.json()
+
+
+async def test_delete_unknown_custom_make_returns_404(auth_client: AsyncClient) -> None:
+    r = await auth_client.delete(f"{BASE}/makes/Nonexistent")
+    assert r.status_code == 404
+
+
+async def test_delete_custom_model(auth_client: AsyncClient) -> None:
+    await auth_client.post(BASE, json=CREATE_BODY)  # make="Toyota", model="Corolla"
+
+    r = await auth_client.delete(f"{BASE}/models/Toyota/Corolla")
+    assert r.status_code == 204
+
+    r = await auth_client.get(f"{BASE}/models", params={"make": "Toyota"})
+    assert "Corolla" not in r.json()

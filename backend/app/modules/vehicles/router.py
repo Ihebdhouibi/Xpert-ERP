@@ -23,6 +23,7 @@ from app.modules.vehicles.schemas import (
 from app.modules.vehicles.service import (
     ConflictError,
     DuplicateVehicleError,
+    MakeModelNotFoundError,
     VehicleNotFoundError,
 )
 from app.core.logging import get_logger
@@ -62,6 +63,76 @@ async def list_vehicles(
 
 
 # ---------------------------------------------------------------------------
+# Make / model lookup (user-confirmed dropdown entries)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/makes",
+    response_model=list[str],
+    dependencies=[require_permission("vehicle.read")],
+    summary="List garage-confirmed vehicle makes not in the frontend's static list",
+)
+async def list_makes(
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    return await service.list_makes(db, garage_id=user.garage_id)
+
+
+@router.get(
+    "/models",
+    response_model=list[str],
+    dependencies=[require_permission("vehicle.read")],
+    summary="List garage-confirmed vehicle models for a make not in the frontend's static list",
+)
+async def list_models(
+    user: AuthUser,
+    make: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    return await service.list_models(db, garage_id=user.garage_id, make=make)
+
+
+@router.delete(
+    "/makes/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    dependencies=[require_permission("vehicle.delete")],
+    summary="Remove a garage-confirmed make from the dropdown suggestions",
+)
+async def delete_make(
+    name: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        await service.remove_make(db, garage_id=user.garage_id, name=name)
+    except MakeModelNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/models/{make}/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    dependencies=[require_permission("vehicle.delete")],
+    summary="Remove a garage-confirmed model from the dropdown suggestions",
+)
+async def delete_model(
+    make: str,
+    name: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    try:
+        await service.remove_model(db, garage_id=user.garage_id, make=make, name=name)
+    except MakeModelNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
 
@@ -78,7 +149,9 @@ async def create_vehicle(
     db: AsyncSession = Depends(get_db),
 ) -> VehicleOut:
     try:
-        return await service.create_vehicle(db, garage_id=user.garage_id, data=body)
+        return await service.create_vehicle(
+            db, garage_id=user.garage_id, data=body, created_by=user.user_id or None
+        )
     except DuplicateVehicleError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -136,6 +209,7 @@ async def update_vehicle(
             garage_id=user.garage_id,
             data=body,
             expected_version=expected_version,
+            updated_by=user.user_id or None,
         )
     except VehicleNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

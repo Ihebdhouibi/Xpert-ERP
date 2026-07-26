@@ -51,6 +51,22 @@ def can_transition(from_status: ROStatus, to_status: ROStatus) -> bool:
     return to_status in ALLOWED_TRANSITIONS.get(from_status, set())
 
 
+# Transitions that move the repair order back to an earlier step. These
+# require a mandatory reason and, if leaving in_repair, reverse the stock
+# committed when in_repair was entered.
+BACKWARD_TRANSITIONS: set[tuple[ROStatus, ROStatus]] = {
+    (ROStatus.diagnosis, ROStatus.created),
+    (ROStatus.in_repair, ROStatus.diagnosis),
+    (ROStatus.finished, ROStatus.in_repair),
+    (ROStatus.paused_parts, ROStatus.diagnosis),
+}
+
+
+def is_backward_transition(from_status: ROStatus, to_status: ROStatus) -> bool:
+    """Check if a transition moves the repair order back to an earlier step."""
+    return (from_status, to_status) in BACKWARD_TRANSITIONS
+
+
 class RepairOrder(Base):
     __tablename__ = "repair_order"
 

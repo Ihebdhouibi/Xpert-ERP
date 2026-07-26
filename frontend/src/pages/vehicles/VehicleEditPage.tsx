@@ -31,8 +31,11 @@ import {
   type VehicleStatus,
 } from '../../lib/vehiclesApi'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
+import { mergeMakeOptions, mergeModelOptions } from '../../lib/vehicleOptions'
+import { ConfirmableAutocomplete } from '../../components/vehicles/ConfirmableAutocomplete'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
+import { useAuth } from '../../contexts/AuthContext'
 
 const FUEL_TYPES = Object.entries(FUEL_TYPE_LABELS).map(([value, label]) => ({
   value: value as FuelType,
@@ -109,6 +112,8 @@ export function VehicleEditPage() {
   const vehicleId = Number(id)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const canDeleteCustomOptions = user?.permissions.includes('vehicle.delete') ?? false
 
   const { data: vehicle, isLoading, isError } = useQuery({
     queryKey: ['vehicle', vehicleId],
@@ -134,6 +139,7 @@ export function VehicleEditPage() {
   const [customerSearch, setCustomerSearch] = useState('')
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousMakeRef = useRef<string | null>(null)
 
   const [initialised, setInitialised] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -154,6 +160,20 @@ export function VehicleEditPage() {
     setStatus(vehicle.status)
     setInitialised(true)
   }
+
+  // Clear the model whenever the make changes to a genuinely different value —
+  // but not on initial population, where make/model are set together from the loaded vehicle.
+  useEffect(() => {
+    if (!initialised) return
+    if (previousMakeRef.current === null) {
+      previousMakeRef.current = make
+      return
+    }
+    if (previousMakeRef.current !== make) {
+      previousMakeRef.current = make
+      setModel('')
+    }
+  }, [make, initialised])
 
   // Fetch owner once vehicle loads (only if it has a customer_id)
   const { data: ownerData } = useQuery({
@@ -198,6 +218,31 @@ export function VehicleEditPage() {
     placeholderData: prev => prev,
   })
   const customers = customersData?.items ?? []
+
+  const { data: customMakes, isFetching: makesLoading } = useQuery({
+    queryKey: ['vehicle-makes'],
+    queryFn: vehiclesApi.getMakes,
+    staleTime: 60_000,
+  })
+  const makeOptions = mergeMakeOptions(customMakes ?? [])
+
+  const { data: customModels, isFetching: modelsLoading } = useQuery({
+    queryKey: ['vehicle-models', make],
+    queryFn: () => vehiclesApi.getModels(make),
+    enabled: !!make,
+    staleTime: 60_000,
+  })
+  const modelOptions = mergeModelOptions(make, customModels ?? [])
+
+  const handleDeleteCustomMake = async (name: string) => {
+    await vehiclesApi.removeMake(name)
+    await queryClient.invalidateQueries({ queryKey: ['vehicle-makes'] })
+  }
+
+  const handleDeleteCustomModel = async (name: string) => {
+    await vehiclesApi.removeModel(make, name)
+    await queryClient.invalidateQueries({ queryKey: ['vehicle-models', make] })
+  }
 
   const errors = validate({ make, model, vin, year, mileage })
   const hasErrors = Object.keys(errors).length > 0
@@ -303,24 +348,31 @@ export function VehicleEditPage() {
             >
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <TextField
+                  <ConfirmableAutocomplete
                     label="Marque *"
                     value={make}
-                    onChange={e => setMake(e.target.value)}
-                    fullWidth
+                    onChange={setMake}
+                    options={makeOptions}
+                    loading={makesLoading}
                     autoFocus
                     error={submitted && !!errors.make}
                     helperText={submitted ? errors.make : undefined}
+                    canDeleteCustomOptions={canDeleteCustomOptions}
+                    onDeleteCustomOption={handleDeleteCustomMake}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <TextField
+                  <ConfirmableAutocomplete
                     label="Modèle *"
                     value={model}
-                    onChange={e => setModel(e.target.value)}
-                    fullWidth
+                    onChange={setModel}
+                    options={modelOptions}
+                    loading={!!make && modelsLoading}
+                    disabled={!make}
                     error={submitted && !!errors.model}
-                    helperText={submitted ? errors.model : undefined}
+                    helperText={submitted ? errors.model : make ? undefined : 'Choisissez d’abord une marque'}
+                    canDeleteCustomOptions={canDeleteCustomOptions}
+                    onDeleteCustomOption={handleDeleteCustomModel}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>

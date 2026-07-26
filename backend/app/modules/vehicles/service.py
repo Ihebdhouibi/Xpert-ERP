@@ -37,6 +37,7 @@ async def create_vehicle(
     *,
     garage_id: int,
     data: VehicleCreateRequest,
+    created_by: Optional[int] = None,
 ) -> VehicleOut:
     logger.info("create_vehicle_start", garage_id=garage_id, make=data.make, model=data.model, registration=data.registration, vin=data.vin)
     try:
@@ -75,6 +76,12 @@ async def create_vehicle(
         )
 
         created = await repo.create(db, vehicle)
+        await repo.upsert_custom_make(
+            db, garage_id=garage_id, name=data.make, created_by=created_by
+        )
+        await repo.upsert_custom_model(
+            db, garage_id=garage_id, make=data.make, name=data.model, created_by=created_by
+        )
         logger.info("vehicle_created", vehicle_id=created.id, garage_id=garage_id)
         return VehicleOut.model_validate(created)
     except DuplicateVehicleError:
@@ -133,6 +140,7 @@ async def update_vehicle(
     garage_id: int,
     data: VehicleUpdateRequest,
     expected_version: Optional[int],
+    updated_by: Optional[int] = None,
 ) -> VehicleOut:
     logger.info("update_vehicle_start", vehicle_id=vehicle_id, garage_id=garage_id)
     vehicle = await _get_or_404(db, vehicle_id=vehicle_id, garage_id=garage_id)
@@ -152,6 +160,16 @@ async def update_vehicle(
     vehicle.version += 1
     await db.commit()
     await db.refresh(vehicle)
+
+    if "make" in update_fields:
+        await repo.upsert_custom_make(
+            db, garage_id=garage_id, name=vehicle.make, created_by=updated_by
+        )
+    if "model" in update_fields:
+        await repo.upsert_custom_model(
+            db, garage_id=garage_id, make=vehicle.make, name=vehicle.model, created_by=updated_by
+        )
+
     logger.info("vehicle_updated", vehicle_id=vehicle_id, garage_id=garage_id)
     return VehicleOut.model_validate(vehicle)
 
@@ -270,6 +288,30 @@ async def re_register(
 
 
 # ---------------------------------------------------------------------------
+# Custom make / model lookup (user-confirmed dropdown entries)
+# ---------------------------------------------------------------------------
+
+async def list_makes(db: AsyncSession, *, garage_id: int) -> list[str]:
+    return await repo.list_custom_makes(db, garage_id=garage_id)
+
+
+async def list_models(db: AsyncSession, *, garage_id: int, make: str) -> list[str]:
+    return await repo.list_custom_models(db, garage_id=garage_id, make=make)
+
+
+async def remove_make(db: AsyncSession, *, garage_id: int, name: str) -> None:
+    found = await repo.delete_custom_make(db, garage_id=garage_id, name=name)
+    if not found:
+        raise MakeModelNotFoundError(name)
+
+
+async def remove_model(db: AsyncSession, *, garage_id: int, make: str, name: str) -> None:
+    found = await repo.delete_custom_model(db, garage_id=garage_id, make=make, name=name)
+    if not found:
+        raise MakeModelNotFoundError(name)
+
+
+# ---------------------------------------------------------------------------
 # History view
 # ---------------------------------------------------------------------------
 
@@ -364,3 +406,9 @@ class DuplicateVehicleError(ValueError):
 
 class ConflictError(ValueError):
     pass
+
+
+class MakeModelNotFoundError(ValueError):
+    def __init__(self, name: str) -> None:
+        super().__init__(f"'{name}' not found in the custom list")
+        self.name = name

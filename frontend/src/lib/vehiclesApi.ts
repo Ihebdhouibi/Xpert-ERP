@@ -158,4 +158,22 @@ export const vehiclesApi = {
   getHistory(id: number): Promise<VehicleHistoryOut> {
     return apiClient.get(`/vehicles/${id}/history`).then(r => r.data)
   },
+
+  getMakes(): Promise<string[]> {
+    return apiClient.get('/vehicles/makes').then(r => r.data)
+  },
+
+  getModels(make: string): Promise<string[]> {
+    return apiClient.get('/vehicles/models', { params: { make } }).then(r => r.data)
+  },
+
+  removeMake(name: string): Promise<void> {
+    return apiClient.delete(`/vehicles/makes/${encodeURIComponent(name)}`).then(() => undefined)
+  },
+
+  removeModel(make: string, name: string): Promise<void> {
+    return apiClient
+      .delete(`/vehicles/models/${encodeURIComponent(make)}/${encodeURIComponent(name)}`)
+      .then(() => undefined)
+  },
 }
