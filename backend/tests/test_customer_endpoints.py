@@ -392,3 +392,128 @@ class TestAuditPersisted:
         assert rows[0].entity_type == "customer"
         # actor was resolved from the JWT
         assert rows[0].user_id is not None
+
+
+# ---------------------------------------------------------------------------
+# Bulk import from Excel
+# ---------------------------------------------------------------------------
+
+
+def _build_xlsx(rows: list[list]) -> bytes:
+    """Build an in-memory .xlsx workbook from a list of rows (first row = header)."""
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+_IMPORT_HEADER = [
+    "Nom",
+    "Prénom",
+    "Nom de l'entreprise",
+    "Téléphone",
+    "E-mail",
+    "Adresse",
+    "Code postal",
+    "Ville",
+]
+
+
+@pytest.mark.asyncio
+class TestImportEndpoint:
+    async def test_import_creates_customers(self, customer_client: AsyncClient) -> None:
+        token = await _login(customer_client)
+        content = _build_xlsx(
+            [
+                _IMPORT_HEADER,
+                ["Dupont", "Jean", None, "+33760481234", "jean@example.com", "1 Rue X", 13015, "Marseille"],
+                [None, None, "AUTOGRIFF", None, None, "5 Bd Y", 67000, "Strasbourg"],
+            ]
+        )
+        resp = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["total_rows"] == 2
+        assert data["created"] == 2
+        assert data["skipped"] == 0
+        assert data["errors"] == []
+
+        # The company row was classified as a company.
+        listing = await customer_client.get(
+            "/api/v1/customers", headers=_auth(token), params={"q": "AUTOGRIFF"}
+        )
+        items = listing.json()["items"]
+        assert any(i["type"] == "company" and i["company_name"] == "AUTOGRIFF" for i in items)
+
+    async def test_import_tolerates_empty_and_bad_cells(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        content = _build_xlsx(
+            [
+                _IMPORT_HEADER,
+                # Fully empty row → ignored silently.
+                [None, None, None, None, None, None, None, None],
+                # Invalid phone + invalid email are dropped, customer still created.
+                ["Martin", "Luc", None, "0612345678", "not-an-email", None, None, "Lyon"],
+                # No name at all but has data → error row.
+                [None, None, None, "+33111111111", None, "some street", None, None],
+            ]
+        )
+        resp = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["created"] == 1
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["row"] == 4
+
+    async def test_import_skips_duplicates(self, customer_client: AsyncClient) -> None:
+        token = await _login(customer_client)
+        rows = [
+            _IMPORT_HEADER,
+            ["Bara", "Hakim", None, "+33760000001", "hakim@example.com", None, None, None],
+            # Same phone as above → duplicate, skipped.
+            ["Bara", "Hakim", None, "+33760000001", None, None, None, None],
+        ]
+        content = _build_xlsx(rows)
+        resp = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["created"] == 1
+        assert data["skipped"] == 1
+
+    async def test_import_rejects_non_xlsx(self, customer_client: AsyncClient) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.csv", b"a,b,c", "text/csv")},
+        )
+        assert resp.status_code == 400
+
+    async def test_import_requires_auth(self, customer_client: AsyncClient) -> None:
+        content = _build_xlsx([_IMPORT_HEADER])
+        resp = await customer_client.post(
+            "/api/v1/customers/import",
+            files={"file": ("clients.xlsx", content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert resp.status_code == 401

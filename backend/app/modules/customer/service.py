@@ -19,6 +19,7 @@ endpoint owns the transaction (matches the auth/rbac modules).
 from __future__ import annotations
 
 import enum
+import re
 import uuid as uuid_lib
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -534,3 +535,299 @@ async def add_balance_event(
     )
     logger.info("add_balance_event_success", customer_id=target.id, event_id=event.id, garage_id=garage_id)
     return event
+
+
+# ---------------------------------------------------------------------------
+# Bulk import from Excel
+# ---------------------------------------------------------------------------
+
+# Tokens that appear in exported spreadsheets and must be treated as empty.
+_EMPTY_TOKENS = {"", "undefined", "none", "null", "n/a", "na", "nan", "-", "—"}
+_E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@dataclass
+class ImportedRow:
+    """A single spreadsheet row normalised into customer fields."""
+
+    type: CustomerType
+    full_name: str
+    company_name: Optional[str]
+    phone_e164: Optional[str]
+    email: Optional[str]
+    address: Optional[dict[str, str]]
+
+
+def _norm_header(value: Any) -> str:
+    """Lower-case, accent-strip and trim a header cell for fuzzy matching."""
+    import unicodedata
+
+    s = unicodedata.normalize("NFKD", str(value or ""))
+    s = s.encode("ascii", "ignore").decode("ascii")
+    return s.lower().strip()
+
+
+def _cell_text(value: Any) -> Optional[str]:
+    """Return a trimmed string for a cell, or None for empty / placeholder values."""
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    s = str(value).strip()
+    if s.lower() in _EMPTY_TOKENS:
+        return None
+    return s or None
+
+
+def _clean_phone(value: Any) -> Optional[str]:
+    """Normalise a phone cell to E.164, or None when it cannot be validated.
+
+    Import is lenient: an unparseable number is dropped (customer still imported
+    without a phone) rather than aborting the row.
+    """
+    s = _cell_text(value)
+    if s is None:
+        return None
+    s = re.sub(r"[\s().\-/]", "", s)
+    if s.startswith("00"):
+        s = "+" + s[2:]
+    if not s.startswith("+"):
+        return None
+    return s if _E164_RE.match(s) else None
+
+
+def _clean_email(value: Any) -> Optional[str]:
+    """Return a lower-cased valid email, or None when invalid / empty."""
+    s = _cell_text(value)
+    if s is None:
+        return None
+    s = s.lower()
+    return s if _EMAIL_RE.match(s) else None
+
+
+# Maps a normalised header to a logical field. Longer / more specific keys are
+# checked first so that "nom de l'entreprise" wins over the bare "nom".
+def _classify_header(header: str) -> Optional[str]:
+    if not header:
+        return None
+    if "entreprise" in header or "societe" in header or "raison" in header or "nom de l" in header:
+        return "company"
+    if "prenom" in header:
+        return "first_name"
+    if header == "nom" or header.startswith("nom "):
+        return "last_name"
+    if "mail" in header:
+        return "email"
+    if "tel" in header or "phone" in header or "gsm" in header or "mobile" in header or "portable" in header:
+        return "phone"
+    if "code postal" in header or header in {"cp", "code"}:
+        return "postal_code"
+    if "ville" in header or "city" in header:
+        return "city"
+    if "adresse" in header or "address" in header or "rue" in header:
+        return "street"
+    return None
+
+
+def parse_customers_xlsx(content: bytes) -> tuple[list[Optional[ImportedRow]], list[tuple[int, str]]]:
+    """Parse an Excel workbook into normalised rows.
+
+    Returns a tuple of:
+      - a list where each entry is an `ImportedRow` (importable), or None for a
+        fully-empty row that should be ignored silently;
+      - a list of ``(row_number, reason)`` errors for rows that carried data but
+        could not be turned into a valid customer.
+
+    Raises ValueError when the file cannot be read as an Excel workbook.
+    """
+    import io
+
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a 400 by the router
+        raise ValueError(f"Fichier Excel illisible: {exc}") from exc
+
+    ws = wb.active
+    if ws is None:
+        raise ValueError("Le classeur ne contient aucune feuille.")
+
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        return [], []
+
+    # Build column index -> logical field mapping from the header row.
+    field_by_col: dict[int, str] = {}
+    for idx, raw in enumerate(header_row):
+        field = _classify_header(_norm_header(raw))
+        if field is not None and idx not in field_by_col.values():
+            field_by_col[idx] = field
+
+    parsed: list[Optional[ImportedRow]] = []
+    errors: list[tuple[int, str]] = []
+
+    for offset, raw_row in enumerate(rows_iter):
+        row_number = offset + 2  # header is row 1
+        values: dict[str, Any] = {}
+        for idx, field in field_by_col.items():
+            values[field] = raw_row[idx] if idx < len(raw_row) else None
+
+        last_name = _cell_text(values.get("last_name"))
+        first_name = _cell_text(values.get("first_name"))
+        company = _cell_text(values.get("company"))
+        phone = _clean_phone(values.get("phone"))
+        email = _clean_email(values.get("email"))
+        street = _cell_text(values.get("street"))
+        city = _cell_text(values.get("city"))
+        postal_code = _cell_text(values.get("postal_code"))
+
+        person = " ".join(p for p in (first_name, last_name) if p).strip()
+
+        # Fully empty row: ignore without counting it.
+        if not any([person, company, phone, email, street, city, postal_code]):
+            parsed.append(None)
+            continue
+
+        if not person and not company:
+            errors.append((row_number, "Nom et prénom manquants."))
+            parsed.append(None)
+            continue
+
+        if company:
+            ctype = CustomerType.company
+            full_name = (person or company)[:255]
+            company_name = company[:255]
+        else:
+            ctype = CustomerType.individual
+            full_name = person[:255]
+            company_name = None
+
+        address: dict[str, str] = {}
+        if street:
+            address["street"] = street[:255]
+        if city:
+            address["city"] = city[:100]
+        if postal_code:
+            address["postal_code"] = postal_code[:20]
+
+        parsed.append(
+            ImportedRow(
+                type=ctype,
+                full_name=full_name,
+                company_name=company_name,
+                phone_e164=phone,
+                email=email,
+                address=address or None,
+            )
+        )
+
+    wb.close()
+    return parsed, errors
+
+
+async def import_customers(
+    db: AsyncSession,
+    *,
+    garage_id: int,
+    actor_user_id: Optional[int],
+    content: bytes,
+    request_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+):
+    """Seed customers from an uploaded Excel file.
+
+    Parsing is lenient — empty / malformed optional cells are dropped rather
+    than aborting the whole import. Rows that duplicate an existing customer
+    (same phone or email in the garage) or a previous row in the same file are
+    skipped. All valid rows are inserted in a single transaction; the caller
+    owns the commit.
+    """
+    from app.modules.customer.schemas import CustomerImportResult, CustomerImportRowError
+
+    parsed, parse_errors = parse_customers_xlsx(content)
+
+    errors: list[CustomerImportRowError] = [
+        CustomerImportRowError(row=r, reason=msg) for r, msg in parse_errors
+    ]
+    created = 0
+    skipped = 0
+    total_rows = 0
+
+    seen_phones: set[str] = set()
+    seen_emails: set[str] = set()
+
+    for offset, row in enumerate(parsed):
+        if row is None:
+            continue
+        total_rows += 1
+        row_number = offset + 2
+
+        # De-dupe within the file and against existing customers.
+        if row.phone_e164 and (
+            row.phone_e164 in seen_phones
+            or await repo.find_by_phone(db, garage_id, row.phone_e164) is not None
+        ):
+            skipped += 1
+            continue
+        if row.email and (
+            row.email in seen_emails
+            or await repo.find_by_email(db, garage_id, row.email) is not None
+        ):
+            skipped += 1
+            continue
+
+        customer = Customer(
+            garage_id=garage_id,
+            type=row.type,
+            full_name=row.full_name,
+            company_name=row.company_name,
+            phone_e164=row.phone_e164,
+            email=row.email,
+            address=row.address,
+            created_by_user_id=actor_user_id,
+            updated_by_user_id=actor_user_id,
+        )
+        db.add(customer)
+        created += 1
+        if row.phone_e164:
+            seen_phones.add(row.phone_e164)
+        if row.email:
+            seen_emails.add(row.email)
+
+    await db.flush()
+
+    await audit(
+        db=db,
+        garage_id=garage_id,
+        user_id=actor_user_id,
+        component="customer",
+        action="import",
+        entity_type="customer",
+        entity_id=None,
+        new_value={
+            "total_rows": total_rows,
+            "created": created,
+            "skipped": skipped,
+            "errors": len(errors),
+        },
+        request_id=request_id,
+        ip_address=ip_address,
+    )
+    logger.info(
+        "import_customers_done",
+        garage_id=garage_id,
+        total_rows=total_rows,
+        created=created,
+        skipped=skipped,
+        errors=len(errors),
+    )
+    return CustomerImportResult(
+        total_rows=total_rows,
+        created=created,
+        skipped=skipped,
+        errors=errors,
+    )

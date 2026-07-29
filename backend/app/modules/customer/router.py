@@ -9,7 +9,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +42,7 @@ from app.modules.customer.schemas import (
     CustomerContactSummary,
     CustomerCreateRequest,
     CustomerDetail,
+    CustomerImportResult,
     CustomerListResponse,
     CustomerSummary,
     CustomerUpdateRequest,
@@ -289,6 +300,60 @@ async def create_customer(
     )
     assert fresh is not None
     return _to_detail(fresh)
+
+
+_MAX_IMPORT_BYTES = 5 * 1024 * 1024  # 5 MB
+_XLSX_CONTENT_TYPES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/octet-stream",
+}
+
+
+@router.post(
+    "/import",
+    response_model=CustomerImportResult,
+    dependencies=[require_permission("customer.create")],
+    summary="Bulk import customers from an Excel (.xlsx) file",
+)
+async def import_customers(
+    user: AuthUser,
+    request: Request,
+    file: UploadFile = File(..., description="Excel workbook with a header row"),
+    db: AsyncSession = Depends(get_db),
+) -> CustomerImportResult:
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".xlsx", ".xlsm")):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Format non support\u00e9. Fournissez un fichier Excel (.xlsx).",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Fichier vide.")
+    if len(content) > _MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Fichier trop volumineux (max 5 Mo).",
+        )
+
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    try:
+        result = await svc.import_customers(
+            db,
+            garage_id=user.garage_id,
+            actor_user_id=actor_id,
+            content=content,
+            request_id=_request_id(request),
+            ip_address=_client_ip(request),
+        )
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    await db.commit()
+    return result
 
 
 @router.patch(
