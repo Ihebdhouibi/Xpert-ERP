@@ -742,9 +742,11 @@ async def import_customers(
 
     Parsing is lenient — empty / malformed optional cells are dropped rather
     than aborting the whole import. Rows that duplicate an existing customer
-    (same phone or email in the garage) or a previous row in the same file are
-    skipped. All valid rows are inserted in a single transaction; the caller
-    owns the commit.
+    are skipped. Duplicates are detected against both existing customers and
+    earlier rows in the same file, using the strongest available key:
+    phone → email → (full_name [+ company_name]) when neither contact exists.
+    All valid rows are inserted in a single transaction; the caller owns the
+    commit.
     """
     from app.modules.customer.schemas import CustomerImportResult, CustomerImportRowError
 
@@ -759,6 +761,7 @@ async def import_customers(
 
     seen_phones: set[str] = set()
     seen_emails: set[str] = set()
+    seen_names: set[tuple[str, str]] = set()
 
     for offset, row in enumerate(parsed):
         if row is None:
@@ -766,7 +769,8 @@ async def import_customers(
         total_rows += 1
         row_number = offset + 2
 
-        # De-dupe within the file and against existing customers.
+        # De-dupe within the file and against existing customers, using the
+        # strongest identity key the row carries.
         if row.phone_e164 and (
             row.phone_e164 in seen_phones
             or await repo.find_by_phone(db, garage_id, row.phone_e164) is not None
@@ -779,6 +783,17 @@ async def import_customers(
         ):
             skipped += 1
             continue
+        # Fallback for rows with no phone and no email: match on name so a
+        # re-import of the same list does not create duplicates.
+        if not row.phone_e164 and not row.email:
+            name_key = (row.full_name.lower(), (row.company_name or "").lower())
+            if name_key in seen_names or (
+                await repo.find_by_name(db, garage_id, row.full_name, row.company_name)
+                is not None
+            ):
+                skipped += 1
+                continue
+            seen_names.add(name_key)
 
         customer = Customer(
             garage_id=garage_id,

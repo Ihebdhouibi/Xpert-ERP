@@ -501,6 +501,36 @@ class TestImportEndpoint:
         assert data["created"] == 1
         assert data["skipped"] == 1
 
+    async def test_import_skips_name_duplicates_without_contact(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        # Rows carry neither phone nor email — dedup must fall back to name.
+        rows = [
+            _IMPORT_HEADER,
+            ["Achit", "Mouloud", None, None, None, "1", 13015, "Marseille"],
+            # Same name (different case) → duplicate within the file.
+            ["ACHIT", "MOULOUD", None, None, None, "1", 13015, "Marseille"],
+        ]
+        first = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.xlsx", _build_xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["created"] == 1
+        assert first.json()["skipped"] == 1
+
+        # Re-importing the same list must create nothing (already in the DB).
+        second = await customer_client.post(
+            "/api/v1/customers/import",
+            headers=_auth(token),
+            files={"file": ("clients.xlsx", _build_xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["created"] == 0
+        assert second.json()["skipped"] == 2
+
     async def test_import_rejects_non_xlsx(self, customer_client: AsyncClient) -> None:
         token = await _login(customer_client)
         resp = await customer_client.post(
