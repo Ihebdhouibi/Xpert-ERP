@@ -276,3 +276,66 @@ class CreditOverrideRequest(Base):
         Index("ix_credit_override_garage_customer", "garage_id", "customer_id"),
         Index("ix_credit_override_garage_status", "garage_id", "status"),
     )
+
+
+class CreditLimitRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class CreditLimitChangeRequest(Base):
+    """A staff-submitted request to change an existing customer's credit limit.
+
+    Unlike `CreditOverrideRequest` (a one-time, time-limited window to issue a
+    single document), approving this request permanently changes
+    `Customer.credit_limit_minor`. Used by staff who hold `customer.update`
+    but not `customer.credit_limit.update` (e.g. receptionist) — an admin must
+    approve before the new limit takes effect.
+    """
+
+    __tablename__ = "credit_limit_change_request"
+
+    id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    garage_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+    customer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requested_by_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+
+    current_credit_limit_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_credit_limit_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    requested_credit_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+    status: Mapped[CreditLimitRequestStatus] = mapped_column(
+        Enum(CreditLimitRequestStatus, name="credit_limit_request_status_enum"),
+        nullable=False,
+        default=CreditLimitRequestStatus.pending,
+        server_default="pending",
+    )
+
+    approved_by_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+    )
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    customer: Mapped[Customer] = relationship("Customer")
+
+    __table_args__ = (
+        Index("ix_credit_limit_request_garage_customer", "garage_id", "customer_id"),
+        Index("ix_credit_limit_request_garage_status", "garage_id", "status"),
+    )

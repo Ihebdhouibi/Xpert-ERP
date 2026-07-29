@@ -332,6 +332,14 @@ async def update_customer(
             status.HTTP_409_CONFLICT,
             detail={"code": "fiscal_id_taken", "message": "This fiscal_id is already in use."},
         )
+    except svc.InvalidFiscalIdError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "invalid_fiscal_id",
+                "message": "fiscal_id must be a 14-digit SIRET number for company customers.",
+            },
+        )
 
     await db.commit()
     fresh = await repo.get_by_public_id(

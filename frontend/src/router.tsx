@@ -55,6 +55,7 @@ import { BonRetourCreatePage } from './pages/bon-retour/BonRetourCreatePage'
 import { BonRetourDetailPage } from './pages/bon-retour/BonRetourDetailPage'
 import { AvoirsFournisseursPage } from './pages/avoirs-fournisseurs/AvoirsFournisseursPage'
 import { CreditOverrideRequestsPage } from './pages/credit-overrides/CreditOverrideRequestsPage'
+import { CreditLimitChangeRequestsPage } from './pages/credit-overrides/CreditLimitChangeRequestsPage'
 
 export const router = createBrowserRouter(
   [
@@ -166,6 +167,7 @@ export const router = createBrowserRouter(
       { path: 'settings', element: <SettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
       { path: 'credit-override-requests', element: <CreditOverrideRequestsPage /> },
+      { path: 'credit-limit-requests', element: <CreditLimitChangeRequestsPage /> },
 
       // Documents & OCR
       { path: 'documents', element: <DocumentsPage /> },

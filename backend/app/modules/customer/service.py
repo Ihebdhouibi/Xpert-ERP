@@ -19,6 +19,7 @@ endpoint owns the transaction (matches the auth/rbac modules).
 from __future__ import annotations
 
 import enum
+import re
 import uuid as uuid_lib
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -49,6 +50,8 @@ from app.modules.customer.schemas import (
 
 logger = get_logger("customer")
 
+_SIRET_PATTERN = re.compile(r"^\d{14}$")
+
 
 # ---------------------------------------------------------------------------
 # Exceptions surfaced to the router layer
@@ -72,6 +75,10 @@ class OptimisticLockError(Exception):
 
 class FiscalIdConflictError(Exception):
     """A fiscal_id update would collide with another live customer."""
+
+
+class InvalidFiscalIdError(Exception):
+    """fiscal_id does not match the required format for the customer's type."""
 
 
 # ---------------------------------------------------------------------------
@@ -272,10 +279,13 @@ async def update_customer(
     if target.version != payload.version:
         raise OptimisticLockError(expected=payload.version, actual=target.version)
 
-    if payload.fiscal_id is not None and payload.fiscal_id != target.fiscal_id:
-        clash = await repo.find_by_fiscal_id(db, garage_id, payload.fiscal_id)
-        if clash is not None and clash.id != target.id:
-            raise FiscalIdConflictError(payload.fiscal_id)
+    if payload.fiscal_id is not None:
+        if target.type == CustomerType.company and not _SIRET_PATTERN.fullmatch(payload.fiscal_id):
+            raise InvalidFiscalIdError(payload.fiscal_id)
+        if payload.fiscal_id != target.fiscal_id:
+            clash = await repo.find_by_fiscal_id(db, garage_id, payload.fiscal_id)
+            if clash is not None and clash.id != target.id:
+                raise FiscalIdConflictError(payload.fiscal_id)
 
     old_snapshot = _to_audit_dict(target)
     changed: dict[str, Any] = {}

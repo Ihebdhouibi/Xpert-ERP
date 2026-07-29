@@ -251,6 +251,12 @@ export const navSections: NavSection[] = [
         icon: CreditScoreRoundedIcon,
         permission: 'credit.override.manage',
       },
+      {
+        label: 'Demandes de limite de crédit',
+        path: '/credit-limit-requests',
+        icon: CreditScoreRoundedIcon,
+        permission: 'customer.credit_limit.update',
+      },
     ],
   },
 ]

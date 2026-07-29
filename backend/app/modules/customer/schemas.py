@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal, Optional
 
@@ -15,16 +16,16 @@ from app.modules.customer.models import (
 # Shared validators
 # ---------------------------------------------------------------------------
 
-_E164_PATTERN = r"^\+[1-9]\d{6,14}$"
+_E164_PATTERN = r"^\+33[1-9]\d{8}$"
 _CURRENCY_PATTERN = r"^[A-Z]{3}$"
+_SIRET_PATTERN = r"^\d{14}$"
 
 
 def _normalize_e164(value: Optional[str]) -> Optional[str]:
-    """Trim whitespace and reject empty strings. Format is enforced by Field pattern."""
+    """Trim whitespace. Format is enforced by Field pattern."""
     if value is None:
         return None
-    v = value.strip()
-    return v or None
+    return value.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -65,9 +66,9 @@ class CustomerCreateRequest(BaseModel):
     type: CustomerType
     full_name: str = Field(min_length=1, max_length=255)
     company_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    fiscal_id: Optional[str] = Field(None, min_length=1, max_length=50)
+    fiscal_id: str = Field(min_length=1, max_length=50)
     email: Optional[EmailStr] = None
-    phone_e164: Optional[str] = Field(None, pattern=_E164_PATTERN, max_length=20)
+    phone_e164: str = Field(pattern=_E164_PATTERN, max_length=20)
     address: Optional[AddressSchema] = None
     segment: Optional[str] = Field(None, max_length=50)
     credit_limit_minor: int = Field(0, ge=0)
@@ -83,6 +84,12 @@ class CustomerCreateRequest(BaseModel):
     def _company_must_have_name(self) -> "CustomerCreateRequest":
         if self.type == CustomerType.company and not self.company_name:
             raise ValueError("company_name is required when type is 'company'")
+        return self
+
+    @model_validator(mode="after")
+    def _company_fiscal_id_is_siret(self) -> "CustomerCreateRequest":
+        if self.type == CustomerType.company and not re.fullmatch(_SIRET_PATTERN, self.fiscal_id):
+            raise ValueError("fiscal_id must be a 14-digit SIRET number when type is 'company'")
         return self
 
     @model_validator(mode="after")
@@ -119,6 +126,34 @@ class CreditLimitUpdateRequest(BaseModel):
     credit_limit_minor: int = Field(ge=0)
     credit_currency: str = Field(pattern=_CURRENCY_PATTERN)
     reason: str = Field(min_length=1, max_length=500)
+
+
+class CreditLimitChangeRequestCreate(BaseModel):
+    customer_public_id: str
+    credit_limit_minor: int = Field(ge=0)
+    credit_currency: str = Field(pattern=_CURRENCY_PATTERN)
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CreditLimitChangeRequestOut(BaseModel):
+    id: int
+    customer_id: int
+    customer_name: Optional[str] = None
+    requested_by_id: int
+    current_credit_limit_minor: int
+    requested_credit_limit_minor: int
+    requested_credit_currency: str
+    reason: str
+    status: str
+    approved_by_id: Optional[int] = None
+    rejection_reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreditLimitChangeRejectBody(BaseModel):
+    reason: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

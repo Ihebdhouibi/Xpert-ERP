@@ -138,11 +138,11 @@ export function CustomerDetailPage() {
   return (
     <Box>
       <PageHeader
-        title={c.full_name}
-        subtitle={c.company_name ?? TYPE_LABELS[c.type]}
+        title={c.type === 'company' && c.company_name ? c.company_name : c.full_name}
+        subtitle={c.type === 'company' && c.company_name ? c.full_name : TYPE_LABELS[c.type]}
         breadcrumbs={[
           { label: 'Clients', href: '/customers' },
-          { label: c.full_name },
+          { label: c.type === 'company' && c.company_name ? c.company_name : c.full_name },
         ]}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">

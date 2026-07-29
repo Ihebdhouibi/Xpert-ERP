@@ -54,9 +54,13 @@ const BASE_COLUMNS: Column<CustomerSummary>[] = [
             : <PersonRoundedIcon sx={{ color: '#16A34A', fontSize: 16 }} />}
         </Box>
         <Box>
-          <Typography variant="body2" fontWeight={600}>{row.full_name}</Typography>
-          {row.company_name && (
-            <Typography variant="caption" color="text.secondary">{row.company_name}</Typography>
+          {row.type === 'company' && row.company_name ? (
+            <>
+              <Typography variant="body2" fontWeight={600}>{row.company_name}</Typography>
+              <Typography variant="caption" color="text.secondary">{row.full_name}</Typography>
+            </>
+          ) : (
+            <Typography variant="body2" fontWeight={600}>{row.full_name}</Typography>
           )}
         </Box>
       </Stack>

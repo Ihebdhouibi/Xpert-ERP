@@ -53,7 +53,6 @@ export function CustomerCreatePage() {
     <Box>
       <PageHeader
         title="Nouveau client"
-        subtitle="Saisissez au minimum un nom — les autres champs facilitent les recherches et la facturation."
         breadcrumbs={[
           { label: 'Clients', href: '/customers' },
           { label: 'Nouveau client' },

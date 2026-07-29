@@ -6,15 +6,18 @@ import { Alert, Box, Paper } from '@mui/material'
 import { CustomerForm } from '../../components/customer/CustomerForm'
 import { customerApi } from '../../lib/customerApi'
 import type { CustomerCreateInput, CustomerStatus } from '../../lib/customerApi'
+import { creditLimitRequestApi } from '../../lib/creditLimitRequestApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { LoadingScreen } from '../../components/ui/LoadingScreen'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../contexts/ToastContext'
 
 export function CustomerEditPage() {
   const { publicId = '' } = useParams<{ publicId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const { success } = useToast()
   const canEditCreditLimit = user?.permissions.includes('customer.credit_limit.update') ?? false
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -23,6 +26,12 @@ export function CustomerEditPage() {
     queryKey: ['customer', publicId],
     queryFn: () => customerApi.get(publicId),
     enabled: !!publicId,
+  })
+
+  const { data: pendingCreditLimitRequest } = useQuery({
+    queryKey: ['credit-limit-request-pending', publicId],
+    queryFn: () => creditLimitRequestApi.getPendingForCustomer(publicId),
+    enabled: !!publicId && !canEditCreditLimit,
   })
 
   const handleSubmit = async (
@@ -48,8 +57,20 @@ export function CustomerEditPage() {
       // Credit limit is a separate privileged endpoint — only call it when
       // the user has permission and the value actually changed.
       const newLimitMinor = payload.credit_limit_minor ?? 0
-      if (canEditCreditLimit && newLimitMinor !== (customer.credit_limit_minor ?? 0)) {
-        await customerApi.updateCreditLimit(publicId, newLimitMinor)
+      const limitChanged = newLimitMinor !== (customer.credit_limit_minor ?? 0)
+      if (limitChanged) {
+        if (canEditCreditLimit) {
+          await customerApi.updateCreditLimit(publicId, newLimitMinor)
+        } else {
+          await creditLimitRequestApi.create(
+            publicId,
+            newLimitMinor,
+            payload.credit_currency ?? 'EUR',
+            'Demande de modification via la fiche client',
+          )
+          success('Demande de modification de la limite de crédit envoyée à l\'administrateur.')
+          await queryClient.invalidateQueries({ queryKey: ['credit-limit-request-pending', publicId] })
+        }
       }
 
       await queryClient.invalidateQueries({ queryKey: ['customers'] })
@@ -107,6 +128,14 @@ export function CustomerEditPage() {
       {serverError && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {serverError}
+        </Alert>
+      )}
+
+      {!canEditCreditLimit && pendingCreditLimitRequest && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Une demande de modification de la limite de crédit est en attente d'approbation
+          (nouveau montant demandé : {(pendingCreditLimitRequest.requested_credit_limit_minor / 100).toFixed(2)}{' '}
+          {pendingCreditLimitRequest.requested_credit_currency}).
         </Alert>
       )}
 

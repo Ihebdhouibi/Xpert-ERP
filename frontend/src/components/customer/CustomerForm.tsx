@@ -17,7 +17,7 @@ import type {
   CustomerType,
 } from '../../lib/customerApi'
 
-const e164Regex = /^\+[1-9]\d{6,14}$/
+const e164Regex = /^\+33[1-9]\d{8}$/
 
 const optionalString = z
   .string()
@@ -31,7 +31,7 @@ export const customerFormSchema = z
     type: z.enum(['individual', 'company']),
     full_name: z.string().trim().min(1, 'Nom requis').max(255),
     company_name: optionalString,
-    fiscal_id: optionalString,
+    fiscal_id: z.string().trim().min(1, 'Identifiant fiscal requis'),
     email: z
       .string()
       .trim()
@@ -42,10 +42,7 @@ export const customerFormSchema = z
     phone_e164: z
       .string()
       .trim()
-      .regex(e164Regex, 'Format requis : +212XXXXXXXXX')
-      .or(z.literal(''))
-      .transform((s) => (s === '' ? null : s))
-      .nullable(),
+      .regex(e164Regex, 'Format requis : +33 suivi de 9 chiffres (ex : +33612345678)'),
     address_street: optionalString,
     address_city: optionalString,
     address_postal_code: optionalString,
@@ -63,6 +60,13 @@ export const customerFormSchema = z
     {
       message: 'Le nom de société est requis pour un client société',
       path: ['company_name'],
+    },
+  )
+  .refine(
+    (data) => data.type !== 'company' || /^\d{14}$/.test(data.fiscal_id),
+    {
+      message: 'Le numéro SIRET doit contenir exactement 14 chiffres',
+      path: ['fiscal_id'],
     },
   )
 
@@ -83,9 +87,9 @@ const defaults = (initial?: CustomerDetail): CustomerFormValues => ({
   type: (initial?.type ?? 'individual') as CustomerType,
   full_name: initial?.full_name ?? '',
   company_name: initial?.company_name ?? null,
-  fiscal_id: initial?.fiscal_id ?? null,
+  fiscal_id: initial?.fiscal_id ?? '',
   email: initial?.email ?? null,
-  phone_e164: initial?.phone_e164 ?? null,
+  phone_e164: initial?.phone_e164 ?? '',
   address_street: initial?.address?.street ?? null,
   address_city: initial?.address?.city ?? null,
   address_postal_code: initial?.address?.postal_code ?? null,
@@ -193,9 +197,9 @@ export function CustomerForm({
 
         <Grid item xs={12} sm={6}>
           <TextField
-            label="Téléphone (format +212...)"
+            label="Téléphone (format +33...)"
             fullWidth
-            placeholder="+212612345678"
+            placeholder="+33612345678"
             {...register('phone_e164')}
             error={!!errors.phone_e164}
             helperText={errors.phone_e164?.message}
@@ -214,8 +218,9 @@ export function CustomerForm({
 
         <Grid item xs={12} sm={6}>
           <TextField
-            label="Identifiant fiscal (ICE / CIN)"
+            label={type === 'company' ? 'Numéro SIRET' : 'CIN'}
             fullWidth
+            placeholder={type === 'company' ? '14 chiffres' : undefined}
             {...register('fiscal_id')}
             error={!!errors.fiscal_id}
             helperText={errors.fiscal_id?.message}
@@ -267,10 +272,9 @@ export function CustomerForm({
             error={!!errors.credit_limit_eur}
             helperText={
               !creditLimitEditable
-                ? 'Seul un administrateur peut modifier la limite de crédit.'
+                ? 'Une demande sera envoyée à l\'administrateur pour approbation.'
                 : errors.credit_limit_eur?.message
             }
-            disabled={!creditLimitEditable}
           />
         </Grid>
 
