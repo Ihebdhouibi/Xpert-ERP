@@ -15,6 +15,7 @@ import {
 } from '@mui/material'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
+import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import BusinessRoundedIcon from '@mui/icons-material/BusinessRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
@@ -27,6 +28,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { CustomerImportDialog } from '../../components/customer/CustomerImportDialog'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -127,6 +129,7 @@ export function CustomersListPage() {
   const [sortBy, setSortBy] = useState<string>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [toArchive, setToArchive] = useState<CustomerSummary | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   const handleSort = (col: string) => {
     if (col === sortBy) {
@@ -224,14 +227,23 @@ export function CustomersListPage() {
         subtitle={data ? `${data.total} client${data.total !== 1 ? 's' : ''}` : 'Gestion des clients'}
         actions={
           <PermissionGate permission="customer.create">
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              component={RouterLink}
-              to="/customers/new"
-            >
-              Nouveau client
-            </Button>
+            <Stack direction="row" spacing={1.5}>
+              <Button
+                variant="outlined"
+                startIcon={<UploadFileRoundedIcon />}
+                onClick={() => setImportOpen(true)}
+              >
+                Importer Excel
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                component={RouterLink}
+                to="/customers/new"
+              >
+                Nouveau client
+              </Button>
+            </Stack>
           </PermissionGate>
         }
       />
@@ -295,6 +307,8 @@ export function CustomersListPage() {
         onConfirm={() => toArchive && archiveMutation.mutate(toArchive)}
         onCancel={() => setToArchive(null)}
       />
+
+      <CustomerImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </Box>
   )
 }
