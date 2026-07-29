@@ -21,9 +21,12 @@ import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
+import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import { repairOrderApi } from '../../lib/repairOrderApi'
 import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { vehiclesApi, type VehicleOut } from '../../lib/vehiclesApi'
+import { VehicleQuickCreateDialog } from '../../components/vehicles/VehicleQuickCreateDialog'
+import { useAuth } from '../../contexts/AuthContext'
 import { PageHeader } from '../../components/ui/PageHeader'
 
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
@@ -66,11 +69,15 @@ function SectionCard({
 export function RepairOrderCreatePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { user } = useAuth()
+  const canCreateVehicle = user?.permissions.includes('vehicle.create') ?? false
+  const canDeleteCustomOptions = user?.permissions.includes('vehicle.delete') ?? false
   const prefillVehicleId = searchParams.get('vehicleId') ? Number(searchParams.get('vehicleId')) : null
   const prefillCustomerId = searchParams.get('customerId') ? Number(searchParams.get('customerId')) : null
 
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false)
 
   // Customer autocomplete state
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null)
@@ -356,6 +363,23 @@ export function RepairOrderCreatePage() {
                   )}
                 />
 
+                {canCreateVehicle && selectedCustomer && (
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                    <Typography variant="caption" color="text.secondary">
+                      {!vehiclesLoading && vehicles.length === 0 && !debouncedVehicleSearch
+                        ? 'Ce client n’a aucun véhicule enregistré.'
+                        : 'Le véhicule recherché n’existe pas ?'}
+                    </Typography>
+                    <Button
+                      size="small"
+                      startIcon={<AddRoundedIcon />}
+                      onClick={() => setVehicleDialogOpen(true)}
+                    >
+                      Nouveau véhicule
+                    </Button>
+                  </Stack>
+                )}
+
                 <TextField
                   label="Description"
                   multiline
@@ -398,6 +422,24 @@ export function RepairOrderCreatePage() {
           </Stack>
         </Grid>
       </Grid>
+
+      {selectedCustomer && (
+        <VehicleQuickCreateDialog
+          open={vehicleDialogOpen}
+          customer={selectedCustomer}
+          canDeleteCustomOptions={canDeleteCustomOptions}
+          onClose={() => setVehicleDialogOpen(false)}
+          onCreated={created => {
+            setVehicleDialogOpen(false)
+            setSelectedVehicle(created)
+            const label = [created.registration, `${created.make} ${created.model}`, created.year]
+              .filter(Boolean)
+              .join(' — ')
+            setVehicleInputValue(label)
+            setVehicleSearch('')
+          }}
+        />
+      )}
     </Box>
   )
 }
