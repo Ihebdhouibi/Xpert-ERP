@@ -117,6 +117,29 @@ async def find_by_email(
     return result.scalars().first()
 
 
+async def find_by_name(
+    db: AsyncSession,
+    garage_id: int,
+    full_name: str,
+    company_name: Optional[str] = None,
+) -> Optional[Customer]:
+    """Return the first live customer with a case-insensitive matching name.
+
+    Used as a last-resort duplicate check for bulk imports where a row carries
+    neither a phone nor an email (the stronger identity keys). When
+    `company_name` is supplied, both names must match.
+    """
+    stmt = select(Customer).where(
+        Customer.garage_id == garage_id,
+        func.lower(Customer.full_name) == full_name.lower(),
+        Customer.deleted_at.is_(None),
+    )
+    if company_name is not None:
+        stmt = stmt.where(func.lower(Customer.company_name) == company_name.lower())
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 # ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------

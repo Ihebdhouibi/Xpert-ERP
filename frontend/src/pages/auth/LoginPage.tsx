@@ -165,92 +165,80 @@ export function LoginPage() {
         </Typography>
       </Box>
 
-      {/* ── Right form panel ── */}
-      <Collapse in={formVisible} orientation="horizontal" timeout={400} sx={{ display: { xs: 'none', md: 'block' } }}>
-        <Box
-          sx={{
-            width: { md: '55vw' },
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            px: { md: 8 },
-            bgcolor: '#F8FAFC',
-          }}
-        >
-          <Box sx={{ width: '100%', maxWidth: 400 }}>
-            <Typography variant="h4" fontWeight={700} color="text.primary" gutterBottom>
-              Connexion
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={4}>
-              Connectez-vous à votre espace professionnel
-            </Typography>
-
-            {serverError && (
-              <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-                {serverError}
-              </Alert>
-            )}
-
-            <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate display="flex" flexDirection="column" gap={2.5}>
-              <TextField
-                label="Adresse email"
-                type="email"
-                fullWidth
-                autoComplete="email"
-                autoFocus
-                {...register('email')}
-                error={!!errors.email}
-                helperText={errors.email?.message}
-                sx={{ bgcolor: '#fff', borderRadius: 1 }}
-              />
-              <TextField
-                label="Mot de passe"
-                type={showPassword ? 'text' : 'password'}
-                fullWidth
-                autoComplete="current-password"
-                {...register('password')}
-                error={!!errors.password}
-                helperText={errors.password?.message}
-                sx={{ bgcolor: '#fff', borderRadius: 1 }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword((v) => !v)} edge="end" size="small" tabIndex={-1}>
-                        {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                disabled={isSubmitting}
-                size="large"
-                sx={{ mt: 1, py: 1.5, fontWeight: 700, fontSize: '1rem', bgcolor: '#1a2744', '&:hover': { bgcolor: '#243b5e' } }}
-              >
-                {isSubmitting ? 'Connexion en cours…' : 'Se connecter'}
-              </Button>
-            </Box>
+      {/* ── Right form panel — single form, always mounted, responsive ── */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1,
+          px: { xs: 3, md: 8 },
+          bgcolor: '#F8FAFC',
+          overflow: 'hidden',
+          maxWidth: formVisible ? { xs: '100%', md: '55vw' } : { xs: '100%', md: 0 },
+          opacity: { xs: 1, md: formVisible ? 1 : 0 },
+          transition: 'max-width 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
+          pointerEvents: formVisible ? 'auto' : { xs: 'auto', md: 'none' },
+        }}
+      >
+        <Box sx={{ width: '100%', maxWidth: 400, minWidth: { md: 320 } }}>
+          {/* Mobile-only logo */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'center', mb: 3 }}>
+            <img src="/assets/logo.png" alt="Motors Utilitaires" style={{ height: 60, objectFit: 'contain' }} />
           </Box>
-        </Box>
-      </Collapse>
+          <Typography variant="h4" fontWeight={700} color="text.primary" gutterBottom>
+            Connexion
+          </Typography>
+          <Typography variant="body2" color="text.secondary" mb={4}>
+            Connectez-vous à votre espace professionnel
+          </Typography>
 
-      {/* ── Mobile fallback (xs only) ── */}
-      <Box sx={{ display: { xs: 'flex', md: 'none' }, flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', px: 3, bgcolor: '#F8FAFC' }}>
-        <Box sx={{ mb: 4 }}>
-          <img src="/assets/logo.png" alt="Motors Utilitaires" style={{ height: 60, objectFit: 'contain' }} />
-        </Box>
-        <Box sx={{ width: '100%', maxWidth: 400 }}>
-          <Typography variant="h4" fontWeight={700} gutterBottom>Connexion</Typography>
-          <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate display="flex" flexDirection="column" gap={2.5} mt={2}>
-            <TextField label="Adresse email" type="email" fullWidth autoComplete="email" {...register('email')} error={!!errors.email} helperText={errors.email?.message} />
-            <TextField label="Mot de passe" type={showPassword ? 'text' : 'password'} fullWidth autoComplete="current-password" {...register('password')} error={!!errors.password} helperText={errors.password?.message} InputProps={{ endAdornment: (<InputAdornment position="end"><IconButton onClick={() => setShowPassword(v => !v)} edge="end" size="small"><VisibilityIcon fontSize="small" /></IconButton></InputAdornment>) }} />
-            <Button type="submit" variant="contained" fullWidth disabled={isSubmitting} size="large" sx={{ bgcolor: '#1a2744' }}>
-              {isSubmitting ? 'Connexion…' : 'Se connecter'}
+          {serverError && (
+            <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+              {serverError}
+            </Alert>
+          )}
+
+          <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate display="flex" flexDirection="column" gap={2.5}>
+            <TextField
+              label="Adresse email"
+              type="email"
+              fullWidth
+              autoComplete="email"
+              {...register('email')}
+              error={!!errors.email}
+              helperText={errors.email?.message}
+              sx={{ bgcolor: '#fff', borderRadius: 1 }}
+            />
+            <TextField
+              label="Mot de passe"
+              type={showPassword ? 'text' : 'password'}
+              fullWidth
+              autoComplete="current-password"
+              {...register('password')}
+              error={!!errors.password}
+              helperText={errors.password?.message}
+              sx={{ bgcolor: '#fff', borderRadius: 1 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword((v) => !v)} edge="end" size="small" tabIndex={-1}>
+                      {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={isSubmitting}
+              size="large"
+              sx={{ mt: 1, py: 1.5, fontWeight: 700, fontSize: '1rem', bgcolor: '#1a2744', '&:hover': { bgcolor: '#243b5e' } }}
+            >
+              {isSubmitting ? 'Connexion en cours…' : 'Se connecter'}
             </Button>
           </Box>
         </Box>

@@ -103,6 +103,18 @@ export interface ListParams {
   page_size?: number
 }
 
+export interface CustomerImportRowError {
+  row: number
+  reason: string
+}
+
+export interface CustomerImportResult {
+  total_rows: number
+  created: number
+  skipped: number
+  errors: CustomerImportRowError[]
+}
+
 export const customerApi = {
   list: async (params: ListParams = {}): Promise<CustomerListResponse> => {
     const { data } = await apiClient.get<CustomerListResponse>('/customers', {
@@ -163,6 +175,17 @@ export const customerApi = {
   restore: async (publicId: string): Promise<CustomerDetail> => {
     const { data } = await apiClient.post<CustomerDetail>(
       `/customers/${publicId}/restore`,
+    )
+    return data
+  },
+
+  importXlsx: async (file: File): Promise<CustomerImportResult> => {
+    const form = new FormData()
+    form.append('file', file)
+    const { data } = await apiClient.post<CustomerImportResult>(
+      '/customers/import',
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
     )
     return data
   },

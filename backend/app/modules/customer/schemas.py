@@ -277,3 +277,24 @@ class CustomerSpendingSummary(BaseModel):
     last_order_at: Optional[datetime]
     advance_balance_minor: int
     loyalty_points: int
+
+
+# ---------------------------------------------------------------------------
+# Bulk import (seed customers from an Excel file)
+# ---------------------------------------------------------------------------
+
+
+class CustomerImportRowError(BaseModel):
+    """A single data row that could not be imported."""
+
+    row: int  # 1-based row number in the source sheet (header is row 1)
+    reason: str
+
+
+class CustomerImportResult(BaseModel):
+    """Summary returned after importing an Excel customer list."""
+
+    total_rows: int  # non-empty data rows examined
+    created: int
+    skipped: int  # rows skipped as duplicates of an existing customer
+    errors: list[CustomerImportRowError] = Field(default_factory=list)
