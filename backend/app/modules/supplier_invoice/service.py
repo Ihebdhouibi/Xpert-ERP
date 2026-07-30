@@ -606,6 +606,54 @@ async def mark_paid(
 
 
 # ---------------------------------------------------------------------------
+# Correct (fix supplier/totals the OCR flow got wrong, at any post-draft status)
+# ---------------------------------------------------------------------------
+
+
+async def correct_supplier_invoice(
+    db: AsyncSession,
+    garage_id: int,
+    public_id: str,
+    submitted_version: int,
+    supplier_public_id: Optional[str],
+    total_ht: int,
+    total_ttc: int,
+) -> SupplierInvoice:
+    """Manually fix supplier link and/or totals after creation.
+
+    Unlike ``update_supplier_invoice`` (draft-only, PO-line reconciliation),
+    this targets invoices the OCR flow already created with a missing
+    supplier or an undetected total (0) — including ones already approved or
+    paid. If the invoice is already paid, ``paid_amount_minor`` is kept in
+    sync so the cash-session ledger reflects the corrected amount.
+    """
+    logger.info("correct_supplier_invoice_start", public_id=public_id, garage_id=garage_id)
+    si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
+    if not si:
+        raise SINotFoundError(public_id)
+    if si.version != submitted_version:
+        raise SIVersionConflictError(si.version, submitted_version)
+    if si.status == SupplierInvoiceStatus.cancelled:
+        raise SIInvalidTransitionError("Cannot correct a cancelled supplier invoice")
+    if si.is_exported:
+        raise SIInvalidTransitionError("Exported supplier invoices cannot be modified")
+
+    supplier_id = (
+        await _resolve_supplier(db, garage_id, supplier_public_id) if supplier_public_id else None
+    )
+
+    updates: dict = {
+        "supplier_id": supplier_id,
+        "total_ht": total_ht,
+        "total_ttc": total_ttc,
+    }
+    if si.status == SupplierInvoiceStatus.paid:
+        updates["paid_amount_minor"] = total_ttc
+
+    return await SupplierInvoiceRepository.update(db, si, **updates)
+
+
+# ---------------------------------------------------------------------------
 # Cancel
 # ---------------------------------------------------------------------------
 

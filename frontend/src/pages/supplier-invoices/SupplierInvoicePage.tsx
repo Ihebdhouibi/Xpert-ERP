@@ -46,6 +46,7 @@ import PaymentsIcon from '@mui/icons-material/Payments'
 import CancelIcon from '@mui/icons-material/Cancel'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
+import EditIcon from '@mui/icons-material/Edit'
 
 import {
   supplierInvoiceApi,
@@ -662,6 +663,23 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [markPaidOpen, setMarkPaidOpen] = useState(false)
   const [markPaidMethod, setMarkPaidMethod] = useState<PaymentMethod>('cash')
+  const [correctOpen, setCorrectOpen] = useState(false)
+  const [correctSuppliers, setCorrectSuppliers] = useState<Supplier[]>([])
+  const [correctSupplierId, setCorrectSupplierId] = useState('')
+  const [correctTotalHt, setCorrectTotalHt] = useState('')
+  const [correctTotalTtc, setCorrectTotalTtc] = useState('')
+
+  const openCorrect = () => {
+    setCorrectTotalHt((si.total_ht / 100).toFixed(2))
+    setCorrectTotalTtc((si.total_ttc / 100).toFixed(2))
+    setCorrectSupplierId('')
+    supplierApi.list({ status: 'active', page_size: 200 }).then((r) => {
+      setCorrectSuppliers(r.items)
+      const current = r.items.find((s) => s.int_id === si.supplier_id)
+      setCorrectSupplierId(current?.id ?? '')
+    })
+    setCorrectOpen(true)
+  }
 
   const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
     if (severity === 'success') toastSuccess(message)
@@ -751,6 +769,19 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
       'Facture marquée payée',
     )
     setMarkPaidOpen(false)
+  }
+
+  const handleCorrect = async () => {
+    await doAction(
+      () => supplierInvoiceApi.correct(si.id, {
+        version: si.version,
+        supplier_public_id: correctSupplierId || null,
+        total_ht: Math.round((parseFloat(correctTotalHt) || 0) * 100),
+        total_ttc: Math.round((parseFloat(correctTotalTtc) || 0) * 100),
+      }),
+      'Facture corrigée',
+    )
+    setCorrectOpen(false)
   }
 
   const handleCancel = () =>
@@ -1088,6 +1119,15 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
             Export comptable
           </Button>
         )}
+        {si.status !== 'cancelled' && (
+          <Button
+            variant="outlined"
+            startIcon={<EditIcon />}
+            onClick={openCorrect}
+          >
+            Corriger fournisseur / montants
+          </Button>
+        )}
         {['draft', 'posted'].includes(si.status) && (
           <Button
             variant="outlined"
@@ -1148,6 +1188,53 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
           <Button onClick={() => setMarkPaidOpen(false)}>Annuler</Button>
           <Button variant="contained" onClick={handleMarkPaid} disabled={acting}>
             Confirmer
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={correctOpen} onClose={() => setCorrectOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Corriger le fournisseur / les montants</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              À utiliser quand l'OCR n'a pas détecté le fournisseur ou les totaux —
+              disponible même si la facture est déjà approuvée ou payée.
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel>Fournisseur</InputLabel>
+              <Select
+                label="Fournisseur"
+                value={correctSupplierId}
+                onChange={(e) => setCorrectSupplierId(e.target.value)}
+              >
+                <MenuItem value="">— Aucun —</MenuItem>
+                {correctSuppliers.map((s) => (
+                  <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Total HT (€)"
+              type="number"
+              fullWidth
+              value={correctTotalHt}
+              onChange={(e) => setCorrectTotalHt(e.target.value)}
+              inputProps={{ min: 0, step: '0.01' }}
+            />
+            <TextField
+              label="Total TTC (€)"
+              type="number"
+              fullWidth
+              value={correctTotalTtc}
+              onChange={(e) => setCorrectTotalTtc(e.target.value)}
+              inputProps={{ min: 0, step: '0.01' }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCorrectOpen(false)}>Annuler</Button>
+          <Button variant="contained" onClick={handleCorrect} disabled={acting}>
+            Enregistrer
           </Button>
         </DialogActions>
       </Dialog>

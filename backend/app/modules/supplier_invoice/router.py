@@ -26,6 +26,7 @@ from app.modules.supplier_invoice.service import (
     approve_supplier_invoice,
     build_accounting_export,
     cancel_supplier_invoice,
+    correct_supplier_invoice,
     create_supplier_invoice,
     mark_paid,
     override_discrepancy,
@@ -76,6 +77,13 @@ class SIUpdateRequest(BaseModel):
     due_date: Optional[date] = None
     notes: Optional[str] = None
     repair_order_id: Optional[int] = None
+
+
+class SICorrectionRequest(BaseModel):
+    version: int
+    supplier_public_id: Optional[str] = None
+    total_ht: int = Field(..., ge=0)
+    total_ttc: int = Field(..., ge=0)
 
 
 class SIVersionRequest(BaseModel):
@@ -586,6 +594,46 @@ async def mark_supplier_invoice_paid(
         return SISummary.model_validate(si)
     except SINotFoundError:
         raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    except SIVersionConflictError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "version_conflict", "current_version": e.current_version},
+        )
+    except SIInvalidTransitionError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post(
+    "/supplier-invoices/{public_id}/correct",
+    response_model=SISummary,
+    dependencies=[require_permission("supplier_invoice.approve")],
+)
+async def correct_supplier_invoice_endpoint(
+    public_id: str,
+    body: SICorrectionRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> SISummary:
+    """Fix supplier link / totals the OCR flow got wrong — works at any
+    non-cancelled, non-exported status, unlike the draft-only PUT update."""
+    try:
+        si = await correct_supplier_invoice(
+            db,
+            garage_id=user.garage_id,
+            public_id=public_id,
+            submitted_version=body.version,
+            supplier_public_id=body.supplier_public_id,
+            total_ht=body.total_ht,
+            total_ttc=body.total_ttc,
+        )
+        await db.commit()
+        summary = SISummary.model_validate(si)
+        summary.repair_order_label = await _resolve_ro_label(db, si.repair_order_id)
+        return summary
+    except SINotFoundError:
+        raise HTTPException(status_code=404, detail="Supplier invoice not found")
+    except SISupplierNotFoundError as e:
+        raise HTTPException(status_code=404, detail=f"Supplier {e} not found")
     except SIVersionConflictError as e:
         raise HTTPException(
             status_code=409,

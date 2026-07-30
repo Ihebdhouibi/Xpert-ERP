@@ -89,6 +89,13 @@ export interface SIMarkPaidPayload {
   payment_method: PaymentMethod
 }
 
+export interface SICorrectionPayload {
+  version: number
+  supplier_public_id?: string | null
+  total_ht: number
+  total_ttc: number
+}
+
 export interface SIOverridePayload {
   version: number
   reason: string
@@ -166,6 +173,10 @@ export const supplierInvoiceApi = {
 
   markPaid(id: string, body: SIMarkPaidPayload): Promise<SupplierInvoice> {
     return apiClient.post(`/supplier-invoices/${id}/mark-paid`, body).then((r) => r.data)
+  },
+
+  correct(id: string, body: SICorrectionPayload): Promise<SupplierInvoice> {
+    return apiClient.post(`/supplier-invoices/${id}/correct`, body).then((r) => r.data)
   },
 
   cancel(id: string, body: SIVersionPayload): Promise<SupplierInvoice> {
