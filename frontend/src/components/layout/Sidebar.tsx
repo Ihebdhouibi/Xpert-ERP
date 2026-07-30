@@ -104,7 +104,7 @@ function NavItemWithPermission({
   return <NavItemRow item={item} collapsed={collapsed} />
 }
 
-function LogoBadge({ size = 32 }: { size?: number }) {
+function LogoBadge({ size = 44 }: { size?: number }) {
   const navigate = useNavigate()
   // Small collapsed-state version: show just the car portion of the logo
   return (
@@ -122,7 +122,7 @@ function LogoBadge({ size = 32 }: { size?: number }) {
       }}
     >
       <img
-        src="/assets/logo.png"
+        src="/assets/logo-blanc.png"
         alt="Motors Utilitaires"
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
       />
@@ -161,7 +161,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
       }}
       onClick={onNavClick}
     >
-      {/* Logo header */}
+      {/* Logo header — dark band so the pale logo-blanc.png artwork reads clearly */}
       <Box
         sx={{
           display: 'flex',
@@ -169,11 +169,11 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           justifyContent: collapsed ? 'center' : 'space-between',
           px: collapsed ? 1 : 2,
           py: 0,
-          minHeight: 64,
-          borderBottom: `1px solid ${T.divider}`,
+          minHeight: 96,
+          borderBottom: `1px solid ${T.logoDivider}`,
           position: 'relative',
           zIndex: 10,
-          bgcolor: T.bg,
+          bgcolor: T.logoBg,
         }}
       >
         {collapsed ? (
@@ -193,9 +193,9 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               }}
             >
               <img
-                src="/assets/logo.png"
+                src="/assets/logo-blanc.png"
                 alt="Motors Utilitaires"
-                style={{ display: 'block', width: '75%', height: 'auto', maxHeight: 48 }}
+                style={{ display: 'block', width: '92%', height: 'auto', maxHeight: 80 }}
               />
             </Box>
             <Tooltip title="Réduire le menu" placement="right">
@@ -212,11 +212,11 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  color: T.sectionLabel,
-                  border: `1px solid ${T.divider}`,
+                  color: T.logoIconColor,
+                  border: `1px solid ${T.logoDivider}`,
                   flexShrink: 0,
                   transition: 'all 0.15s',
-                  '&:hover': { color: T.text, borderColor: '#334155', bgcolor: T.hover },
+                  '&:hover': { color: T.logoIconHoverColor, borderColor: 'rgba(255,255,255,0.3)', bgcolor: 'rgba(255,255,255,0.08)' },
                 }}
               >
                 <ChevronLeftRoundedIcon sx={{ fontSize: 18 }} />
