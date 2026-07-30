@@ -144,6 +144,15 @@ export const theme = createTheme({
             background: 'linear-gradient(135deg, #0F172A 0%, #020617 100%)',
             boxShadow: '0 4px 12px rgba(245,158,11,0.25)',
           },
+          // Without this, the gradient background above still applies even when
+          // disabled (it isn't scoped to :not(.Mui-disabled)), which overrides
+          // MUI's own disabled-background dimming — leaving MUI's near-invisible
+          // translucent-black disabled text on top of our dark background.
+          '&.Mui-disabled': {
+            background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
+            color: '#ffffff',
+            opacity: 0.5,
+          },
         },
         outlinedPrimary: {
           borderColor: '#CBD5E1',
