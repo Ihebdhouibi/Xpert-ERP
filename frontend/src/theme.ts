@@ -4,13 +4,6 @@ export const sidebarTokens = {
   width: 260,
   collapsedWidth: 64,
   bg: '#FFFFFF',
-  // The logo header is a separate dark band so the pale/gold logo-blanc.png
-  // artwork (designed for dark backgrounds) has real contrast, while the nav
-  // body underneath stays white.
-  logoBg: '#0F172A',
-  logoDivider: 'rgba(255,255,255,0.08)',
-  logoIconColor: 'rgba(255,255,255,0.6)',
-  logoIconHoverColor: '#ffffff',
   hover: 'rgba(15,23,42,0.05)',
   activeBg: 'rgba(245,158,11,0.14)',
   activeBorder: '#F59E0B',

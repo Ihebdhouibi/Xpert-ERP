@@ -122,7 +122,7 @@ function LogoBadge({ size = 44 }: { size?: number }) {
       }}
     >
       <img
-        src="/assets/logo-blanc.png"
+        src="/assets/logo.png"
         alt="Motors Utilitaires"
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
       />
@@ -161,7 +161,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
       }}
       onClick={onNavClick}
     >
-      {/* Logo header — dark band so the pale logo-blanc.png artwork reads clearly */}
+      {/* Logo header */}
       <Box
         sx={{
           display: 'flex',
@@ -170,10 +170,10 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           px: collapsed ? 1 : 2,
           py: 0,
           minHeight: 96,
-          borderBottom: `1px solid ${T.logoDivider}`,
+          borderBottom: `1px solid ${T.divider}`,
           position: 'relative',
           zIndex: 10,
-          bgcolor: T.logoBg,
+          bgcolor: T.bg,
         }}
       >
         {collapsed ? (
@@ -193,7 +193,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               }}
             >
               <img
-                src="/assets/logo-blanc.png"
+                src="/assets/logo.png"
                 alt="Motors Utilitaires"
                 style={{ display: 'block', width: '92%', height: 'auto', maxHeight: 80 }}
               />
@@ -212,11 +212,11 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  color: T.logoIconColor,
-                  border: `1px solid ${T.logoDivider}`,
+                  color: T.sectionLabel,
+                  border: `1px solid ${T.divider}`,
                   flexShrink: 0,
                   transition: 'all 0.15s',
-                  '&:hover': { color: T.logoIconHoverColor, borderColor: 'rgba(255,255,255,0.3)', bgcolor: 'rgba(255,255,255,0.08)' },
+                  '&:hover': { color: T.text, borderColor: '#334155', bgcolor: T.hover },
                 }}
               >
                 <ChevronLeftRoundedIcon sx={{ fontSize: 18 }} />
