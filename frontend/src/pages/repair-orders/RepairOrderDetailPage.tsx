@@ -1515,7 +1515,7 @@ export function RepairOrderDetailPage() {
                       }}
                     >
                       <MenuItem value=""><em>— Sélectionner une catégorie —</em></MenuItem>
-                      {(partCategories ?? []).map(cat => (
+                      {(partCategories ?? []).filter(cat => cat.part_count > 0).map(cat => (
                         <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
                       ))}
                       <MenuItem value="none"><em>Sans catégorie</em></MenuItem>

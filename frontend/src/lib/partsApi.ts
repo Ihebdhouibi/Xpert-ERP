@@ -10,6 +10,7 @@ export interface PartCategory {
   parent_id: number | null
   created_at: string
   updated_at: string
+  part_count: number
 }
 
 // Synthetic category used as a sentinel in category pickers so the user can
@@ -23,6 +24,7 @@ export const UNCATEGORIZED_CATEGORY: PartCategory = {
   parent_id: null,
   created_at: '',
   updated_at: '',
+  part_count: 0,
 }
 
 export interface PartSummary {

@@ -34,6 +34,7 @@ class PartCategorySummary(BaseModel):
     parent_id: Optional[int]
     created_at: datetime
     updated_at: datetime
+    part_count: int = 0
 
 
 class PartCategoryTree(PartCategorySummary):

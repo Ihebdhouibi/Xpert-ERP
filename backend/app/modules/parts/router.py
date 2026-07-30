@@ -61,7 +61,11 @@ async def list_categories(
     db: AsyncSession = Depends(get_db),
 ) -> list[PartCategorySummary]:
     cats = await PartCategoryRepository.list(db, user.garage_id, parent_id=parent_id, flat=flat)
-    return [PartCategorySummary.model_validate(c) for c in cats]
+    counts = await PartCategoryRepository.count_parts_by_category(db, user.garage_id)
+    summaries = [PartCategorySummary.model_validate(c) for c in cats]
+    for summary in summaries:
+        summary.part_count = counts.get(summary.id, 0)
+    return summaries
 
 
 @router.post(

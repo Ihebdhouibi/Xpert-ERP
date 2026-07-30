@@ -87,6 +87,18 @@ class PartCategoryRepository:
         return (result.scalar() or 0) > 0
 
     @staticmethod
+    async def count_parts_by_category(
+        db: AsyncSession, garage_id: int
+    ) -> dict[int, int]:
+        """Count non-deleted parts per category_id for a garage."""
+        result = await db.execute(
+            select(Part.category_id, func.count(Part.id))
+            .where(Part.garage_id == garage_id, Part.deleted_at.is_(None))
+            .group_by(Part.category_id)
+        )
+        return {row[0]: row[1] for row in result.all() if row[0] is not None}
+
+    @staticmethod
     async def delete(db: AsyncSession, cat: PartCategory) -> None:
         await db.delete(cat)
         await db.flush()
