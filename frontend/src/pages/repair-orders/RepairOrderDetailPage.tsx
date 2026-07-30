@@ -929,6 +929,7 @@ export function RepairOrderDetailPage() {
   const [partQty, setPartQty] = useState('')
   const [partUnitPrice, setPartUnitPrice] = useState('')
   const [partRemise, setPartRemise] = useState('0')
+  const [newPartPrice, setNewPartPrice] = useState('')
 
   // Edit/delete labor line state
   const [editLaborLineId, setEditLaborLineId] = useState<number | null>(null)
@@ -1048,6 +1049,20 @@ export function RepairOrderDetailPage() {
       refetch()
     },
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
+  })
+
+  const setPartPriceMutation = useMutation({
+    mutationFn: () => partsApi.update(selectedPart!.id, selectedPart!.version, {
+      selling_price_minor: Math.round((parseFloat(newPartPrice) || 0) * 100),
+    }),
+    onSuccess: (updated) => {
+      success('Prix de la pièce mis à jour.')
+      setSelectedPart(updated)
+      setPartUnitPrice((updated.selling_price_minor / 100).toFixed(2))
+      setNewPartPrice('')
+      queryClient.invalidateQueries({ queryKey: ['parts-by-category', selectedCategoryId] })
+    },
+    onError: () => toastError('Impossible de mettre à jour le prix de la pièce.'),
   })
 
   const updateLaborLineMutation = useMutation({
@@ -1496,6 +1511,7 @@ export function RepairOrderDetailPage() {
                         setSelectedPart(null)
                         setPartQty('')
                         setPartUnitPrice('')
+                        setNewPartPrice('')
                       }}
                     >
                       <MenuItem value=""><em>— Sélectionner une catégorie —</em></MenuItem>
@@ -1518,6 +1534,7 @@ export function RepairOrderDetailPage() {
                         setSelectedPart(val)
                         setPartQty('1')
                         setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
+                        setNewPartPrice('')
                       }}
                       noOptionsText={partsResults ? (selectedCategoryId === 'none' ? 'Aucune pièce sans catégorie' : 'Aucune pièce dans cette catégorie') : 'Chargement…'}
                       renderOption={(props, option) => (
@@ -1572,7 +1589,7 @@ export function RepairOrderDetailPage() {
                     <Box sx={{ display: 'flex', alignItems: 'center', px: 1, pb: '20px', minWidth: 80 }}>
                       <Typography variant="caption" color="text.secondary">TVA&nbsp;20%</Typography>
                     </Box>
-                    {selectedPart && partQty && partUnitPrice && (
+                    {selectedPart && partQty && partUnitPrice && parseFloat(partUnitPrice) > 0 && (
                       <Box sx={{ display: 'flex', alignItems: 'center', pb: '20px' }}>
                         <Typography variant="body2" color="text.secondary">
                           Total TTC :&nbsp;
@@ -1588,13 +1605,42 @@ export function RepairOrderDetailPage() {
                       </Box>
                     )}
                   </Stack>
+                  {selectedPart && parseFloat(partUnitPrice || '0') <= 0 && (
+                    <Alert severity="warning" sx={{ mb: 1 }}>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        Cette pièce n'a pas de prix de vente défini. Définissez un prix avant de l'ajouter à l'OR.
+                      </Typography>
+                      <PermissionGate permission="part.update">
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <TextField
+                            size="small"
+                            label="Nouveau prix (€)"
+                            type="number"
+                            value={newPartPrice}
+                            onChange={e => setNewPartPrice(e.target.value)}
+                            inputProps={{ min: 0.01, step: 0.01 }}
+                            sx={{ width: 150 }}
+                          />
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={setPartPriceMutation.isPending || !newPartPrice || parseFloat(newPartPrice) <= 0}
+                            onClick={() => setPartPriceMutation.mutate()}
+                            sx={{ textTransform: 'none' }}
+                          >
+                            {setPartPriceMutation.isPending ? 'Enregistrement…' : 'Enregistrer le prix'}
+                          </Button>
+                        </Stack>
+                      </PermissionGate>
+                    </Alert>
+                  )}
                   <Stack direction="row" spacing={1}>
                     <Button
                       size="small"
                       onClick={() => {
                         setShowAddPart(false)
                         setSelectedPart(null); setSelectedCategoryId(null); setPartQty('')
-                        setPartUnitPrice(''); setPartRemise('0')
+                        setPartUnitPrice(''); setPartRemise('0'); setNewPartPrice('')
                       }}
                       sx={{ textTransform: 'none' }}
                     >
@@ -1607,6 +1653,7 @@ export function RepairOrderDetailPage() {
                         !selectedPart ||
                         !partQty ||
                         !partUnitPrice ||
+                        parseFloat(partUnitPrice) <= 0 ||
                         parseInt(partQty, 10) < 1 ||
                         parseInt(partQty, 10) > (selectedPart?.stock_on_hand ?? 0)
                       }
@@ -2021,7 +2068,7 @@ export function RepairOrderDetailPage() {
             />
             <TextField
               size="small" label="Prix unit. (€)" type="number" value={editPartUnitPrice}
-              onChange={e => setEditPartUnitPrice(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ width: 130 }}
+              onChange={e => setEditPartUnitPrice(e.target.value)} inputProps={{ min: 0.01, step: 0.01 }} sx={{ width: 130 }}
             />
             <TextField
               size="small" label="Remise (%)" type="number" value={editPartRemise}
@@ -2036,7 +2083,8 @@ export function RepairOrderDetailPage() {
             disabled={
               updatePartLineMutation.isPending ||
               !editPartQty || !editPartUnitPrice ||
-              parseInt(editPartQty, 10) < 1
+              parseInt(editPartQty, 10) < 1 ||
+              parseFloat(editPartUnitPrice) <= 0
             }
             onClick={() => updatePartLineMutation.mutate()}
             sx={{ textTransform: 'none', fontWeight: 700 }}
