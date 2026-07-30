@@ -428,6 +428,30 @@ class TestCashSessionService:
         txns = await cs_svc.list_session_transactions(db_session, opened.id, 1)
         assert txns == []
 
+    async def test_advance_auto_linked_and_listed(self, db_session: AsyncSession) -> None:
+        from sqlalchemy import select
+        from app.modules.advance_payment import service as adv_svc
+        from app.modules.advance_payment.models import AdvancePayment
+        from app.modules.advance_payment.schemas import AdvancePaymentCreateRequest
+
+        opened = await cs_svc.open_session(db_session, garage_id=1, user_id=1)
+        customer = await _make_customer(db_session)
+
+        result = await adv_svc.record_advance(
+            db_session,
+            request=AdvancePaymentCreateRequest(customer_id=customer.id, amount_minor=2500),
+            garage_id=1,
+            user_id=1,
+        )
+
+        row = (await db_session.execute(
+            select(AdvancePayment).where(AdvancePayment.id == result.id)
+        )).scalar_one()
+        assert row.cash_session_id == opened.id
+
+        txns = await cs_svc.list_session_transactions(db_session, opened.id, 1)
+        assert any(t.kind == "advance" and t.id == result.id for t in txns)
+
 
 # ---------------------------------------------------------------------------
 # Endpoint tests

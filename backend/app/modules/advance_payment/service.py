@@ -62,6 +62,13 @@ async def record_advance(
         applied_at=None,
         created_by=user_id,
     )
+
+    # Auto-link to the currently open cash session (if any)
+    from app.modules.cash_session import repository as session_repo
+    open_session = await session_repo.get_open_session(db, garage_id)
+    if open_session:
+        advance.cash_session_id = open_session.id
+
     await repo.create(db, advance)
     await db.commit()
 

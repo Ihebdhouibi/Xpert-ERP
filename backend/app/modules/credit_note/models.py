@@ -124,6 +124,11 @@ class Refund(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Cash session open at the time the refund was paid out (nullable — no session required)
+    cash_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("cash_session.id", ondelete="SET NULL"), nullable=True
+    )
+
     created_by: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
     )

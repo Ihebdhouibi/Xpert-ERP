@@ -317,6 +317,13 @@ async def record_refund(
         refunded_at=datetime.now(tz=timezone.utc),
         created_by=user_id,
     )
+
+    # Auto-link to the currently open cash session (if any)
+    from app.modules.cash_session import repository as session_repo
+    open_session = await session_repo.get_open_session(db, garage_id)
+    if open_session:
+        refund.cash_session_id = open_session.id
+
     await repo.create_refund(db, refund)
 
     # Post credit entry to customer ledger (refund reduces garage's credit to customer)

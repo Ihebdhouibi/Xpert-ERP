@@ -54,6 +54,11 @@ class AdvancePayment(Base):
     # How much was actually applied (may be less than amount_minor if partially applied)
     applied_amount_minor: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
+    # Cash session open at the time the advance was taken (nullable — no session required)
+    cash_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("cash_session.id", ondelete="SET NULL"), nullable=True
+    )
+
     created_by: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
     )

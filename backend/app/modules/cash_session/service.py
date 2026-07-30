@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, func as sqlfunc
+from sqlalchemy import and_, or_, select, func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -374,8 +374,14 @@ async def list_session_transactions(
         .join(Customer, Customer.id == Invoice.customer_id, isouter=True)
         .where(
             Refund.garage_id == garage_id,
-            Refund.refunded_at >= window_start,
-            Refund.refunded_at <= window_end,
+            or_(
+                Refund.cash_session_id == session_id,
+                and_(
+                    Refund.cash_session_id.is_(None),
+                    Refund.refunded_at >= window_start,
+                    Refund.refunded_at <= window_end,
+                ),
+            ),
         )
     )).all()
     for r in refund_rows:
@@ -416,8 +422,14 @@ async def list_session_transactions(
         .join(Customer, Customer.id == AdvancePayment.customer_id, isouter=True)
         .where(
             AdvancePayment.garage_id == garage_id,
-            AdvancePayment.paid_at >= window_start,
-            AdvancePayment.paid_at <= window_end,
+            or_(
+                AdvancePayment.cash_session_id == session_id,
+                and_(
+                    AdvancePayment.cash_session_id.is_(None),
+                    AdvancePayment.paid_at >= window_start,
+                    AdvancePayment.paid_at <= window_end,
+                ),
+            ),
         )
     )).all()
     for r in advance_rows:
