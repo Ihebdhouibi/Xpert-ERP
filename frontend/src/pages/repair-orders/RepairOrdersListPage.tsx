@@ -25,7 +25,7 @@ import { formatMinor } from '../../components/ui/CurrencyDisplay'
 
 const PRIORITY_COLOR: Record<string, string> = {
   low: '#64748B',
-  normal: '#2563EB',
+  normal: '#334155',
   high: '#F59E0B',
   urgent: '#EF4444',
 }
@@ -48,14 +48,14 @@ const columns: Column<RepairOrderSummary>[] = [
             width: 34,
             height: 34,
             borderRadius: '9px',
-            bgcolor: '#EFF6FF',
+            bgcolor: '#F1F5F9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
           }}
         >
-          <BuildRoundedIcon sx={{ color: '#2563EB', fontSize: 16 }} />
+          <BuildRoundedIcon sx={{ color: '#334155', fontSize: 16 }} />
         </Box>
         <Box>
           <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: 320 }}>

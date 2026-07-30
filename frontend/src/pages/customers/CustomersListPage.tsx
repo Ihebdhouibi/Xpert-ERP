@@ -44,7 +44,7 @@ const BASE_COLUMNS: Column<CustomerSummary>[] = [
             width: 34,
             height: 34,
             borderRadius: '9px',
-            bgcolor: row.type === 'company' ? '#EFF6FF' : '#F0FDF4',
+            bgcolor: row.type === 'company' ? '#F1F5F9' : '#F0FDF4',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -52,7 +52,7 @@ const BASE_COLUMNS: Column<CustomerSummary>[] = [
           }}
         >
           {row.type === 'company'
-            ? <BusinessRoundedIcon sx={{ color: '#2563EB', fontSize: 16 }} />
+            ? <BusinessRoundedIcon sx={{ color: '#334155', fontSize: 16 }} />
             : <PersonRoundedIcon sx={{ color: '#16A34A', fontSize: 16 }} />}
         </Box>
         <Box>

@@ -98,9 +98,9 @@ const styleMap: Record<StatusKey, StatusStyle> = {
   in_repair:     { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
   partially_received: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
 
-  // Blue — informational / sent / active states
-  sent:       { dot: '#2563EB', text: '#1D4ED8', bg: '#EFF6FF' },
-  diagnosis:  { dot: '#2563EB', text: '#1D4ED8', bg: '#EFF6FF' },
+  // Slate — informational / sent / active states
+  sent:       { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
+  diagnosis:  { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
 
   // Grey — neutral / default / closed
   inactive:  { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
@@ -110,7 +110,7 @@ const styleMap: Record<StatusKey, StatusStyle> = {
   created:   { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
   expired:   { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
   converted: { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  issued:    { dot: '#2563EB', text: '#1D4ED8', bg: '#EFF6FF' },
+  issued:    { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
 }
 
 const fallbackStyle: StatusStyle = { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' }

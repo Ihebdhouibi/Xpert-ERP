@@ -41,7 +41,7 @@ const TOUCH_BTN = { minHeight: 52, borderRadius: '10px' }
 
 const STATUS_ACCENT: Record<ROStatus, string> = {
   created: '#94A3B8',
-  diagnosis: '#3B82F6',
+  diagnosis: '#334155',
   in_repair: '#F59E0B',
   finished: '#10B981',
   delivered: '#6366F1',
@@ -487,7 +487,7 @@ export function TabletViewPage() {
                 sx={{
                   width: 32, height: 32,
                   borderRadius: '8px',
-                  bgcolor: '#2563EB',
+                  bgcolor: '#1E293B',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,
                 }}

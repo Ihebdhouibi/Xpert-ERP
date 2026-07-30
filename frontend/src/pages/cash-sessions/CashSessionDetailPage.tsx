@@ -53,7 +53,7 @@ const METHOD_COLOR: Record<string, 'default' | 'success' | 'primary' | 'warning'
 }
 
 // Movement type → chip label + colour (green = money in, red = money out,
-// blue = advance/deposit which is a distinct process).
+// slate = advance/deposit which is a distinct process).
 const KIND_META: Record<string, { label: string; color: 'success' | 'error' | 'info' }> = {
   payment: { label: 'Paiement', color: 'success' },
   advance: { label: 'Acompte', color: 'info' },

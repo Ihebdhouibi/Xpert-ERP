@@ -82,7 +82,7 @@ const PRIORITY_LABEL: Record<string, string> = {
   low: 'Basse', normal: 'Normale', high: 'Haute', urgent: 'Urgente',
 }
 const PRIORITY_COLOR: Record<string, string> = {
-  low: '#64748B', normal: '#2563EB', high: '#F59E0B', urgent: '#EF4444',
+  low: '#64748B', normal: '#334155', high: '#F59E0B', urgent: '#EF4444',
 }
 
 const SECTION_LABEL_SX = {
@@ -110,7 +110,7 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
 // Status accent colors — same palette as Kanban for consistency
 const STATUS_ACCENT_COLOR: Record<string, string> = {
   created:      '#94A3B8',
-  diagnosis:    '#3B82F6',
+  diagnosis:    '#334155',
   in_repair:    '#F59E0B',
   finished:     '#10B981',
   delivered:    '#6366F1',
@@ -626,7 +626,7 @@ function StatusTimeline({ events }: { events: RepairOrderDetail['status_events']
               bgcolor: i === 0 ? 'primary.main' : '#94A3B8',
               flexShrink: 0, mt: 0.3, zIndex: 1,
               border: '2px solid white',
-              boxShadow: i === 0 ? '0 0 0 2px #2563EB' : '0 0 0 2px #94A3B8',
+              boxShadow: i === 0 ? '0 0 0 2px #1E293B' : '0 0 0 2px #94A3B8',
             }}
           />
           <Box>
@@ -1784,15 +1784,15 @@ export function RepairOrderDetailPage() {
 
             {/* Pending advances banner */}
             {pendingAdvancesTotal > 0 && (
-              <Card sx={{ border: '1px solid #BFDBFE', bgcolor: '#EFF6FF' }}>
+              <Card sx={{ border: '1px solid #FDE68A', bgcolor: '#FFFBEB' }}>
                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                   <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                    <SavingsRoundedIcon sx={{ color: '#2563EB', fontSize: 20, mt: 0.25, flexShrink: 0 }} />
+                    <SavingsRoundedIcon sx={{ color: '#D97706', fontSize: 20, mt: 0.25, flexShrink: 0 }} />
                     <Box>
-                      <Typography variant="subtitle2" fontWeight={700} color="#1D4ED8">
+                      <Typography variant="subtitle2" fontWeight={700} color="#92400E">
                         Acomptes disponibles
                       </Typography>
-                      <Typography variant="body2" color="#1E40AF" mt={0.25}>
+                      <Typography variant="body2" color="#92400E" mt={0.25}>
                         Ce client a{' '}
                         <strong>{formatMinor(pendingAdvancesTotal)}</strong>
                         {' '}en acomptes non imputés — ils seront automatiquement déduits à l'émission de la facture.
@@ -1938,7 +1938,7 @@ export function RepairOrderDetailPage() {
                     fullWidth
                     startIcon={<SavingsRoundedIcon />}
                     onClick={() => setAdvanceOpen(true)}
-                    sx={{ textTransform: 'none', fontWeight: 700, borderColor: '#2563EB', color: '#2563EB', '&:hover': { borderColor: '#1D4ED8', bgcolor: '#EFF6FF' } }}
+                    sx={{ textTransform: 'none', fontWeight: 700, borderColor: '#D97706', color: '#D97706', '&:hover': { borderColor: '#92400E', bgcolor: '#FFFBEB' } }}
                   >
                     Enregistrer un acompte
                   </Button>

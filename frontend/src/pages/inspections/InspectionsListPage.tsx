@@ -234,14 +234,14 @@ export function InspectionsListPage() {
                         width: 40,
                         height: 40,
                         borderRadius: '10px',
-                        bgcolor: '#EFF6FF',
+                        bgcolor: '#F1F5F9',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}
                     >
-                      <AssignmentRoundedIcon sx={{ color: '#2563EB', fontSize: 20 }} />
+                      <AssignmentRoundedIcon sx={{ color: '#334155', fontSize: 20 }} />
                     </Box>
                     <Box>
                       <Typography variant="body2" fontWeight={700}>

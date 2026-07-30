@@ -50,7 +50,7 @@ const STATUS_ORDER: ROStatus[] = [
 
 const STATUS_ACCENT: Record<ROStatus, string> = {
   created: '#94A3B8',
-  diagnosis: '#3B82F6',
+  diagnosis: '#334155',
   in_repair: '#F59E0B',
   finished: '#10B981',
   delivered: '#6366F1',
@@ -210,10 +210,10 @@ function KanbanColumn({
           minHeight: 120,
           p: 0.75,
           borderRadius: '0 0 8px 8px',
-          bgcolor: isOver ? '#EFF6FF' : '#F8FAFC',
+          bgcolor: isOver ? 'rgba(245,158,11,0.1)' : '#F8FAFC',
           border: '1px solid',
           borderTop: 0,
-          borderColor: isOver ? 'primary.light' : '#E2E8F0',
+          borderColor: isOver ? '#F59E0B' : '#E2E8F0',
           display: 'flex',
           flexDirection: 'column',
           gap: 0.75,

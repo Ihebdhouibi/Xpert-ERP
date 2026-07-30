@@ -34,7 +34,7 @@ function ChannelChip({ channel }: { channel: string }) {
       icon={<EmailRoundedIcon />}
       label="Email"
       size="small"
-      sx={{ bgcolor: '#EFF6FF', color: '#2563EB', fontWeight: 600, '& .MuiChip-icon': { color: '#2563EB' } }}
+      sx={{ bgcolor: '#E2E8F0', color: '#1E293B', fontWeight: 600, '& .MuiChip-icon': { color: '#1E293B' } }}
     />
   ) : (
     <Chip
@@ -52,8 +52,8 @@ function TriggerBadge({ type }: { type: string }) {
       label={type === 'event' ? 'Événement' : 'Planifié'}
       size="small"
       sx={{
-        bgcolor: type === 'event' ? '#F0FDF4' : '#EFF6FF',
-        color: type === 'event' ? '#16A34A' : '#2563EB',
+        bgcolor: type === 'event' ? '#F0FDF4' : '#E2E8F0',
+        color: type === 'event' ? '#16A34A' : '#1E293B',
         fontWeight: 600,
         fontSize: '0.6875rem',
         height: 22,

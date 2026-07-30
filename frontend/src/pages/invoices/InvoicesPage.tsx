@@ -80,13 +80,13 @@ const buildColumns = (
             width: 34,
             height: 34,
             borderRadius: '9px',
-            bgcolor: '#EFF6FF',
+            bgcolor: '#F1F5F9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <ReceiptRoundedIcon sx={{ color: '#2563EB', fontSize: 17 }} />
+          <ReceiptRoundedIcon sx={{ color: '#334155', fontSize: 17 }} />
         </Box>
         <Box>
           <Typography variant="body2" fontWeight={700} fontFamily="monospace">

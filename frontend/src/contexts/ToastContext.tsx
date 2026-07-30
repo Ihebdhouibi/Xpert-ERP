@@ -62,10 +62,10 @@ const TOAST_STYLES: Record<AlertColor, {
   },
   info: {
     icon: <InfoRoundedIcon sx={{ fontSize: 18 }} />,
-    bg: '#EFF6FF',
-    border: '#BFDBFE',
-    iconColor: '#2563EB',
-    textColor: '#1D4ED8',
+    bg: '#F1F5F9',
+    border: '#CBD5E1',
+    iconColor: '#334155',
+    textColor: '#1E293B',
   },
 }
 

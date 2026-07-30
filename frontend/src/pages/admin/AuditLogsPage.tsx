@@ -33,8 +33,8 @@ const TRACKED_COMPONENTS = [
   {
     component: 'rbac',
     label: 'Utilisateurs & Rôles',
-    icon: <PersonRoundedIcon sx={{ fontSize: 16, color: '#2563EB' }} />,
-    color: '#2563EB',
+    icon: <PersonRoundedIcon sx={{ fontSize: 16, color: '#334155' }} />,
+    color: '#334155',
     actions: ['create', 'update', 'deactivate', 'roles_assigned'],
   },
   {
@@ -113,11 +113,11 @@ export function AuditLogsPage() {
           <Stack direction="row" alignItems="center" spacing={1.5} sx={{ px: 3, py: 2, borderBottom: '1px solid #F1F5F9' }}>
             <Box
               sx={{
-                width: 36, height: 36, borderRadius: '10px', bgcolor: '#EFF6FF',
+                width: 36, height: 36, borderRadius: '10px', bgcolor: '#F1F5F9',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <HistoryRoundedIcon sx={{ color: '#2563EB', fontSize: 18 }} />
+              <HistoryRoundedIcon sx={{ color: '#334155', fontSize: 18 }} />
             </Box>
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>Événements tracés</Typography>

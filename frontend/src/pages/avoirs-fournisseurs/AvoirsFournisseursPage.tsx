@@ -23,11 +23,11 @@ const columns: Column<SupplierCreditNoteOut>[] = [
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <Box
           sx={{
-            width: 34, height: 34, borderRadius: '9px', bgcolor: '#F0F9FF',
+            width: 34, height: 34, borderRadius: '9px', bgcolor: '#F1F5F9',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}
         >
-          <ReceiptRoundedIcon sx={{ color: '#0284C7', fontSize: 17 }} />
+          <ReceiptRoundedIcon sx={{ color: '#334155', fontSize: 17 }} />
         </Box>
         <Stack spacing={0.25}>
           <Typography variant="body2" fontWeight={700} fontFamily="monospace">

@@ -112,9 +112,9 @@ function CommandPalette({ open, onClose }: CommandPaletteProps) {
             outline: 'none',
             transition: 'background-color 0.1s',
             '&[data-selected="true"]': {
-              bgcolor: '#EFF6FF',
+              bgcolor: 'rgba(245,158,11,0.12)',
             },
-            '&:active': { bgcolor: '#DBEAFE' },
+            '&:active': { bgcolor: 'rgba(245,158,11,0.2)' },
           },
           '& [cmdk-empty]': {
             px: 2,
@@ -192,12 +192,12 @@ function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     sx={{
                       width: 28, height: 28,
                       borderRadius: '7px',
-                      bgcolor: '#EFF6FF',
+                      bgcolor: '#F1F5F9',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
                     }}
                   >
-                    <AddRoundedIcon sx={{ color: '#2563EB', fontSize: 16 }} />
+                    <AddRoundedIcon sx={{ color: '#334155', fontSize: 16 }} />
                   </Box>
                   <Typography variant="body2" fontWeight={500} flex={1}>
                     {action.label}

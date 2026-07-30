@@ -18,9 +18,9 @@ export const sidebarTokens = {
 export const theme = createTheme({
   palette: {
     primary: {
-      main: '#2563EB',
-      dark: '#1D4ED8',
-      light: '#3B82F6',
+      main: '#1E293B',
+      dark: '#0F172A',
+      light: '#475569',
       contrastText: '#ffffff',
     },
     secondary: {
@@ -32,7 +32,7 @@ export const theme = createTheme({
     error:   { main: '#EF4444', dark: '#DC2626', light: '#FCA5A5' },
     warning: { main: '#F59E0B', dark: '#D97706', light: '#FDE68A' },
     success: { main: '#10B981', dark: '#059669', light: '#6EE7B7' },
-    info:    { main: '#3B82F6', dark: '#2563EB', light: '#93C5FD' },
+    info:    { main: '#475569', dark: '#1E293B', light: '#94A3B8' },
     background: {
       default: '#F1F5F9',
       paper:   '#FFFFFF',
@@ -132,15 +132,15 @@ export const theme = createTheme({
         sizeSmall: { padding: '5px 12px', fontSize: '0.8125rem' },
         sizeLarge: { padding: '11px 24px', fontSize: '0.9375rem' },
         containedPrimary: {
-          background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+          background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
           '&:hover': {
-            background: 'linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%)',
-            boxShadow: '0 4px 12px rgba(37,99,235,0.35)',
+            background: 'linear-gradient(135deg, #0F172A 0%, #020617 100%)',
+            boxShadow: '0 4px 12px rgba(245,158,11,0.25)',
           },
         },
         outlinedPrimary: {
-          borderColor: '#BFDBFE',
-          '&:hover': { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+          borderColor: '#CBD5E1',
+          '&:hover': { borderColor: '#1E293B', backgroundColor: '#F1F5F9' },
         },
       },
     },
@@ -247,13 +247,13 @@ export const theme = createTheme({
           '& .MuiChip-icon': { color: '#92400E' },
         },
         colorInfo: {
-          backgroundColor: '#DBEAFE',
-          color: '#1E40AF',
-          '& .MuiChip-icon': { color: '#1E40AF' },
+          backgroundColor: '#E2E8F0',
+          color: '#1E293B',
+          '& .MuiChip-icon': { color: '#1E293B' },
         },
         colorPrimary: {
-          backgroundColor: '#DBEAFE',
-          color: '#1E40AF',
+          backgroundColor: '#E2E8F0',
+          color: '#1E293B',
         },
       },
     },
@@ -268,7 +268,7 @@ export const theme = createTheme({
             fontSize: '0.875rem',
             '& fieldset': { borderColor: '#E2E8F0', transition: 'border-color 0.15s' },
             '&:hover fieldset': { borderColor: '#CBD5E1' },
-            '&.Mui-focused fieldset': { borderColor: '#2563EB', borderWidth: 2 },
+            '&.Mui-focused fieldset': { borderColor: '#F59E0B', borderWidth: 2 },
           },
           '& .MuiInputLabel-root': { fontSize: '0.875rem' },
         },
@@ -327,7 +327,7 @@ export const theme = createTheme({
         standardSuccess: { backgroundColor: '#F0FDF4', color: '#166534' },
         standardError:   { backgroundColor: '#FEF2F2', color: '#991B1B' },
         standardWarning: { backgroundColor: '#FFFBEB', color: '#92400E' },
-        standardInfo:    { backgroundColor: '#EFF6FF', color: '#1E40AF' },
+        standardInfo:    { backgroundColor: '#F1F5F9', color: '#1E293B' },
       },
     },
 
@@ -387,7 +387,7 @@ export const theme = createTheme({
 
     MuiTabs: {
       styleOverrides: {
-        indicator: { height: 3, borderRadius: '3px 3px 0 0' },
+        indicator: { height: 3, borderRadius: '3px 3px 0 0', backgroundColor: '#F59E0B' },
         root: { borderBottom: '1px solid #E2E8F0' },
       },
     },
@@ -401,7 +401,7 @@ export const theme = createTheme({
           minWidth: 0,
           padding: '10px 16px',
           color: '#64748B',
-          '&.Mui-selected': { color: '#2563EB' },
+          '&.Mui-selected': { color: '#1E293B' },
         },
       },
     },

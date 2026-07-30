@@ -348,7 +348,7 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
                 bgcolor: 'primary.main',
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                background: 'linear-gradient(135deg, #2563EB, #1D4ED8)',
+                background: 'linear-gradient(135deg, #1E293B, #0F172A)',
               }}
             >
               {initials}

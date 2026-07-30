@@ -202,8 +202,8 @@ function ModuleTile({ label, sub, icon, to }: ModuleTileProps) {
         cursor: 'pointer',
         transition: 'box-shadow 0.15s, transform 0.15s, border-color 0.15s',
         '&:hover': {
-          boxShadow: '0 8px 24px rgba(37,99,235,0.12)',
-          borderColor: '#BFDBFE',
+          boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
+          borderColor: '#CBD5E1',
           transform: 'translateY(-2px)',
         },
       }}
@@ -215,11 +215,11 @@ function ModuleTile({ label, sub, icon, to }: ModuleTileProps) {
             width: 36,
             height: 36,
             borderRadius: '10px',
-            bgcolor: '#EFF6FF',
+            bgcolor: '#F1F5F9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#2563EB',
+            color: '#334155',
             mb: 1.5,
           }}
         >
@@ -396,8 +396,8 @@ export function DashboardPage() {
                   label="Suivi Atelier"
                   description="Vue en temps réel des OTs en cours"
                   icon={<ViewKanbanRoundedIcon sx={{ fontSize: 22 }} />}
-                  iconBg="#EFF6FF"
-                  iconColor="#2563EB"
+                  iconBg="#F1F5F9"
+                  iconColor="#334155"
                   to="/workshop"
                 />
                 <QuickActionCard

@@ -85,7 +85,7 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
                 width: 40,
                 height: 40,
                 borderRadius: '12px',
-                bgcolor: applied ? '#F0FDF4' : '#EFF6FF',
+                bgcolor: applied ? '#F0FDF4' : '#F1F5F9',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -93,7 +93,7 @@ function AdvanceCard({ ap }: { ap: AdvancePaymentOut }) {
             >
               {applied
                 ? <CheckCircleRoundedIcon sx={{ color: '#16A34A', fontSize: 20 }} />
-                : <PendingRoundedIcon sx={{ color: '#2563EB', fontSize: 20 }} />}
+                : <PendingRoundedIcon sx={{ color: '#334155', fontSize: 20 }} />}
             </Box>
             <Box>
               <Typography variant="subtitle2" fontWeight={700}>

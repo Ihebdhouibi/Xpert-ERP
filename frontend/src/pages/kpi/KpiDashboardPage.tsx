@@ -138,7 +138,7 @@ function KpiCard({ label, value, icon, color = 'primary.main' }: KpiCardProps) {
             sx={{
               width: 36, height: 36,
               borderRadius: '9px',
-              bgcolor: `${color === 'error.main' ? '#FEF2F2' : color === 'success.main' ? '#F0FDF4' : color === 'warning.main' ? '#FFFBEB' : '#EFF6FF'}`,
+              bgcolor: `${color === 'error.main' ? '#FEF2F2' : color === 'success.main' ? '#F0FDF4' : color === 'warning.main' ? '#FFFBEB' : '#F1F5F9'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color,
             }}
@@ -307,7 +307,7 @@ export function KpiDashboardPage() {
   const mechanicData = analytics?.mechanic_productivity ?? []
 
   // Design system palette — consistent with the rest of the app
-  const BAR_COLORS = ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4']
+  const BAR_COLORS = ['#1E293B', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4']
 
   return (
     <Box>
@@ -449,8 +449,8 @@ export function KpiDashboardPage() {
             <AreaChart data={revenueTrend} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#1E293B" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#1E293B" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" strokeOpacity={0.7} />
@@ -470,7 +470,7 @@ export function KpiDashboardPage() {
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#2563EB"
+                stroke="#1E293B"
                 strokeWidth={2}
                 fill="url(#revenueGrad)"
                 dot={false}

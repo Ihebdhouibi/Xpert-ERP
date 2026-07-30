@@ -286,14 +286,14 @@ export function InspectionTemplatesPage() {
                           width: 40,
                           height: 40,
                           borderRadius: '10px',
-                          bgcolor: '#EFF6FF',
+                          bgcolor: '#F1F5F9',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
                         }}
                       >
-                        <ChecklistRoundedIcon sx={{ color: '#2563EB', fontSize: 20 }} />
+                        <ChecklistRoundedIcon sx={{ color: '#334155', fontSize: 20 }} />
                       </Box>
                       <Box flex={1} minWidth={0}>
                         <Typography variant="subtitle1" fontWeight={700} noWrap>

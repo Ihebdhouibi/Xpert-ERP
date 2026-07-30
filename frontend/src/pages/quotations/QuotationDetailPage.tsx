@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -62,7 +62,7 @@ import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
 
 const KIND_COLORS: Record<string, { bg: string; color: string }> = {
-  labor: { bg: '#EFF6FF', color: '#2563EB' },
+  labor: { bg: '#E2E8F0', color: '#1E293B' },
   part: { bg: '#FFFBEB', color: '#D97706' },
   service: { bg: '#F0FDF4', color: '#16A34A' },
   other: { bg: '#F1F5F9', color: '#64748B' },

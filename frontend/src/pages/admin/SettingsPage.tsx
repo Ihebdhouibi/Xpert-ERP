@@ -357,10 +357,10 @@ export function SettingsPage() {
                   <Box
                     sx={{
                       width: 36, height: 36, borderRadius: '10px',
-                      bgcolor: '#EFF6FF',
+                      bgcolor: '#F1F5F9',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0,
-                      '& svg': { color: '#2563EB', fontSize: 18 },
+                      '& svg': { color: '#334155', fontSize: 18 },
                     }}
                   >
                     {section.icon}

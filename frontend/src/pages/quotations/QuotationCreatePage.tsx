@@ -653,9 +653,9 @@ export function QuotationCreatePage() {
 
             {/* Options */}
             <SectionCard title="Options du devis" icon={<ReceiptLongRoundedIcon sx={{ fontSize: 20 }} />}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2, p: 1.5, bgcolor: '#F0F9FF', borderRadius: 1.5, border: '1px solid #BAE6FD' }}>
-                <InfoOutlinedIcon sx={{ fontSize: 16, color: '#0369A1', mt: 0.25, flexShrink: 0 }} />
-                <Typography variant="caption" color="#0369A1">
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2, p: 1.5, bgcolor: '#F1F5F9', borderRadius: 1.5, border: '1px solid #CBD5E1' }}>
+                <InfoOutlinedIcon sx={{ fontSize: 16, color: '#334155', mt: 0.25, flexShrink: 0 }} />
+                <Typography variant="caption" color="#334155">
                   <strong>Devise</strong> — monnaie utilisée pour toutes les lignes du devis.<br />
                   <strong>Valide jusqu'au</strong> — date limite au-delà de laquelle le devis expire automatiquement.<br />
                   <strong>Notes internes</strong> — commentaires visibles uniquement en interne (non imprimés sur le PDF client).

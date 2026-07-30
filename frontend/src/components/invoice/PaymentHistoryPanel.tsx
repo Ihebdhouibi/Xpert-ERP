@@ -20,7 +20,7 @@ import { formatMinor } from '../ui/CurrencyDisplay'
 
 const METHOD_COLORS: Record<string, { bg: string; color: string }> = {
   cash: { bg: '#F0FDF4', color: '#16A34A' },
-  card: { bg: '#EFF6FF', color: '#2563EB' },
+  card: { bg: '#F1F5F9', color: '#334155' },
   bank_transfer: { bg: '#F5F3FF', color: '#7C3AED' },
   cheque: { bg: '#FFFBEB', color: '#D97706' },
   other: { bg: '#F1F5F9', color: '#64748B' },

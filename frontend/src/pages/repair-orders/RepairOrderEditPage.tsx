@@ -33,7 +33,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 }
 const PRIORITY_COLORS: Record<string, string> = {
   low: '#64748B',
-  normal: '#2563EB',
+  normal: '#334155',
   high: '#F59E0B',
   urgent: '#EF4444',
 }

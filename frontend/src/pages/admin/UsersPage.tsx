@@ -40,7 +40,7 @@ import { useAuth } from '../../contexts/AuthContext'
 // eslint-disable-next-line react-refresh/only-export-components
 export const SYSTEM_ROLES: { code: string; label: string; color: string }[] = [
   { code: 'super_admin', label: 'Super Admin', color: '#7C3AED' },
-  { code: 'admin', label: 'Admin', color: '#2563EB' },
+  { code: 'admin', label: 'Admin', color: '#334155' },
   { code: 'receptionist', label: 'Réceptionniste', color: '#0891B2' },
   { code: 'mechanic', label: 'Mécanicien', color: '#D97706' },
   { code: 'accountant', label: 'Comptable', color: '#16A34A' },
@@ -384,14 +384,14 @@ export function UsersPage() {
               width: 36,
               height: 36,
               borderRadius: '10px',
-              bgcolor: row.status === 'active' ? '#EFF6FF' : '#F1F5F9',
+              bgcolor: row.status === 'active' ? '#E2E8F0' : '#F1F5F9',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <PersonRoundedIcon sx={{ color: row.status === 'active' ? '#2563EB' : '#94A3B8', fontSize: 18 }} />
+            <PersonRoundedIcon sx={{ color: row.status === 'active' ? '#1E293B' : '#94A3B8', fontSize: 18 }} />
           </Box>
           <Box>
             <Typography variant="body2" fontWeight={700}>{row.full_name}</Typography>
