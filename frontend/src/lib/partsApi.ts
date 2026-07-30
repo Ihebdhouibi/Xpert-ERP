@@ -12,6 +12,19 @@ export interface PartCategory {
   updated_at: string
 }
 
+// Synthetic category used as a sentinel in category pickers so the user can
+// select parts that have no category_id assigned (id -1 never collides with
+// a real category, which is a positive DB id).
+export const UNCATEGORIZED_CATEGORY: PartCategory = {
+  id: -1,
+  garage_id: 0,
+  name: 'Sans catégorie',
+  description: null,
+  parent_id: null,
+  created_at: '',
+  updated_at: '',
+}
+
 export interface PartSummary {
   id: string
   int_id: number
@@ -49,6 +62,7 @@ export interface PartListResponse {
 export interface PartListParams {
   search?: string
   category_id?: number
+  uncategorized?: boolean
   status?: PartStatus
   include_deleted?: boolean
   page?: number

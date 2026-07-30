@@ -25,6 +25,20 @@ class ROPartLineCreateRequest(BaseModel):
     )
 
 
+class ROLaborLineUpdateRequest(BaseModel):
+    """Request to update an existing labor line on a repair order."""
+    labor_type: str = Field(..., min_length=1, max_length=100)
+    duration_minutes: int = Field(0, ge=0)
+    rate_minor: int = Field(..., gt=0)
+
+
+class ROPartLineUpdateRequest(BaseModel):
+    """Request to update an existing part line on a repair order."""
+    quantity: int = Field(..., gt=0)
+    unit_cost_minor: int = Field(..., gt=0)
+    remise_pct: float = Field(0, ge=0, le=100)
+
+
 class RepairOrderCreateRequest(BaseModel):
     """Request to create a repair order."""
     customer_id: int = Field(..., gt=0)

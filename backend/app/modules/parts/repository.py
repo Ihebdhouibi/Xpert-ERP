@@ -99,6 +99,7 @@ class PartRepository:
         garage_id: int,
         search: Optional[str] = None,
         category_id: Optional[int] = None,
+        uncategorized: bool = False,
         status: Optional[PartStatus] = None,
         include_deleted: bool = False,
         page: int = 1,
@@ -114,7 +115,9 @@ class PartRepository:
             stmt = stmt.where(Part.deleted_at.is_(None))
         if status is not None:
             stmt = stmt.where(Part.status == status)
-        if category_id is not None:
+        if uncategorized:
+            stmt = stmt.where(Part.category_id.is_(None))
+        elif category_id is not None:
             stmt = stmt.where(Part.category_id == category_id)
         if search:
             pattern = f"%{search}%"

@@ -197,6 +197,18 @@ class RepairOrderRepository:
         return line
 
     @staticmethod
+    async def get_labor_line(db: AsyncSession, line_id: int) -> ROLaborLine | None:
+        """Get a single labor line by id."""
+        stmt = select(ROLaborLine).where(ROLaborLine.id == line_id)
+        return (await db.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
+    async def get_part_line(db: AsyncSession, line_id: int) -> ROPartLine | None:
+        """Get a single part line by id."""
+        stmt = select(ROPartLine).where(ROPartLine.id == line_id)
+        return (await db.execute(stmt)).scalar_one_or_none()
+
+    @staticmethod
     async def remove_labor_line(db: AsyncSession, line_id: int) -> bool:
         """Remove a labor line."""
         stmt = select(ROLaborLine).where(ROLaborLine.id == line_id)

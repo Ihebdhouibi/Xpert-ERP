@@ -25,7 +25,7 @@ import {
 import InventoryRoundedIcon from '@mui/icons-material/InventoryRounded'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
 import LockRoundedIcon from '@mui/icons-material/LockRounded'
-import { partsApi, type PartSummary, type PartCategory } from '../../lib/partsApi'
+import { partsApi, UNCATEGORIZED_CATEGORY, type PartSummary, type PartCategory } from '../../lib/partsApi'
 import { invoiceApi, type InvoiceLineOut, type InvoiceOut } from '../../lib/invoiceApi'
 import { formatMinor } from '../ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
@@ -137,7 +137,9 @@ export function AddInvoiceLineDialog({
     queryKey: ['parts-by-category', selectedCategory?.id, debouncedSearch],
     queryFn: () =>
       partsApi.list({
-        category_id: selectedCategory!.id,
+        ...(selectedCategory!.id === UNCATEGORIZED_CATEGORY.id
+          ? { uncategorized: true }
+          : { category_id: selectedCategory!.id }),
         search: debouncedSearch || undefined,
         page_size: 500,
       }),
@@ -267,7 +269,10 @@ export function AddInvoiceLineDialog({
                       value={selectedCategory?.id ?? ''}
                       label="Catégorie"
                       onChange={(e) => {
-                        const cat = categories.find((c) => c.id === Number(e.target.value)) ?? null
+                        const id = Number(e.target.value)
+                        const cat = id === UNCATEGORIZED_CATEGORY.id
+                          ? UNCATEGORIZED_CATEGORY
+                          : categories.find((c) => c.id === id) ?? null
                         setSelectedCategory(cat)
                         setSelectedPart(null)
                         setPartSearch('')
@@ -279,6 +284,7 @@ export function AddInvoiceLineDialog({
                           {cat.name}
                         </MenuItem>
                       ))}
+                      <MenuItem value={UNCATEGORIZED_CATEGORY.id}>{UNCATEGORIZED_CATEGORY.name}</MenuItem>
                     </Select>
                   </FormControl>
 

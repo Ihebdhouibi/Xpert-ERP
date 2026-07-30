@@ -53,6 +53,8 @@ import {
   isBackwardTransition,
   type ROStatus,
   type RepairOrderDetail,
+  type ROPartLine,
+  type ROLaborLine,
   type Comment,
   type ROPhotoSummary,
   type MechanicSummary,
@@ -919,11 +921,24 @@ export function RepairOrderDetailPage() {
 
   // Add-part inline form state
   const [showAddPart, setShowAddPart] = useState(false)
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | 'none' | null>(null)
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
   const [partQty, setPartQty] = useState('')
   const [partUnitPrice, setPartUnitPrice] = useState('')
   const [partRemise, setPartRemise] = useState('0')
+
+  // Edit/delete labor line state
+  const [editLaborLineId, setEditLaborLineId] = useState<number | null>(null)
+  const [editLaborType, setEditLaborType] = useState('')
+  const [editLaborRate, setEditLaborRate] = useState('')
+  const [deleteLaborLineId, setDeleteLaborLineId] = useState<number | null>(null)
+
+  // Edit/delete part line state
+  const [editPartLineId, setEditPartLineId] = useState<number | null>(null)
+  const [editPartQty, setEditPartQty] = useState('')
+  const [editPartUnitPrice, setEditPartUnitPrice] = useState('')
+  const [editPartRemise, setEditPartRemise] = useState('0')
+  const [deletePartLineId, setDeletePartLineId] = useState<number | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['repair-order', publicId],
@@ -959,7 +974,9 @@ export function RepairOrderDetailPage() {
 
   const { data: partsResults } = useQuery({
     queryKey: ['parts-by-category', selectedCategoryId],
-    queryFn: () => partsApi.list({ category_id: selectedCategoryId!, page_size: 200, status: 'active' }),
+    queryFn: () => selectedCategoryId === 'none'
+      ? partsApi.list({ uncategorized: true, page_size: 200, status: 'active' })
+      : partsApi.list({ category_id: selectedCategoryId!, page_size: 200, status: 'active' }),
     enabled: showAddPart && selectedCategoryId !== null,
     staleTime: 30_000,
   })
@@ -1021,6 +1038,66 @@ export function RepairOrderDetailPage() {
     onError: () => toastError('Impossible d\'ajouter la pièce.'),
   })
 
+  const updateLaborLineMutation = useMutation({
+    mutationFn: () => repairOrderApi.updateLaborLine(publicId, editLaborLineId!, {
+      labor_type: editLaborType,
+      rate_minor: Math.round(parseFloat(editLaborRate) * 100),
+    }),
+    onSuccess: () => {
+      success('Ligne de main d\'œuvre modifiée.')
+      setEditLaborLineId(null)
+      refetch()
+    },
+    onError: () => toastError('Impossible de modifier la ligne.'),
+  })
+
+  const removeLaborLineMutation = useMutation({
+    mutationFn: (lineId: number) => repairOrderApi.removeLaborLine(publicId, lineId),
+    onSuccess: () => {
+      success('Ligne de main d\'œuvre supprimée.')
+      setDeleteLaborLineId(null)
+      refetch()
+    },
+    onError: () => { toastError('Impossible de supprimer la ligne.'); setDeleteLaborLineId(null) },
+  })
+
+  const updatePartLineMutation = useMutation({
+    mutationFn: () => repairOrderApi.updatePartLine(publicId, editPartLineId!, {
+      quantity: parseInt(editPartQty, 10),
+      unit_cost_minor: Math.round(parseFloat(editPartUnitPrice) * 100),
+      remise_pct: parseFloat(editPartRemise) || 0,
+    }),
+    onSuccess: () => {
+      success('Pièce modifiée.')
+      setEditPartLineId(null)
+      refetch()
+    },
+    onError: () => toastError('Impossible de modifier la pièce.'),
+  })
+
+  const removePartLineMutation = useMutation({
+    mutationFn: (lineId: number) => repairOrderApi.removePartLine(publicId, lineId),
+    onSuccess: () => {
+      success('Pièce supprimée.')
+      setDeletePartLineId(null)
+      refetch()
+    },
+    onError: () => { toastError('Impossible de supprimer la pièce.'); setDeletePartLineId(null) },
+  })
+
+  function openEditLaborLine(line: ROLaborLine) {
+    setEditLaborLineId(line.id)
+    setEditLaborType(line.labor_type)
+    setEditLaborRate((line.rate_minor / 100).toFixed(2))
+  }
+
+  function openEditPartLine(line: ROPartLine) {
+    setEditPartLineId(line.id)
+    setEditPartQty(String(line.quantity))
+    setEditPartUnitPrice((line.unit_cost_minor / 100).toFixed(2))
+    setEditPartRemise(String(line.remise_pct))
+  }
+
   const createAdvanceMutation = useMutation({
     mutationFn: () =>
       advancePaymentApi.create({
@@ -1080,6 +1157,8 @@ export function RepairOrderDetailPage() {
   const currency = ro.estimated_cost_currency ?? 'EUR'
   const laborTotal = ro.labor_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
   const partsTotal = ro.part_lines.reduce((s, l) => s + (l.amount_minor ?? 0), 0)
+  const canEditLaborLines = ro.status === 'diagnosis' || ro.status === 'in_repair'
+  const canEditPartLines = ro.status === 'paused_parts'
   const pendingAdvances = (advancesData?.items ?? []).filter(a => a.applied_to_invoice_id === null)
   const pendingAdvancesTotal = pendingAdvances.reduce((s, a) => s + a.amount_minor, 0)
 
@@ -1317,6 +1396,7 @@ export function RepairOrderDetailPage() {
                       <TableCell align="right">Prix HT</TableCell>
                       <TableCell align="right">TVA</TableCell>
                       <TableCell align="right">Montant TTC</TableCell>
+                      {canEditLaborLines && <TableCell align="right">Actions</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1334,6 +1414,20 @@ export function RepairOrderDetailPage() {
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
                         </TableCell>
+                        {canEditLaborLines && (
+                          <TableCell align="right">
+                            <PermissionGate permission="repair_order.transition">
+                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <IconButton size="small" onClick={() => openEditLaborLine(line)}>
+                                  <EditRoundedIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                                <IconButton size="small" onClick={() => setDeleteLaborLineId(line.id)}>
+                                  <DeleteRoundedIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                              </Stack>
+                            </PermissionGate>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
@@ -1345,6 +1439,7 @@ export function RepairOrderDetailPage() {
                       <TableCell align="right">
                         <Typography variant="body2" fontWeight={700}>{formatMinor(laborTotal, currency)}</Typography>
                       </TableCell>
+                      {canEditLaborLines && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -1384,7 +1479,8 @@ export function RepairOrderDetailPage() {
                       label="Catégorie"
                       value={selectedCategoryId ?? ''}
                       onChange={(e) => {
-                        setSelectedCategoryId(e.target.value === '' ? null : Number(e.target.value))
+                        const v = e.target.value
+                        setSelectedCategoryId(v === '' ? null : v === 'none' ? 'none' : Number(v))
                         setSelectedPart(null)
                         setPartQty('')
                         setPartUnitPrice('')
@@ -1394,6 +1490,7 @@ export function RepairOrderDetailPage() {
                       {(partCategories ?? []).map(cat => (
                         <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
                       ))}
+                      <MenuItem value="none"><em>Sans catégorie</em></MenuItem>
                     </Select>
                   </FormControl>
                   {/* Step 2 — part (only after category chosen) */}
@@ -1403,13 +1500,14 @@ export function RepairOrderDetailPage() {
                       size="small"
                       options={partsResults?.items ?? []}
                       getOptionLabel={(o) => `${o.sku_code} — ${o.name}`}
+                      getOptionDisabled={(o) => o.stock_on_hand === 0}
                       value={selectedPart}
                       onChange={(_, val) => {
                         setSelectedPart(val)
                         setPartQty('1')
                         setPartUnitPrice(val ? (val.selling_price_minor / 100).toFixed(2) : '')
                       }}
-                      noOptionsText={partsResults ? 'Aucune pièce dans cette catégorie' : 'Chargement…'}
+                      noOptionsText={partsResults ? (selectedCategoryId === 'none' ? 'Aucune pièce sans catégorie' : 'Aucune pièce dans cette catégorie') : 'Chargement…'}
                       renderOption={(props, option) => (
                         <Box component="li" {...props} key={option.int_id}>
                           <Stack direction="row" justifyContent="space-between" width="100%" spacing={1}>
@@ -1523,6 +1621,7 @@ export function RepairOrderDetailPage() {
                       <TableCell align="right">Remise</TableCell>
                       <TableCell align="right">TVA</TableCell>
                       <TableCell align="right">Montant</TableCell>
+                      {canEditPartLines && <TableCell align="right">Actions</TableCell>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1550,6 +1649,20 @@ export function RepairOrderDetailPage() {
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight={600}>{formatMinor(line.amount_minor, currency)}</Typography>
                         </TableCell>
+                        {canEditPartLines && (
+                          <TableCell align="right">
+                            <PermissionGate permission="repair_order.transition">
+                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <IconButton size="small" onClick={() => openEditPartLine(line)}>
+                                  <EditRoundedIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                                <IconButton size="small" onClick={() => setDeletePartLineId(line.id)}>
+                                  <DeleteRoundedIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                              </Stack>
+                            </PermissionGate>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                     <TableRow sx={{ bgcolor: '#F8FAFC' }}>
@@ -1561,6 +1674,7 @@ export function RepairOrderDetailPage() {
                       <TableCell align="right">
                         <Typography variant="body2" fontWeight={700}>{formatMinor(partsTotal, currency)}</Typography>
                       </TableCell>
+                      {canEditPartLines && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -1794,6 +1908,90 @@ export function RepairOrderDetailPage() {
         dangerous
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      <Dialog open={editLaborLineId !== null} onClose={() => setEditLaborLineId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Modifier la ligne de main d'œuvre</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              size="small" label="Désignation" value={editLaborType}
+              onChange={e => setEditLaborType(e.target.value)} fullWidth
+            />
+            <TextField
+              size="small" label="Prix HT (€)" type="number" value={editLaborRate}
+              onChange={e => setEditLaborRate(e.target.value)} inputProps={{ min: 0, step: 0.01 }} fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditLaborLineId(null)} sx={{ textTransform: 'none' }}>Annuler</Button>
+          <Button
+            variant="contained"
+            disabled={updateLaborLineMutation.isPending || !editLaborType.trim() || !editLaborRate}
+            onClick={() => updateLaborLineMutation.mutate()}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            {updateLaborLineMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ConfirmDialog
+        open={deleteLaborLineId !== null}
+        title="Supprimer cette ligne de main d'œuvre ?"
+        message="Cette action est irréversible."
+        confirmLabel="Supprimer"
+        dangerous
+        loading={removeLaborLineMutation.isPending}
+        onConfirm={() => deleteLaborLineId !== null && removeLaborLineMutation.mutate(deleteLaborLineId)}
+        onCancel={() => setDeleteLaborLineId(null)}
+      />
+
+      <Dialog open={editPartLineId !== null} onClose={() => setEditPartLineId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Modifier la pièce</DialogTitle>
+        <DialogContent>
+          <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap">
+            <TextField
+              size="small" label="Quantité" type="number" value={editPartQty}
+              onChange={e => setEditPartQty(e.target.value)} inputProps={{ min: 1, step: 1 }} sx={{ width: 110 }}
+            />
+            <TextField
+              size="small" label="Prix unit. (€)" type="number" value={editPartUnitPrice}
+              onChange={e => setEditPartUnitPrice(e.target.value)} inputProps={{ min: 0, step: 0.01 }} sx={{ width: 130 }}
+            />
+            <TextField
+              size="small" label="Remise (%)" type="number" value={editPartRemise}
+              onChange={e => setEditPartRemise(e.target.value)} inputProps={{ min: 0, max: 100, step: 1 }} sx={{ width: 110 }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditPartLineId(null)} sx={{ textTransform: 'none' }}>Annuler</Button>
+          <Button
+            variant="contained"
+            disabled={
+              updatePartLineMutation.isPending ||
+              !editPartQty || !editPartUnitPrice ||
+              parseInt(editPartQty, 10) < 1
+            }
+            onClick={() => updatePartLineMutation.mutate()}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            {updatePartLineMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ConfirmDialog
+        open={deletePartLineId !== null}
+        title="Supprimer cette pièce ?"
+        message="Le stock réservé pour cette pièce sera libéré."
+        confirmLabel="Supprimer"
+        dangerous
+        loading={removePartLineMutation.isPending}
+        onConfirm={() => deletePartLineId !== null && removePartLineMutation.mutate(deletePartLineId)}
+        onCancel={() => setDeletePartLineId(null)}
       />
     </Box>
   )

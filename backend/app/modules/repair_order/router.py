@@ -20,14 +20,19 @@ from app.modules.repair_order.schemas import (
     RepairOrderSummary,
     RepairOrderUpdateRequest,
     ROLaborLineCreateRequest,
+    ROLaborLineUpdateRequest,
     ROPartLineCreateRequest,
+    ROPartLineUpdateRequest,
     ROPhotoListResponse,
     ROPhotoSummary,
     StatusTransitionRequest,
 )
 from app.modules.repair_order.service import (
     InvalidStatusTransitionError,
+    LaborLineNotFoundError,
     OptimisticLockError,
+    PartLineNotFoundError,
+    RepairOrderLineStateError,
     RepairOrderNotFoundError,
     RepairOrderService,
     StepIncompleteError,
@@ -475,6 +480,150 @@ async def add_part_line(
                 "requested": e.requested,
             },
         )
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch(
+    "/{public_id}/labor-lines/{line_id}",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def update_labor_line(
+    public_id: str,
+    line_id: int,
+    body: ROLaborLineUpdateRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Update a labor line on a repair order."""
+    actor_id = await _resolve_user_id(db, user.public_id)
+    try:
+        await RepairOrderService.update_labor_line(
+            db,
+            garage_id=user.garage_id,
+            user_id=actor_id or user.user_id,
+            public_id=public_id,
+            line_id=line_id,
+            labor_type=body.labor_type,
+            duration_minutes=body.duration_minutes,
+            rate_minor=body.rate_minor,
+        )
+        await db.commit()
+        return await _get_detail(db, user.garage_id, public_id)
+    except RepairOrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    except LaborLineNotFoundError:
+        raise HTTPException(status_code=404, detail="Labor line not found")
+    except RepairOrderLineStateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/{public_id}/labor-lines/{line_id}",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def remove_labor_line(
+    public_id: str,
+    line_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Remove a labor line from a repair order."""
+    actor_id = await _resolve_user_id(db, user.public_id)
+    try:
+        await RepairOrderService.remove_labor_line(
+            db,
+            garage_id=user.garage_id,
+            user_id=actor_id or user.user_id,
+            public_id=public_id,
+            line_id=line_id,
+        )
+        await db.commit()
+        return await _get_detail(db, user.garage_id, public_id)
+    except RepairOrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    except LaborLineNotFoundError:
+        raise HTTPException(status_code=404, detail="Labor line not found")
+    except RepairOrderLineStateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch(
+    "/{public_id}/part-lines/{line_id}",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def update_part_line(
+    public_id: str,
+    line_id: int,
+    body: ROPartLineUpdateRequest,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Update a part line on a repair order."""
+    actor_id = await _resolve_user_id(db, user.public_id)
+    try:
+        await RepairOrderService.update_part_line(
+            db,
+            garage_id=user.garage_id,
+            user_id=actor_id or user.user_id,
+            public_id=public_id,
+            line_id=line_id,
+            quantity=body.quantity,
+            unit_cost_minor=body.unit_cost_minor,
+            remise_pct=body.remise_pct,
+        )
+        await db.commit()
+        return await _get_detail(db, user.garage_id, public_id)
+    except RepairOrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    except PartLineNotFoundError:
+        raise HTTPException(status_code=404, detail="Part line not found")
+    except RepairOrderLineStateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/{public_id}/part-lines/{line_id}",
+    response_model=RepairOrderDetail,
+    dependencies=[require_permission("repair_order.transition")],
+)
+async def remove_part_line(
+    public_id: str,
+    line_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> RepairOrderDetail:
+    """Remove a part line from a repair order."""
+    actor_id = await _resolve_user_id(db, user.public_id)
+    try:
+        await RepairOrderService.remove_part_line(
+            db,
+            garage_id=user.garage_id,
+            user_id=actor_id or user.user_id,
+            public_id=public_id,
+            line_id=line_id,
+        )
+        await db.commit()
+        return await _get_detail(db, user.garage_id, public_id)
+    except RepairOrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+    except PartLineNotFoundError:
+        raise HTTPException(status_code=404, detail="Part line not found")
+    except RepairOrderLineStateError as e:
+        raise HTTPException(status_code=409, detail=e.message)
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

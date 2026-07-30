@@ -250,6 +250,38 @@ export const repairOrderApi = {
       .then((r) => r.data)
   },
 
+  updateLaborLine(
+    publicId: string,
+    lineId: number,
+    input: LaborLineInput
+  ): Promise<RepairOrderDetail> {
+    return apiClient
+      .patch(`/repair-orders/${publicId}/labor-lines/${lineId}`, input)
+      .then((r) => r.data)
+  },
+
+  removeLaborLine(publicId: string, lineId: number): Promise<RepairOrderDetail> {
+    return apiClient
+      .delete(`/repair-orders/${publicId}/labor-lines/${lineId}`)
+      .then((r) => r.data)
+  },
+
+  updatePartLine(
+    publicId: string,
+    lineId: number,
+    input: { quantity: number; unit_cost_minor: number; remise_pct?: number }
+  ): Promise<RepairOrderDetail> {
+    return apiClient
+      .patch(`/repair-orders/${publicId}/part-lines/${lineId}`, input)
+      .then((r) => r.data)
+  },
+
+  removePartLine(publicId: string, lineId: number): Promise<RepairOrderDetail> {
+    return apiClient
+      .delete(`/repair-orders/${publicId}/part-lines/${lineId}`)
+      .then((r) => r.data)
+  },
+
   remove(publicId: string): Promise<void> {
     return apiClient.delete(`/repair-orders/${publicId}`).then(() => undefined)
   },

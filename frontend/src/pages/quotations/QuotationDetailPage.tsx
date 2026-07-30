@@ -33,6 +33,7 @@ import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
@@ -46,12 +47,13 @@ import {
   QUOTATION_STATUS_LABELS,
   LINE_KIND_LABELS,
   type LineKind,
+  type QuotationLineOut,
 } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
 import { deliveryNoteApi } from '../../lib/deliveryNoteApi'
 import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
-import { partsApi, type PartCategory, type PartSummary } from '../../lib/partsApi'
+import { partsApi, UNCATEGORIZED_CATEGORY, type PartCategory, type PartSummary } from '../../lib/partsApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -115,6 +117,13 @@ export function QuotationDetailPage() {
   const [linePartDebounced, setLinePartDebounced] = useState('')
   const partDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Edit-line dialog state
+  const [editLine, setEditLine] = useState<QuotationLineOut | null>(null)
+  const [editDesc, setEditDesc] = useState('')
+  const [editQty, setEditQty] = useState('1')
+  const [editPrice, setEditPrice] = useState('')
+  const [editDiscount, setEditDiscount] = useState('0')
+
   const { data: quotation, isLoading, isError } = useQuery({
     queryKey: ['quotation', publicId],
     queryFn: () => quotationApi.get(publicId!),
@@ -144,7 +153,9 @@ export function QuotationDetailPage() {
     queryKey: ['parts', 'for-quotation-line', lineSelectedCategory?.id, linePartDebounced],
     queryFn: () => partsApi.list({
       search: linePartDebounced || undefined,
-      category_id: lineSelectedCategory?.id,
+      ...(lineSelectedCategory?.id === UNCATEGORIZED_CATEGORY.id
+        ? { uncategorized: true }
+        : { category_id: lineSelectedCategory?.id }),
       page_size: 50,
     }),
     enabled: lineKind === 'part' && !!lineSelectedCategory,
@@ -281,6 +292,29 @@ export function QuotationDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['quotation', publicId] })
     },
     onError: () => toastError("Impossible de supprimer la ligne."),
+  })
+
+  function openEditLine(line: QuotationLineOut) {
+    setEditLine(line)
+    setEditDesc(line.description)
+    setEditQty(line.quantity)
+    setEditPrice(String(line.unit_price_minor / 100))
+    setEditDiscount(line.discount_percent)
+  }
+
+  const updateLineMutation = useMutation({
+    mutationFn: () => quotationApi.updateLine(publicId!, editLine!.id, quotation!.version, {
+      description: editDesc,
+      quantity: parseFloat(editQty) || 1,
+      unit_price_minor: Math.round(parseFloat(editPrice) * 100),
+      discount_percent: parseFloat(editDiscount) || 0,
+    }),
+    onSuccess: () => {
+      success('Ligne modifiée')
+      setEditLine(null)
+      queryClient.invalidateQueries({ queryKey: ['quotation', publicId] })
+    },
+    onError: () => toastError("Impossible de modifier la ligne."),
   })
 
   const handleDownloadPdf = async (mode: 'download' | 'print') => {
@@ -500,7 +534,7 @@ export function QuotationDetailPage() {
                       {lineKind === 'part' && (
                         <>
                           <Autocomplete
-                            options={partCategories}
+                            options={[...partCategories, UNCATEGORIZED_CATEGORY]}
                             value={lineSelectedCategory}
                             onChange={(_e, v) => {
                               setLineSelectedCategory(v)
@@ -675,12 +709,19 @@ export function QuotationDetailPage() {
                               </TableCell>
                               {canEditLines && (
                                 <TableCell align="right" sx={{ py: 1.5 }}>
-                                  <Tooltip title="Supprimer">
-                                    <IconButton size="small" color="error" disabled={removeLineMutation.isPending}
-                                      onClick={() => removeLineMutation.mutate(line.id)}>
-                                      <CloseRoundedIcon sx={{ fontSize: 14 }} />
-                                    </IconButton>
-                                  </Tooltip>
+                                  <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                    <Tooltip title="Modifier">
+                                      <IconButton size="small" onClick={() => openEditLine(line)}>
+                                        <EditRoundedIcon sx={{ fontSize: 14 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Supprimer">
+                                      <IconButton size="small" color="error" disabled={removeLineMutation.isPending}
+                                        onClick={() => removeLineMutation.mutate(line.id)}>
+                                        <CloseRoundedIcon sx={{ fontSize: 14 }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Stack>
                                 </TableCell>
                               )}
                             </TableRow>
@@ -826,6 +867,43 @@ export function QuotationDetailPage() {
             disabled={sendMutation.isPending}
             sx={{ textTransform: 'none', fontWeight: 700 }}>
             {sendMutation.isPending ? 'Envoi…' : 'Confirmer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit-line dialog */}
+      <Dialog open={editLine !== null} onClose={() => setEditLine(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Modifier la ligne</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              size="small" label="Description" value={editDesc}
+              onChange={e => setEditDesc(e.target.value)} fullWidth required
+            />
+            <Stack direction="row" spacing={1.5}>
+              <TextField size="small" label="Quantité" type="number" value={editQty}
+                onChange={e => setEditQty(e.target.value)}
+                sx={{ width: 100 }} inputProps={{ min: 1, step: 1 }} />
+              <TextField size="small" label="Prix" type="number" value={editPrice}
+                onChange={e => setEditPrice(e.target.value)}
+                sx={{ flex: 1 }} inputProps={{ min: 0, step: 1 }}
+                InputProps={{ endAdornment: <Typography variant="caption" color="text.secondary">{quotation.currency}</Typography> }}
+                required />
+              <TextField size="small" label="Remise %" type="number" value={editDiscount}
+                onChange={e => setEditDiscount(e.target.value)}
+                sx={{ width: 110 }} inputProps={{ min: 0, max: 100 }} />
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditLine(null)} disabled={updateLineMutation.isPending} sx={{ textTransform: 'none' }}>
+            Annuler
+          </Button>
+          <Button variant="contained"
+            disabled={updateLineMutation.isPending || !editDesc.trim() || !editPrice}
+            onClick={() => updateLineMutation.mutate()}
+            sx={{ textTransform: 'none', fontWeight: 700 }}>
+            {updateLineMutation.isPending ? 'Enregistrement…' : 'Enregistrer'}
           </Button>
         </DialogActions>
       </Dialog>
