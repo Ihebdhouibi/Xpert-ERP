@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.parts.models import PartStatus
 from app.modules.parts.repository import PartCategoryRepository, PartRepository
+from app.modules.parts.stock_repository import StockRepository
 from app.modules.parts.schemas import (
     EquivalentLinkRequest,
     PartCategoryCreate,
@@ -155,6 +156,8 @@ async def _get_part_detail(
         raise HTTPException(status_code=404, detail="Part not found")
     equivalents = await PartRepository.get_equivalents(db, part.id)
     detail = PartDetail.model_validate(part)
+    level = await StockRepository.get_level(db, garage_id, part.id)
+    detail.stock_on_hand = level.on_hand if level else 0
     detail.equivalents = [PartSummary.model_validate(p) for p in equivalents]
     return detail
 
