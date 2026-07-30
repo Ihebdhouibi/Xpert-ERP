@@ -64,6 +64,7 @@ import { customerApi, type CustomerSummary } from '../../lib/customerApi'
 import { repairOrderApi, type RepairOrderSummary } from '../../lib/repairOrderApi'
 import type { InvoicePrefill } from '../../lib/ocrApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { apiClient } from '../../lib/apiClient'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -659,6 +660,8 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
   const [accountingOpen, setAccountingOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [markPaidOpen, setMarkPaidOpen] = useState(false)
+  const [markPaidMethod, setMarkPaidMethod] = useState<PaymentMethod>('cash')
 
   const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
     if (severity === 'success') toastSuccess(message)
@@ -742,11 +745,13 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
       'Facture approuvée',
     )
 
-  const handleMarkPaid = () =>
-    doAction(
-      () => supplierInvoiceApi.markPaid(si.id, { version: si.version }),
+  const handleMarkPaid = async () => {
+    await doAction(
+      () => supplierInvoiceApi.markPaid(si.id, { version: si.version, payment_method: markPaidMethod }),
       'Facture marquée payée',
     )
+    setMarkPaidOpen(false)
+  }
 
   const handleCancel = () =>
     doAction(
@@ -1068,7 +1073,7 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
             variant="contained"
             color="primary"
             startIcon={<PaymentsIcon />}
-            onClick={handleMarkPaid}
+            onClick={() => setMarkPaidOpen(true)}
             disabled={acting}
           >
             Marquer payé
@@ -1122,6 +1127,30 @@ function SIDetail({ si, onBack, onUpdated }: SIDetailProps) {
         si={si}
         onClose={() => setAccountingOpen(false)}
       />
+
+      <Dialog open={markPaidOpen} onClose={() => setMarkPaidOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Marquer la facture payée</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Mode de paiement</InputLabel>
+            <Select
+              label="Mode de paiement"
+              value={markPaidMethod}
+              onChange={(e) => setMarkPaidMethod(e.target.value as PaymentMethod)}
+            >
+              {(Object.entries(PAYMENT_METHOD_LABELS) as [PaymentMethod, string][]).map(([v, l]) => (
+                <MenuItem key={v} value={v}>{l}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMarkPaidOpen(false)}>Annuler</Button>
+          <Button variant="contained" onClick={handleMarkPaid} disabled={acting}>
+            Confirmer
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
   )

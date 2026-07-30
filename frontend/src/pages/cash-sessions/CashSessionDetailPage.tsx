@@ -58,6 +58,7 @@ const KIND_META: Record<string, { label: string; color: 'success' | 'error' | 'i
   payment: { label: 'Paiement', color: 'success' },
   advance: { label: 'Acompte', color: 'info' },
   refund: { label: 'Remboursement', color: 'error' },
+  supplier_payment: { label: 'Paiement fournisseur', color: 'error' },
 }
 
 // Threshold below which we show no discrepancy warning (10 cents)
@@ -97,6 +98,8 @@ export function CashSessionDetailPage() {
   const navigateTransaction = (t: SessionTransactionOut) => {
     if (t.kind === 'refund' && t.credit_note_id != null) {
       navigate(`/credit-notes/${t.credit_note_id}`)
+    } else if (t.kind === 'supplier_payment') {
+      navigate('/supplier-invoices')
     } else if (t.invoice_public_id) {
       navigate(`/invoices/${t.invoice_public_id}`)
     } else if (t.customer_public_id) {
@@ -396,7 +399,7 @@ export function CashSessionDetailPage() {
                       Référence doc.
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
-                      Client
+                      Client / Fournisseur
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
                       Moyen
@@ -415,7 +418,9 @@ export function CashSessionDetailPage() {
                     const docLabel = t.invoice_number
                       ?? (t.invoice_id != null ? `#${t.invoice_id}` : null)
                       ?? (t.credit_note_id != null ? `Avoir #${t.credit_note_id}` : null)
-                    const clickable = t.invoice_public_id != null || t.credit_note_id != null || t.customer_public_id != null
+                      ?? t.supplier_invoice_number
+                    const clickable = t.invoice_public_id != null || t.credit_note_id != null
+                      || t.customer_public_id != null || t.kind === 'supplier_payment'
                     return (
                       <TableRow
                         key={`${t.kind}-${t.id}`}
@@ -444,7 +449,7 @@ export function CashSessionDetailPage() {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {t.customer_name ?? '—'}
+                            {t.customer_name ?? t.supplier_name ?? '—'}
                           </Typography>
                         </TableCell>
                         <TableCell>

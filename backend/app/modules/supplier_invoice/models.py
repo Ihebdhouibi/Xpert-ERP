@@ -83,6 +83,12 @@ class SupplierInvoice(Base):
     has_discrepancy: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_exported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    payment_method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    paid_amount_minor: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cash_session_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("cash_session.id", ondelete="SET NULL"), nullable=True
+    )
     created_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
@@ -103,4 +109,5 @@ class SupplierInvoice(Base):
         Index("ix_si_supplier_id", "supplier_id"),
         Index("ix_si_po_id", "purchase_order_id"),
         Index("ix_si_repair_order_id", "repair_order_id"),
+        Index("ix_supplier_invoice_cash_session", "cash_session_id"),
     )

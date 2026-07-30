@@ -89,9 +89,81 @@ async def _sum_cash_payments(db: AsyncSession, session_id: int) -> int:
     return int(result.scalar_one())
 
 
+async def _sum_cash_advances(db: AsyncSession, session: CashSession) -> int:
+    """Sum of cash-method advance payments attributed to this session.
+
+    Advances carry no session FK on legacy rows, so they're attributed by the
+    same FK-or-time-window rule used in ``list_session_transactions``.
+    """
+    from app.modules.advance_payment.models import AdvancePayment
+
+    window_end = session.closed_at or datetime.now(tz=timezone.utc)
+    result = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(AdvancePayment.amount_minor), 0)).where(
+            AdvancePayment.garage_id == session.garage_id,
+            AdvancePayment.payment_method == PaymentMethod.cash,
+            or_(
+                AdvancePayment.cash_session_id == session.id,
+                and_(
+                    AdvancePayment.cash_session_id.is_(None),
+                    AdvancePayment.paid_at >= session.opened_at,
+                    AdvancePayment.paid_at <= window_end,
+                ),
+            ),
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def _sum_cash_refunds(db: AsyncSession, session: CashSession) -> int:
+    """Sum of cash-method refunds attributed to this session (money out)."""
+    from app.modules.credit_note.models import Refund
+
+    window_end = session.closed_at or datetime.now(tz=timezone.utc)
+    result = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(Refund.amount_minor), 0)).where(
+            Refund.garage_id == session.garage_id,
+            Refund.payment_method == PaymentMethod.cash,
+            or_(
+                Refund.cash_session_id == session.id,
+                and_(
+                    Refund.cash_session_id.is_(None),
+                    Refund.refunded_at >= session.opened_at,
+                    Refund.refunded_at <= window_end,
+                ),
+            ),
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def _sum_cash_supplier_payments(db: AsyncSession, session_id: int) -> int:
+    """Sum of cash-method supplier invoice payments recorded against this session (money out)."""
+    from app.modules.supplier_invoice.models import SupplierInvoice
+
+    result = await db.execute(
+        select(sqlfunc.coalesce(sqlfunc.sum(SupplierInvoice.paid_amount_minor), 0)).where(
+            SupplierInvoice.cash_session_id == session_id,
+            SupplierInvoice.payment_method == PaymentMethod.cash,
+        )
+    )
+    return int(result.scalar_one())
+
+
 async def _expected_cash(db: AsyncSession, session: CashSession) -> int:
-    """Expected physical cash = opening float + cash payments taken in."""
-    return session.opening_float + await _sum_cash_payments(db, session.id)
+    """Expected physical cash = opening float + cash in (payments, advances)
+    minus cash out (refunds, supplier invoice payments)."""
+    cash_in = await _sum_cash_payments(db, session.id)
+    cash_advances = await _sum_cash_advances(db, session)
+    cash_refunds = await _sum_cash_refunds(db, session)
+    cash_supplier_payments = await _sum_cash_supplier_payments(db, session.id)
+    return (
+        session.opening_float
+        + cash_in
+        + cash_advances
+        - cash_refunds
+        - cash_supplier_payments
+    )
 
 
 async def _to_out(db: AsyncSession, session: CashSession) -> CashSessionOut:
@@ -451,6 +523,41 @@ async def list_session_transactions(
             )
         )
 
+    # --- Supplier invoice payments (money out) — authoritative link via cash_session_id ---
+    from app.modules.supplier_invoice.models import SupplierInvoice
+    from app.modules.supplier.models import Supplier
+
+    supplier_rows = (await db.execute(
+        select(
+            SupplierInvoice.id,
+            SupplierInvoice.paid_at,
+            SupplierInvoice.paid_amount_minor,
+            SupplierInvoice.payment_method,
+            SupplierInvoice.number,
+            SupplierInvoice.created_by,
+            Supplier.name.label("supplier_name"),
+        )
+        .join(Supplier, Supplier.id == SupplierInvoice.supplier_id, isouter=True)
+        .where(SupplierInvoice.cash_session_id == session_id)
+    )).all()
+    for r in supplier_rows:
+        if r.created_by:
+            creator_ids.add(r.created_by)
+        transactions.append(
+            SessionTransactionOut(
+                kind="supplier_payment",
+                direction="out",
+                id=r.id,
+                occurred_at=r.paid_at,
+                amount_minor=r.paid_amount_minor,
+                payment_method=r.payment_method,
+                label="Paiement fournisseur",
+                supplier_name=r.supplier_name,
+                supplier_invoice_number=r.number,
+                created_by_name=None,
+            )
+        )
+
     # Resolve creator names in a single batch.
     if creator_ids:
         users = (await db.execute(
@@ -459,7 +566,7 @@ async def list_session_transactions(
         creator_names = {u.id: u.full_name for u in users}
         for t, src in zip(
             transactions,
-            [*pay_rows, *refund_rows, *advance_rows],
+            [*pay_rows, *refund_rows, *advance_rows, *supplier_rows],
         ):
             t.created_by_name = creator_names.get(src.created_by) if src.created_by else None
 

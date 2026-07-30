@@ -13,6 +13,7 @@ from app.modules.supplier_invoice.models import (
     SupplierInvoiceStatus,
 )
 from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
+from app.modules.payment.models import PaymentMethod
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +574,7 @@ async def mark_paid(
     garage_id: int,
     public_id: str,
     submitted_version: int,
+    payment_method: PaymentMethod,
 ) -> SupplierInvoice:
     logger.info("mark_paid_start", public_id=public_id, garage_id=garage_id)
     si = await SupplierInvoiceRepository.get_by_public_id(db, garage_id, public_id)
@@ -585,8 +587,21 @@ async def mark_paid(
             f"Cannot mark as paid a supplier invoice with status '{si.status}'"
         )
 
+    cash_session_id = None
+    if payment_method == PaymentMethod.cash:
+        from app.modules.cash_session import repository as session_repo
+        open_session = await session_repo.get_open_session(db, garage_id)
+        if open_session:
+            cash_session_id = open_session.id
+
     return await SupplierInvoiceRepository.update(
-        db, si, status=SupplierInvoiceStatus.paid
+        db,
+        si,
+        status=SupplierInvoiceStatus.paid,
+        payment_method=payment_method,
+        paid_amount_minor=si.total_ttc,
+        paid_at=datetime.now(tz=timezone.utc),
+        cash_session_id=cash_session_id,
     )
 
 

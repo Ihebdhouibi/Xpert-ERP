@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.modules.payment.models import PaymentMethod
 from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.supplier_invoice.models import SupplierInvoiceStatus
 from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
@@ -81,6 +82,11 @@ class SIVersionRequest(BaseModel):
     version: int
 
 
+class SIMarkPaidRequest(BaseModel):
+    version: int
+    payment_method: PaymentMethod
+
+
 class SIOverrideRequest(BaseModel):
     version: int
     reason: str = Field(..., min_length=1)
@@ -123,6 +129,9 @@ class SISummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     supplier_name: Optional[str] = None
+    payment_method: Optional[PaymentMethod] = None
+    paid_amount_minor: Optional[int] = None
+    paid_at: Optional[datetime] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -567,12 +576,12 @@ async def approve_supplier_invoice_endpoint(
 )
 async def mark_supplier_invoice_paid(
     public_id: str,
-    body: SIVersionRequest,
+    body: SIMarkPaidRequest,
     user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> SISummary:
     try:
-        si = await mark_paid(db, user.garage_id, public_id, body.version)
+        si = await mark_paid(db, user.garage_id, public_id, body.version, body.payment_method)
         await db.commit()
         return SISummary.model_validate(si)
     except SINotFoundError:

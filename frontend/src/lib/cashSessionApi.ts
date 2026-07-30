@@ -22,7 +22,7 @@ export interface SessionPaymentOut {
   created_by_name: string | null
 }
 
-export type SessionTransactionKind = 'payment' | 'refund' | 'advance'
+export type SessionTransactionKind = 'payment' | 'refund' | 'advance' | 'supplier_payment'
 export type SessionTransactionDirection = 'in' | 'out'
 
 export interface SessionTransactionOut {
@@ -40,6 +40,8 @@ export interface SessionTransactionOut {
   invoice_public_id: string | null
   credit_note_id: number | null
   customer_public_id: string | null
+  supplier_name: string | null
+  supplier_invoice_number: string | null
   created_by_name: string | null
 }
 

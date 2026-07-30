@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient'
+import type { PaymentMethod } from './paymentApi'
 
 export type SIStatus = 'draft' | 'posted' | 'approved' | 'paid' | 'cancelled'
 export type SIMatchStatus = 'ok' | 'qty_mismatch' | 'price_mismatch'
@@ -38,6 +39,9 @@ export interface SupplierInvoice {
   version: number
   created_at: string
   updated_at: string
+  payment_method: PaymentMethod | null
+  paid_amount_minor: number | null
+  paid_at: string | null
 }
 
 export interface SIListResponse {
@@ -78,6 +82,11 @@ export interface SIUpdatePayload {
 
 export interface SIVersionPayload {
   version: number
+}
+
+export interface SIMarkPaidPayload {
+  version: number
+  payment_method: PaymentMethod
 }
 
 export interface SIOverridePayload {
@@ -155,7 +164,7 @@ export const supplierInvoiceApi = {
     return apiClient.post(`/supplier-invoices/${id}/approve`, body).then((r) => r.data)
   },
 
-  markPaid(id: string, body: SIVersionPayload): Promise<SupplierInvoice> {
+  markPaid(id: string, body: SIMarkPaidPayload): Promise<SupplierInvoice> {
     return apiClient.post(`/supplier-invoices/${id}/mark-paid`, body).then((r) => r.data)
   },
 

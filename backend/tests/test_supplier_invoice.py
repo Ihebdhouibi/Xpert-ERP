@@ -672,7 +672,7 @@ class TestSIFullWorkflow:
         # Mark paid
         resp = await si_client.post(
             f"/api/v1/supplier-invoices/{si['id']}/mark-paid",
-            json={"version": si["version"]},
+            json={"version": si["version"], "payment_method": "cash"},
             headers=auth(token),
         )
         assert resp.status_code == 200
