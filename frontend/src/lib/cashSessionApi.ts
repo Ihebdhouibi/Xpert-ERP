@@ -22,6 +22,27 @@ export interface SessionPaymentOut {
   created_by_name: string | null
 }
 
+export type SessionTransactionKind = 'payment' | 'refund' | 'advance'
+export type SessionTransactionDirection = 'in' | 'out'
+
+export interface SessionTransactionOut {
+  kind: SessionTransactionKind
+  direction: SessionTransactionDirection
+  id: number
+  occurred_at: string
+  amount_minor: number
+  payment_method: PaymentMethod
+  reference: string | null
+  label: string
+  customer_name: string | null
+  invoice_id: number | null
+  invoice_number: string | null
+  invoice_public_id: string | null
+  credit_note_id: number | null
+  customer_public_id: string | null
+  created_by_name: string | null
+}
+
 export interface ZReportData {
   session_id: number
   garage_id: number
@@ -104,5 +125,9 @@ export const cashSessionApi = {
 
   listPayments(sessionId: number): Promise<SessionPaymentOut[]> {
     return apiClient.get(`/cash-sessions/${sessionId}/payments`).then(r => r.data)
+  },
+
+  listTransactions(sessionId: number): Promise<SessionTransactionOut[]> {
+    return apiClient.get(`/cash-sessions/${sessionId}/transactions`).then(r => r.data)
   },
 }

@@ -351,6 +351,83 @@ class TestCashSessionService:
         current = await cs_svc.get_current_open_session(db_session, 1)
         assert current is None
 
+    async def test_list_session_payments_enriched_no_crash(
+        self, db_session: AsyncSession
+    ) -> None:
+        # Regression: the query previously referenced non-existent columns
+        # (Customer.name / AppUser.display_name) and 500'd every call.
+        opened = await cs_svc.open_session(db_session, garage_id=1, user_id=1)
+        customer = await _make_customer(db_session)
+        invoice = await _make_issued_invoice(db_session, customer.id)
+        await pay_svc.record_payment(
+            db_session,
+            request=PaymentCreateRequest(invoice_id=invoice.id, amount_minor=4000, payment_method=PaymentMethod.cash),
+            garage_id=1, user_id=1,
+        )
+        rows = await cs_svc.list_session_payments(db_session, opened.id, 1)
+        assert len(rows) == 1
+        assert rows[0].customer_name == "Test Customer"
+        assert rows[0].invoice_number == "INV-TEST-001"
+
+    async def test_list_session_transactions_includes_payments_and_advances(
+        self, db_session: AsyncSession
+    ) -> None:
+        from app.modules.advance_payment.models import AdvancePayment
+
+        opened = await cs_svc.open_session(db_session, garage_id=1, user_id=1)
+        customer = await _make_customer(db_session)
+        invoice = await _make_issued_invoice(db_session, customer.id)
+
+        # Money in: an invoice payment (auto-linked to the session).
+        await pay_svc.record_payment(
+            db_session,
+            request=PaymentCreateRequest(invoice_id=invoice.id, amount_minor=4000, payment_method=PaymentMethod.cash),
+            garage_id=1, user_id=1,
+        )
+        # Money in: an advance deposit taken during the session window.
+        db_session.add(AdvancePayment(
+            garage_id=1,
+            customer_id=customer.id,
+            amount_minor=1500,
+            payment_method=PaymentMethod.cash,
+            paid_at=datetime.now(timezone.utc),
+            created_by=1,
+        ))
+        await db_session.flush()
+
+        txns = await cs_svc.list_session_transactions(db_session, opened.id, 1)
+        kinds = {t.kind for t in txns}
+        assert kinds == {"payment", "advance"}
+        assert all(t.direction == "in" for t in txns)
+        payment_txn = next(t for t in txns if t.kind == "payment")
+        assert payment_txn.customer_name == "Test Customer"
+        assert payment_txn.invoice_public_id is not None
+        advance_txn = next(t for t in txns if t.kind == "advance")
+        assert advance_txn.amount_minor == 1500
+        assert advance_txn.customer_public_id is not None
+
+    async def test_list_session_transactions_excludes_out_of_window(
+        self, db_session: AsyncSession
+    ) -> None:
+        from datetime import timedelta
+        from app.modules.advance_payment.models import AdvancePayment
+
+        opened = await cs_svc.open_session(db_session, garage_id=1, user_id=1)
+        customer = await _make_customer(db_session)
+        # An advance taken well before the session opened must not be attributed to it.
+        db_session.add(AdvancePayment(
+            garage_id=1,
+            customer_id=customer.id,
+            amount_minor=999,
+            payment_method=PaymentMethod.cash,
+            paid_at=datetime.now(timezone.utc) - timedelta(days=2),
+            created_by=1,
+        ))
+        await db_session.flush()
+
+        txns = await cs_svc.list_session_transactions(db_session, opened.id, 1)
+        assert txns == []
+
 
 # ---------------------------------------------------------------------------
 # Endpoint tests

@@ -17,6 +17,7 @@ from app.modules.cash_session.schemas import (
     CashSessionOut,
     PaymentMethodTally,
     SessionPaymentOut,
+    SessionTransactionOut,
     ZReportData,
 )
 from app.modules.payment.models import Payment, PaymentMethod
@@ -231,7 +232,6 @@ async def list_session_payments(
     db: AsyncSession, session_id: int, garage_id: int
 ) -> list[SessionPaymentOut]:
     """Return all payments for a session enriched with invoice number and customer name."""
-    from sqlalchemy.orm import aliased  # noqa: F401
     from app.modules.invoice.models import Invoice
     from app.modules.customer.models import Customer
     from app.modules.auth.models import AppUser
@@ -251,7 +251,7 @@ async def list_session_payments(
             Payment.invoice_id,
             Payment.created_by,
             Invoice.doc_number.label("invoice_number"),
-            Customer.name.label("customer_name"),
+            Customer.full_name.label("customer_name"),
         )
         .join(Invoice, Invoice.id == Payment.invoice_id, isouter=True)
         .join(Customer, Customer.id == Invoice.customer_id, isouter=True)
@@ -264,9 +264,9 @@ async def list_session_payments(
     creator_names: dict[int, str] = {}
     if creator_ids:
         users = (await db.execute(
-            select(AppUser.id, AppUser.display_name).where(AppUser.id.in_(creator_ids))
+            select(AppUser.id, AppUser.full_name).where(AppUser.id.in_(creator_ids))
         )).all()
-        creator_names = {u.id: u.display_name for u in users}
+        creator_names = {u.id: u.full_name for u in users}
 
     return [
         SessionPaymentOut(
@@ -283,6 +283,176 @@ async def list_session_payments(
         )
         for r in rows
     ]
+
+
+async def list_session_transactions(
+    db: AsyncSession, session_id: int, garage_id: int
+) -> list[SessionTransactionOut]:
+    """Return every cash movement tied to a session: payments and advances (in)
+    plus refunds (out).
+
+    Payments are linked to the session by ``cash_session_id``. Refunds and
+    advance payments carry no session FK, so they are attributed by time window
+    (between the session's open and close, or now for an open session). Since a
+    garage has at most one open session at a time, these windows never overlap.
+    """
+    from app.modules.invoice.models import Invoice
+    from app.modules.customer.models import Customer
+    from app.modules.auth.models import AppUser
+    from app.modules.credit_note.models import Refund
+    from app.modules.advance_payment.models import AdvancePayment
+
+    session = await repo.get_by_id(db, session_id, garage_id)
+    if not session:
+        raise SessionNotFoundError(session_id)
+
+    window_start = session.opened_at
+    window_end = session.closed_at or datetime.now(tz=timezone.utc)
+
+    transactions: list[SessionTransactionOut] = []
+    creator_ids: set[int] = set()
+
+    # --- Payments (money in) — authoritative link via cash_session_id ---------
+    pay_rows = (await db.execute(
+        select(
+            Payment.id,
+            Payment.paid_at,
+            Payment.amount_minor,
+            Payment.payment_method,
+            Payment.reference,
+            Payment.invoice_id,
+            Payment.created_by,
+            Invoice.doc_number.label("invoice_number"),
+            Invoice.public_id.label("invoice_public_id"),
+            Customer.full_name.label("customer_name"),
+            Customer.public_id.label("customer_public_id"),
+        )
+        .join(Invoice, Invoice.id == Payment.invoice_id, isouter=True)
+        .join(Customer, Customer.id == Invoice.customer_id, isouter=True)
+        .where(Payment.cash_session_id == session_id)
+    )).all()
+    for r in pay_rows:
+        if r.created_by:
+            creator_ids.add(r.created_by)
+        transactions.append(
+            SessionTransactionOut(
+                kind="payment",
+                direction="in",
+                id=r.id,
+                occurred_at=r.paid_at,
+                amount_minor=r.amount_minor,
+                payment_method=r.payment_method,
+                reference=r.reference,
+                label="Paiement facture",
+                customer_name=r.customer_name,
+                invoice_id=r.invoice_id,
+                invoice_number=r.invoice_number,
+                invoice_public_id=str(r.invoice_public_id) if r.invoice_public_id else None,
+                customer_public_id=str(r.customer_public_id) if r.customer_public_id else None,
+                created_by_name=None,
+            )
+        )
+
+    # --- Refunds (money out) — attributed by time window ----------------------
+    refund_rows = (await db.execute(
+        select(
+            Refund.id,
+            Refund.refunded_at,
+            Refund.amount_minor,
+            Refund.payment_method,
+            Refund.reference,
+            Refund.credit_note_id,
+            Refund.created_by,
+            Payment.invoice_id.label("invoice_id"),
+            Invoice.doc_number.label("invoice_number"),
+            Invoice.public_id.label("invoice_public_id"),
+            Customer.full_name.label("customer_name"),
+            Customer.public_id.label("customer_public_id"),
+        )
+        .join(Payment, Payment.id == Refund.payment_id, isouter=True)
+        .join(Invoice, Invoice.id == Payment.invoice_id, isouter=True)
+        .join(Customer, Customer.id == Invoice.customer_id, isouter=True)
+        .where(
+            Refund.garage_id == garage_id,
+            Refund.refunded_at >= window_start,
+            Refund.refunded_at <= window_end,
+        )
+    )).all()
+    for r in refund_rows:
+        if r.created_by:
+            creator_ids.add(r.created_by)
+        transactions.append(
+            SessionTransactionOut(
+                kind="refund",
+                direction="out",
+                id=r.id,
+                occurred_at=r.refunded_at,
+                amount_minor=r.amount_minor,
+                payment_method=r.payment_method,
+                reference=r.reference,
+                label="Remboursement",
+                customer_name=r.customer_name,
+                invoice_id=r.invoice_id,
+                invoice_number=r.invoice_number,
+                invoice_public_id=str(r.invoice_public_id) if r.invoice_public_id else None,
+                credit_note_id=r.credit_note_id,
+                customer_public_id=str(r.customer_public_id) if r.customer_public_id else None,
+                created_by_name=None,
+            )
+        )
+
+    # --- Advance payments (money in) — attributed by time window --------------
+    advance_rows = (await db.execute(
+        select(
+            AdvancePayment.id,
+            AdvancePayment.paid_at,
+            AdvancePayment.amount_minor,
+            AdvancePayment.payment_method,
+            AdvancePayment.reference,
+            AdvancePayment.created_by,
+            Customer.full_name.label("customer_name"),
+            Customer.public_id.label("customer_public_id"),
+        )
+        .join(Customer, Customer.id == AdvancePayment.customer_id, isouter=True)
+        .where(
+            AdvancePayment.garage_id == garage_id,
+            AdvancePayment.paid_at >= window_start,
+            AdvancePayment.paid_at <= window_end,
+        )
+    )).all()
+    for r in advance_rows:
+        if r.created_by:
+            creator_ids.add(r.created_by)
+        transactions.append(
+            SessionTransactionOut(
+                kind="advance",
+                direction="in",
+                id=r.id,
+                occurred_at=r.paid_at,
+                amount_minor=r.amount_minor,
+                payment_method=r.payment_method,
+                reference=r.reference,
+                label="Acompte client",
+                customer_name=r.customer_name,
+                customer_public_id=str(r.customer_public_id) if r.customer_public_id else None,
+                created_by_name=None,
+            )
+        )
+
+    # Resolve creator names in a single batch.
+    if creator_ids:
+        users = (await db.execute(
+            select(AppUser.id, AppUser.full_name).where(AppUser.id.in_(creator_ids))
+        )).all()
+        creator_names = {u.id: u.full_name for u in users}
+        for t, src in zip(
+            transactions,
+            [*pay_rows, *refund_rows, *advance_rows],
+        ):
+            t.created_by_name = creator_names.get(src.created_by) if src.created_by else None
+
+    transactions.sort(key=lambda t: t.occurred_at, reverse=True)
+    return transactions
 
 
 async def get_z_report_data(

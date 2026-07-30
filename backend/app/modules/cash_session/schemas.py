@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -39,6 +39,30 @@ class SessionPaymentOut(BaseModel):
     invoice_number: Optional[str]
     customer_name: Optional[str]
     created_by_name: Optional[str]
+
+
+class SessionTransactionOut(BaseModel):
+    """A unified cash-session movement (payment, refund or advance).
+
+    `direction` is "in" for money received (payments, advances) and "out" for
+    money returned (refunds); the UI uses it for sign and colour. Link ids let
+    the UI redirect to the originating document.
+    """
+    kind: Literal["payment", "refund", "advance"]
+    direction: Literal["in", "out"]
+    id: int
+    occurred_at: datetime
+    amount_minor: int
+    payment_method: PaymentMethod
+    reference: Optional[str] = None
+    label: str
+    customer_name: Optional[str] = None
+    invoice_id: Optional[int] = None
+    invoice_number: Optional[str] = None
+    invoice_public_id: Optional[str] = None
+    credit_note_id: Optional[int] = None
+    customer_public_id: Optional[str] = None
+    created_by_name: Optional[str] = None
 
 
 class ZReportData(BaseModel):

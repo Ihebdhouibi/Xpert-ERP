@@ -32,6 +32,7 @@ import RadioButtonCheckedRoundedIcon from '@mui/icons-material/RadioButtonChecke
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded'
 import { cashSessionApi } from '../../lib/cashSessionApi'
+import type { SessionTransactionOut } from '../../lib/cashSessionApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
@@ -49,6 +50,14 @@ const METHOD_COLOR: Record<string, 'default' | 'success' | 'primary' | 'warning'
   card: 'primary',
   wire: 'warning',
   check: 'default',
+}
+
+// Movement type → chip label + colour (green = money in, red = money out,
+// blue = advance/deposit which is a distinct process).
+const KIND_META: Record<string, { label: string; color: 'success' | 'error' | 'info' }> = {
+  payment: { label: 'Paiement', color: 'success' },
+  advance: { label: 'Acompte', color: 'info' },
+  refund: { label: 'Remboursement', color: 'error' },
 }
 
 // Threshold below which we show no discrepancy warning (10 cents)
@@ -78,12 +87,22 @@ export function CashSessionDetailPage() {
     refetchInterval: session?.status === 'open' ? 15_000 : false,
   })
 
-  const { data: payments = [] } = useQuery({
-    queryKey: ['cash-session-payments', sessionId],
-    queryFn: () => cashSessionApi.listPayments(sessionId),
+  const { data: transactions = [] } = useQuery({
+    queryKey: ['cash-session-transactions', sessionId],
+    queryFn: () => cashSessionApi.listTransactions(sessionId),
     enabled: !!sessionId,
     refetchInterval: session?.status === 'open' ? 15_000 : false,
   })
+
+  const navigateTransaction = (t: SessionTransactionOut) => {
+    if (t.kind === 'refund' && t.credit_note_id != null) {
+      navigate(`/credit-notes/${t.credit_note_id}`)
+    } else if (t.invoice_public_id) {
+      navigate(`/invoices/${t.invoice_public_id}`)
+    } else if (t.customer_public_id) {
+      navigate(`/customers/${t.customer_public_id}`)
+    }
+  }
 
   const countedMinor = countedCash ? Math.round(parseFloat(countedCash) * 100) : null
   const expectedMinor = session?.expected_cash_so_far ?? session?.expected_total_cash ?? null
@@ -252,10 +271,10 @@ export function CashSessionDetailPage() {
                   Transactions
                 </Typography>
                 <Typography variant="h6" fontWeight={700}>
-                  {payments.length}
+                  {transactions.length}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Paiements enregistrés
+                  Mouvements enregistrés
                 </Typography>
               </CardContent>
             </Card>
@@ -356,11 +375,11 @@ export function CashSessionDetailPage() {
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
         <CardContent sx={{ pb: '12px !important' }}>
           <Typography variant="subtitle2" fontWeight={700} mb={2}>
-            Historique des transactions ({payments.length})
+            Historique des transactions ({transactions.length})
           </Typography>
-          {payments.length === 0 ? (
+          {transactions.length === 0 ? (
             <Typography variant="body2" color="text.disabled">
-              Aucun paiement enregistré dans cette session.
+              Aucun mouvement enregistré dans cette session.
             </Typography>
           ) : (
             <TableContainer>
@@ -371,7 +390,10 @@ export function CashSessionDetailPage() {
                       Date / Heure
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
-                      N° Facture
+                      Type
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
+                      Référence doc.
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
                       Client
@@ -383,61 +405,73 @@ export function CashSessionDetailPage() {
                       Montant
                     </TableCell>
                     <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
-                      Référence
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
                       Encaissé par
                     </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {payments.map((p) => (
-                    <TableRow
-                      key={p.id}
-                      hover
-                      sx={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/invoices/${p.invoice_id}`)}
-                    >
-                      <TableCell>
-                        <Typography variant="body2">
-                          {fmtDate(p.paid_at)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" fontFamily="monospace" fontWeight={600} color="primary.main">
-                          {p.invoice_number ?? `#${p.invoice_id}`}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {p.customer_name ?? '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={PAYMENT_METHOD_LABELS[p.payment_method as PaymentMethod] ?? p.payment_method}
-                          size="small"
-                          color={METHOD_COLOR[p.payment_method] ?? 'default'}
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" fontWeight={600}>
-                          {fmt(p.amount_minor)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {p.reference ?? '—'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {p.created_by_name ?? '—'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {transactions.map((t) => {
+                    const meta = KIND_META[t.kind] ?? { label: t.label, color: 'default' as const }
+                    const docLabel = t.invoice_number
+                      ?? (t.invoice_id != null ? `#${t.invoice_id}` : null)
+                      ?? (t.credit_note_id != null ? `Avoir #${t.credit_note_id}` : null)
+                    const clickable = t.invoice_public_id != null || t.credit_note_id != null || t.customer_public_id != null
+                    return (
+                      <TableRow
+                        key={`${t.kind}-${t.id}`}
+                        hover
+                        sx={{ cursor: clickable ? 'pointer' : 'default' }}
+                        onClick={clickable ? () => navigateTransaction(t) : undefined}
+                      >
+                        <TableCell>
+                          <Typography variant="body2">
+                            {fmtDate(t.occurred_at)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={meta.label}
+                            size="small"
+                            color={meta.color}
+                            variant="filled"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontFamily="monospace" fontWeight={600} color={docLabel ? 'primary.main' : 'text.disabled'}>
+                            {docLabel ?? '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {t.customer_name ?? '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={PAYMENT_METHOD_LABELS[t.payment_method as PaymentMethod] ?? t.payment_method}
+                            size="small"
+                            color={METHOD_COLOR[t.payment_method] ?? 'default'}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography
+                            variant="body2"
+                            fontWeight={700}
+                            color={t.direction === 'out' ? 'error.main' : 'success.main'}
+                          >
+                            {t.direction === 'out' ? '-' : '+'}{fmt(t.amount_minor)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {t.created_by_name ?? '—'}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

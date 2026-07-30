@@ -11,6 +11,7 @@ from app.modules.cash_session.schemas import (
     CloseSessionRequest,
     OpenSessionRequest,
     SessionPaymentOut,
+    SessionTransactionOut,
     ZReportData,
 )
 from app.modules.cash_session import service
@@ -148,6 +149,24 @@ async def list_session_payments(
     """List all payments recorded in a session, enriched with invoice and customer info."""
     try:
         return await service.list_session_payments(db, session_id, current_user.garage_id)
+    except service.SessionNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+
+
+@router.get(
+    "/cash-sessions/{session_id}/transactions",
+    response_model=list[SessionTransactionOut],
+    dependencies=[require_permission("cash_session.read")],
+)
+async def list_session_transactions(
+    session_id: int,
+    current_user: AuthUser,
+    db=Depends(get_db),
+):
+    """List every cash movement of a session: invoice payments and advances (in)
+    plus refunds (out), each enriched with document and customer context."""
+    try:
+        return await service.list_session_transactions(db, session_id, current_user.garage_id)
     except service.SessionNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
 
