@@ -222,8 +222,20 @@ export function CashSessionDetailPage() {
               <Typography variant="h6" fontWeight={700}>
                 {fmt(session.opening_float)}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Montant à l'ouverture
+              </Typography>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                Solde actuel
+              </Typography>
+              <Typography variant="h6" fontWeight={700} color="primary.main">
+                {isOpen
+                  ? fmt(session.expected_cash_so_far ?? 0)
+                  : fmt(session.expected_total_cash ?? 0)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Espèces disponibles en temps réel
               </Typography>
             </CardContent>
           </Card>
