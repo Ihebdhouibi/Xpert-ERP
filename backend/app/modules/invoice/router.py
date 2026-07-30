@@ -88,9 +88,12 @@ async def create_invoice(
     request: InvoiceCreateRequest,
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceOut:
-    return await service.create_invoice(
-        db, request=request, garage_id=user.garage_id, user_id=user.user_id
-    )
+    try:
+        return await service.create_invoice(
+            db, request=request, garage_id=user.garage_id, user_id=user.user_id
+        )
+    except InvoiceStateError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +155,12 @@ async def create_invoice_from_repair_order(
         notes=ro.notes,
         lines=lines,
     )
-    return await service.create_invoice(
-        db, request=request, garage_id=user.garage_id, user_id=user.user_id
-    )
+    try:
+        return await service.create_invoice(
+            db, request=request, garage_id=user.garage_id, user_id=user.user_id
+        )
+    except InvoiceStateError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

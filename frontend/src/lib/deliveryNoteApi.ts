@@ -38,6 +38,7 @@ export interface DeliveryNoteOut {
   vehicle_id: number | null
   invoice_id: number | null
   invoice_public_id: string | null
+  repair_order_id: number | null
   doc_number: string | null
   status: DeliveryNoteStatus
   issued_at: string | null
@@ -185,6 +186,13 @@ export const deliveryNoteApi = {
   fromQuotation: async (quotationId: number): Promise<DeliveryNoteOut> => {
     const { data } = await apiClient.post<DeliveryNoteOut>(
       `/delivery-notes/from-quotation/${quotationId}`,
+    )
+    return data
+  },
+
+  fromRepairOrder: async (roPublicId: string): Promise<DeliveryNoteOut> => {
+    const { data } = await apiClient.post<DeliveryNoteOut>(
+      `/delivery-notes/from-repair-order/${roPublicId}`,
     )
     return data
   },

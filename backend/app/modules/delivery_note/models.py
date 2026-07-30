@@ -65,6 +65,12 @@ class DeliveryNote(Base):
     invoice_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("invoice.id", ondelete="SET NULL"), nullable=True
     )
+    # If this BL was generated from a finished repair order, record the link.
+    # Only one active (non-cancelled) delivery note per repair order — enforced
+    # by a partial unique index (see migration 0067).
+    repair_order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("repair_order.id", ondelete="SET NULL"), nullable=True
+    )
 
     doc_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
@@ -113,6 +119,7 @@ class DeliveryNote(Base):
         Index("ix_dn_customer_id", "customer_id"),
         Index("ix_dn_status", "status"),
         Index("ix_dn_garage_customer", "garage_id", "customer_id"),
+        Index("ix_dn_repair_order_id", "repair_order_id"),
     )
 
 

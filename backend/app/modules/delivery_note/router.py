@@ -373,3 +373,30 @@ async def create_from_quotation(
         )
     except service.DeliveryNoteNotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Create from repair order
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/from-repair-order/{ro_public_id}",
+    response_model=DeliveryNoteOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[require_permission("invoice.create")],
+    summary="Create a draft delivery note pre-linked to a repair order",
+)
+async def create_from_repair_order(
+    ro_public_id: str,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryNoteOut:
+    uid = await _resolve_user_id(db, user.public_id)
+    try:
+        return await service.from_repair_order(
+            db, ro_public_id, user.garage_id, user_id=uid or 0
+        )
+    except DeliveryNoteNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Repair order not found.")
+    except DeliveryNoteStateError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))

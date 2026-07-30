@@ -190,6 +190,14 @@ DIAGNOSIS_QUESTIONS: list[tuple[str, str]] = [
 ]
 
 
+class RepairOrderLinkedDocument(BaseModel):
+    """Summary of an active invoice/delivery note generated from a repair order."""
+    public_id: str
+    doc_number: Optional[str] = None
+    status: str
+    created_at: datetime
+
+
 class RepairOrderDetail(BaseModel):
     """Repair order full detail with line items and status history."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -218,6 +226,9 @@ class RepairOrderDetail(BaseModel):
     labor_lines: list[ROLaborLineSummary] = []
     part_lines: list[ROPartLineSummary] = []
     status_events: list[ROStatusEventSummary] = []
+
+    linked_invoice: Optional[RepairOrderLinkedDocument] = None
+    linked_delivery_note: Optional[RepairOrderLinkedDocument] = None
 
     @model_validator(mode="before")
     @classmethod

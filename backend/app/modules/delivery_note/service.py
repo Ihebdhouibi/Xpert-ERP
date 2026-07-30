@@ -183,6 +183,87 @@ async def from_quotation(
     return DeliveryNoteOut.model_validate(fresh)
 
 
+async def from_repair_order(
+    db: AsyncSession,
+    ro_public_id: str,
+    garage_id: int,
+    *,
+    user_id: int,
+) -> DeliveryNoteOut:
+    """Create a draft delivery note from a finished repair order, copying all lines."""
+    from app.core.constants import TVA_PCT
+    from app.modules.repair_order.repository import RepairOrderRepository
+
+    ro = await RepairOrderRepository.get_by_public_id(
+        db, garage_id, ro_public_id, load_relationships=True
+    )
+    if not ro:
+        raise DeliveryNoteNotFoundError(f"Repair order {ro_public_id} not found")
+
+    existing = await repo.get_active_by_repair_order_id(
+        db, garage_id=garage_id, repair_order_id=ro.id
+    )
+    if existing:
+        raise DeliveryNoteStateError(
+            "Un bon de livraison actif existe déjà pour cet ordre de réparation."
+        )
+
+    dn = DeliveryNote(
+        public_id=str(uuid.uuid4()),
+        garage_id=garage_id,
+        customer_id=ro.customer_id,
+        vehicle_id=ro.vehicle_id,
+        repair_order_id=ro.id,
+        currency="EUR",
+        notes=ro.notes,
+        status=DeliveryNoteStatus.draft,
+        version=1,
+        created_by=user_id,
+        updated_by=user_id,
+    )
+
+    for ll in ro.labor_lines:
+        lt = _line_total(ll.rate_minor, Decimal("1"))
+        dn.lines.append(DeliveryNoteLine(
+            delivery_note_id=0,
+            kind=DeliveryNoteLineKind.service,
+            part_id=None,
+            description=ll.labor_type,
+            quantity=Decimal("1.000"),
+            unit_price_minor=ll.rate_minor,
+            vat_rate=TVA_PCT,
+            line_total_minor=lt,
+        ))
+
+    for pl in ro.part_lines:
+        # DN lines have no discount field — fold the RO line's remise into the unit price.
+        remise = Decimal(str(pl.remise_pct))
+        unit_price_minor = int(
+            (Decimal(pl.unit_cost_minor) * (Decimal("1") - remise / Decimal("100")))
+            .to_integral_value(rounding=ROUND_HALF_UP)
+        )
+        qty = Decimal(str(pl.quantity))
+        lt = _line_total(unit_price_minor, qty)
+        dn.lines.append(DeliveryNoteLine(
+            delivery_note_id=0,
+            kind=DeliveryNoteLineKind.part,
+            part_id=pl.part_id,
+            description=pl.part_name,
+            quantity=qty,
+            unit_price_minor=unit_price_minor,
+            vat_rate=TVA_PCT,
+            line_total_minor=lt,
+        ))
+
+    _recalculate_totals(dn)
+    await repo.create(db, dn)
+    await db.commit()
+
+    fresh = await repo.get_by_id(db, dn.id, garage_id)
+    logger.info("delivery_note_from_repair_order", dn_id=dn.id, repair_order_id=ro.id, garage_id=garage_id)
+    return DeliveryNoteOut.model_validate(fresh)
+
+
 async def get_delivery_note(
     db: AsyncSession, public_id: str, garage_id: int
 ) -> DeliveryNoteOut:

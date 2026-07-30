@@ -51,6 +51,13 @@ export interface RepairOrderSummary {
   created_at: string
 }
 
+export interface RepairOrderLinkedDocument {
+  public_id: string
+  doc_number: string | null
+  status: string
+  created_at: string
+}
+
 export interface RepairOrderDetail extends RepairOrderSummary {
   notes: string | null
   updated_at: string
@@ -63,6 +70,8 @@ export interface RepairOrderDetail extends RepairOrderSummary {
   labor_lines: ROLaborLine[]
   part_lines: ROPartLine[]
   status_events: ROStatusEvent[]
+  linked_invoice: RepairOrderLinkedDocument | null
+  linked_delivery_note: RepairOrderLinkedDocument | null
 }
 
 export interface MechanicSummary {

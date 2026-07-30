@@ -50,6 +50,20 @@ async def get_by_public_id(
     return result.scalar_one_or_none()
 
 
+async def get_active_by_repair_order_id(
+    db: AsyncSession, garage_id: int, repair_order_id: int
+) -> Optional[Invoice]:
+    """Return the active (non-cancelled) invoice linked to a repair order, if any."""
+    stmt = select(Invoice).where(
+        Invoice.garage_id == garage_id,
+        Invoice.repair_order_id == repair_order_id,
+        Invoice.status != InvoiceStatus.cancelled,
+        Invoice.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 async def list_invoices(
     db: AsyncSession,
     garage_id: int,

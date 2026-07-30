@@ -43,6 +43,8 @@ import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateR
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
+import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
 import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
@@ -63,6 +65,7 @@ import { customerApi } from '../../lib/customerApi'
 import { vehiclesApi } from '../../lib/vehiclesApi'
 import { quotationApi } from '../../lib/quotationApi'
 import { invoiceApi } from '../../lib/invoiceApi'
+import { deliveryNoteApi } from '../../lib/deliveryNoteApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
 import { advancePaymentApi } from '../../lib/advancePaymentApi'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '../../lib/paymentApi'
@@ -1006,6 +1009,15 @@ export function RepairOrderDetailPage() {
     onError: () => toastError('Impossible de créer la facture.'),
   })
 
+  const createDeliveryNoteMutation = useMutation({
+    mutationFn: () => deliveryNoteApi.fromRepairOrder(publicId),
+    onSuccess: (deliveryNote) => {
+      success('Bon de livraison créé avec succès.')
+      navigate(`/delivery-notes/${deliveryNote.public_id}`)
+    },
+    onError: () => toastError('Impossible de créer le bon de livraison.'),
+  })
+
   const addLaborMutation = useMutation({
     mutationFn: () => repairOrderApi.addLaborLine(publicId, {
       labor_type: laborType,
@@ -1792,7 +1804,7 @@ export function RepairOrderDetailPage() {
               </PermissionGate>
             )}
 
-            {/* Create Invoice (finished or delivered) */}
+            {/* Create Invoice / Delivery Note (finished or delivered) */}
             {(ro.status === 'finished' || ro.status === 'delivered') && (
               <PermissionGate permission="invoice.create">
                 <Card>
@@ -1800,17 +1812,68 @@ export function RepairOrderDetailPage() {
                     <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                       Actions
                     </Typography>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      fullWidth
-                      startIcon={<ReceiptRoundedIcon />}
-                      disabled={createInvoiceMutation.isPending}
-                      onClick={() => createInvoiceMutation.mutate()}
-                      sx={{ textTransform: 'none', fontWeight: 700 }}
-                    >
-                      {createInvoiceMutation.isPending ? 'Création…' : 'Créer une facture'}
-                    </Button>
+                    <Stack spacing={1.5}>
+                      {ro.linked_invoice ? (
+                        <Alert
+                          severity="info"
+                          icon={<ReceiptRoundedIcon fontSize="inherit" />}
+                          action={
+                            <IconButton
+                              size="small"
+                              component={RouterLink}
+                              to={`/invoices/${ro.linked_invoice.public_id}`}
+                            >
+                              <OpenInNewRoundedIcon fontSize="small" />
+                            </IconButton>
+                          }
+                        >
+                          Facture {ro.linked_invoice.doc_number ?? '(brouillon)'} créée le{' '}
+                          {new Date(ro.linked_invoice.created_at).toLocaleDateString('fr-FR')}.
+                        </Alert>
+                      ) : (
+                        <Button
+                          variant="contained"
+                          color="success"
+                          fullWidth
+                          startIcon={<ReceiptRoundedIcon />}
+                          disabled={createInvoiceMutation.isPending}
+                          onClick={() => createInvoiceMutation.mutate()}
+                          sx={{ textTransform: 'none', fontWeight: 700 }}
+                        >
+                          {createInvoiceMutation.isPending ? 'Création…' : 'Créer une facture'}
+                        </Button>
+                      )}
+
+                      {ro.linked_delivery_note ? (
+                        <Alert
+                          severity="info"
+                          icon={<LocalShippingRoundedIcon fontSize="inherit" />}
+                          action={
+                            <IconButton
+                              size="small"
+                              component={RouterLink}
+                              to={`/delivery-notes/${ro.linked_delivery_note.public_id}`}
+                            >
+                              <OpenInNewRoundedIcon fontSize="small" />
+                            </IconButton>
+                          }
+                        >
+                          BL {ro.linked_delivery_note.doc_number ?? '(brouillon)'} créé le{' '}
+                          {new Date(ro.linked_delivery_note.created_at).toLocaleDateString('fr-FR')}.
+                        </Alert>
+                      ) : (
+                        <Button
+                          variant="contained"
+                          fullWidth
+                          startIcon={<LocalShippingRoundedIcon />}
+                          disabled={createDeliveryNoteMutation.isPending}
+                          onClick={() => createDeliveryNoteMutation.mutate()}
+                          sx={{ textTransform: 'none', fontWeight: 700 }}
+                        >
+                          {createDeliveryNoteMutation.isPending ? 'Création…' : 'Créer un bon de livraison'}
+                        </Button>
+                      )}
+                    </Stack>
                   </CardContent>
                 </Card>
               </PermissionGate>

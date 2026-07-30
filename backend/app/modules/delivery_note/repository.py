@@ -47,6 +47,21 @@ async def get_by_public_id(
     return result.scalar_one_or_none()
 
 
+async def get_active_by_repair_order_id(
+    db: AsyncSession, garage_id: int, repair_order_id: int
+) -> Optional[DeliveryNote]:
+    """Return the active (non-cancelled) delivery note linked to a repair order, if any."""
+    result = await db.execute(
+        select(DeliveryNote).where(
+            DeliveryNote.garage_id == garage_id,
+            DeliveryNote.repair_order_id == repair_order_id,
+            DeliveryNote.status != DeliveryNoteStatus.cancelled,
+            DeliveryNote.deleted_at.is_(None),
+        )
+    )
+    return result.scalars().first()
+
+
 async def list_delivery_notes(
     db: AsyncSession,
     garage_id: int,

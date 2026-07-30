@@ -57,7 +57,11 @@ class Invoice(Base):
     vehicle_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("vehicle.id", ondelete="RESTRICT"), nullable=True
     )
-    repair_order_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # Only one active (non-cancelled) invoice per repair order — enforced by a
+    # partial unique index (see migration 0067).
+    repair_order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("repair_order.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Source quotation — set when converted from a quotation
     quotation_id: Mapped[Optional[int]] = mapped_column(
@@ -131,6 +135,7 @@ class Invoice(Base):
         Index("ix_invoice_customer_id", "customer_id"),
         Index("ix_invoice_status", "status"),
         Index("ix_invoice_quotation_id", "quotation_id"),
+        Index("ix_invoice_repair_order_id", "repair_order_id"),
         CheckConstraint(
             "status IN ('draft','issued','partial','paid','cancelled')",
             name="ck_invoice_status",

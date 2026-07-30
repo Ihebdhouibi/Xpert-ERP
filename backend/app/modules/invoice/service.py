@@ -165,6 +165,14 @@ async def create_invoice(
     user_id: int,
 ) -> InvoiceOut:
     logger.info("create_invoice_start", garage_id=garage_id, user_id=user_id)
+    if request.repair_order_id is not None:
+        existing = await repo.get_active_by_repair_order_id(
+            db, garage_id=garage_id, repair_order_id=request.repair_order_id
+        )
+        if existing:
+            raise InvoiceStateError(
+                "Une facture active existe déjà pour cet ordre de réparation."
+            )
     invoice = Invoice(
         public_id=str(uuid.uuid4()),
         garage_id=garage_id,

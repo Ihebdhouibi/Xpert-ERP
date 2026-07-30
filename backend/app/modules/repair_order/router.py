@@ -17,6 +17,7 @@ from app.modules.repair_order.schemas import (
     MechanicSummary,
     RepairOrderCreateRequest,
     RepairOrderDetail,
+    RepairOrderLinkedDocument,
     RepairOrderSummary,
     RepairOrderUpdateRequest,
     ROLaborLineCreateRequest,
@@ -80,6 +81,56 @@ async def _resolve_user_id(db: AsyncSession, public_id: str) -> Optional[int]:
     return row[0] if row else None
 
 
+async def _linked_invoice(db: AsyncSession, garage_id: int, ro_id: int) -> Optional[RepairOrderLinkedDocument]:
+    from app.modules.invoice.models import Invoice, InvoiceStatus
+
+    row = (
+        await db.execute(
+            select(Invoice.public_id, Invoice.doc_number, Invoice.status, Invoice.created_at)
+            .where(
+                Invoice.garage_id == garage_id,
+                Invoice.repair_order_id == ro_id,
+                Invoice.status != InvoiceStatus.cancelled,
+                Invoice.deleted_at.is_(None),
+            )
+            .order_by(Invoice.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    if not row:
+        return None
+    return RepairOrderLinkedDocument(
+        public_id=str(row.public_id), doc_number=row.doc_number,
+        status=row.status.value if hasattr(row.status, "value") else row.status,
+        created_at=row.created_at,
+    )
+
+
+async def _linked_delivery_note(db: AsyncSession, garage_id: int, ro_id: int) -> Optional[RepairOrderLinkedDocument]:
+    from app.modules.delivery_note.models import DeliveryNote, DeliveryNoteStatus
+
+    row = (
+        await db.execute(
+            select(DeliveryNote.public_id, DeliveryNote.doc_number, DeliveryNote.status, DeliveryNote.created_at)
+            .where(
+                DeliveryNote.garage_id == garage_id,
+                DeliveryNote.repair_order_id == ro_id,
+                DeliveryNote.status != DeliveryNoteStatus.cancelled,
+                DeliveryNote.deleted_at.is_(None),
+            )
+            .order_by(DeliveryNote.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    if not row:
+        return None
+    return RepairOrderLinkedDocument(
+        public_id=str(row.public_id), doc_number=row.doc_number,
+        status=row.status.value if hasattr(row.status, "value") else row.status,
+        created_at=row.created_at,
+    )
+
+
 async def _get_detail(db: AsyncSession, garage_id: int, public_id: str, include_deleted: bool = False) -> RepairOrderDetail:
     """Fetch a repair order with all relationships eagerly loaded and return as detail schema."""
     ro = await RepairOrderRepository.get_by_public_id(
@@ -90,6 +141,8 @@ async def _get_detail(db: AsyncSession, garage_id: int, public_id: str, include_
     detail = RepairOrderDetail.model_validate(ro)
     detail.customer_name = await _customer_name(db, garage_id, ro.customer_id)
     detail.assigned_user_name = await _user_name(db, ro.assigned_user_id)
+    detail.linked_invoice = await _linked_invoice(db, garage_id, ro.id)
+    detail.linked_delivery_note = await _linked_delivery_note(db, garage_id, ro.id)
     return detail
 
 
