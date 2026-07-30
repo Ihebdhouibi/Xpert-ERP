@@ -122,7 +122,7 @@ function LogoBadge({ size = 32 }: { size?: number }) {
       }}
     >
       <img
-        src="/assets/logo-blanc.png"
+        src="/assets/logo.png"
         alt="Motors Utilitaires"
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
       />
@@ -193,7 +193,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
               }}
             >
               <img
-                src="/assets/logo-blanc.png"
+                src="/assets/logo.png"
                 alt="Motors Utilitaires"
                 style={{ display: 'block', width: '75%', height: 'auto', maxHeight: 48 }}
               />
@@ -235,7 +235,7 @@ function SidebarContent({ collapsed, onToggle, onNavClick }: SidebarContentProps
           py: 1.5,
           '&::-webkit-scrollbar': { width: 4 },
           '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(255,255,255,0.15)',
+            background: 'rgba(15,23,42,0.15)',
             borderRadius: 2,
           },
         }}
