@@ -195,12 +195,15 @@ interface BlLine {
   designation: string
   quantite: string
   pu_brut: string
+  vat_rate: string
   pu_net: string
   montant: string
 }
 
 type BlLineField = keyof BlLine
 
+// Bon de livraison: gross vs net unit price are genuinely distinct figures on
+// the source document (before/after discount) — no VAT column.
 const BL_LINE_COLUMNS: { field: BlLineField; label: string }[] = [
   { field: 'code', label: 'Code' },
   { field: 'designation', label: 'Désignation' },
@@ -210,11 +213,24 @@ const BL_LINE_COLUMNS: { field: BlLineField; label: string }[] = [
   { field: 'montant', label: 'Montant' },
 ]
 
+// Supplier / service invoices: the "brut" column was never a real distinct
+// figure for invoices (always duplicated PU Net) — show the per-line VAT
+// rate instead, which the invoice actually needs.
+const SI_LINE_COLUMNS: { field: BlLineField; label: string }[] = [
+  { field: 'code', label: 'Code' },
+  { field: 'designation', label: 'Désignation' },
+  { field: 'quantite', label: 'Qté' },
+  { field: 'vat_rate', label: 'TVA (%)' },
+  { field: 'pu_net', label: 'PU Net' },
+  { field: 'montant', label: 'Montant' },
+]
+
 const emptyBlLine = (): BlLine => ({
   code: '',
   designation: '',
   quantite: '',
   pu_brut: '',
+  vat_rate: '20',
   pu_net: '',
   montant: '',
 })
@@ -238,6 +254,7 @@ function seedBlLinesFromRaw(rawLignes: string | undefined): BlLine[] {
         designation: toStr(obj.description),
         quantite: toStr(obj.quantity),
         pu_brut: '',
+        vat_rate: toStr(obj.vat_rate) || '20',
         pu_net: toStr(obj.unit_price),
         montant: toStr(obj.line_total),
       }
@@ -351,6 +368,7 @@ function reconstructBlRows(
       designation: at(desCol, i),
       quantite: des ? nearestQte(des.cy) : '',
       pu_brut: at(brut, i),
+      vat_rate: '',
       pu_net: at(net, i),
       montant: at(mont, i),
     })
@@ -722,6 +740,7 @@ export function OcrReviewPage() {
               designation: cur.designation || r.designation,
               quantite: cur.quantite || r.quantite,
               pu_brut: cur.pu_brut || r.pu_brut,
+              vat_rate: cur.vat_rate || r.vat_rate,
               pu_net: cur.pu_net || r.pu_net,
               montant: cur.montant || r.montant,
             }
@@ -797,8 +816,9 @@ export function OcrReviewPage() {
             const liveLines: BlLine[] = si.lines.map((l) => ({
               designation: l.description || '',
               quantite: String(l.quantity ?? ''),
-              pu_brut: l.unit_price_ht != null ? String((l.unit_price_ht / 100).toFixed(2)) : '',
-              pu_net: '',
+              pu_brut: '',
+              vat_rate: l.vat_rate != null ? String(l.vat_rate) : '20',
+              pu_net: l.unit_price_ht != null ? String((l.unit_price_ht / 100).toFixed(2)) : '',
               montant: l.line_total_ht != null ? String((l.line_total_ht / 100).toFixed(2)) : '',
               code: '',
             }))
@@ -995,8 +1015,9 @@ export function OcrReviewPage() {
           blLines.map((l) => ({
             description: l.designation || null,
             quantity: l.quantite || null,
-            unit_price: l.pu_net || l.pu_brut || null,
+            unit_price: l.pu_net || null,
             line_total: l.montant || null,
+            vat_rate: l.vat_rate || null,
           }))
         )
       }
@@ -1082,6 +1103,7 @@ export function OcrReviewPage() {
   const isServiceInvoice = category === 'service_invoice'
   // Show the per-line capture grid for BL, supplier invoice and service invoice.
   const showLineGrid = isDeliveryNote || isSupplierInvoice || isServiceInvoice
+  const activeLineColumns = isSupplierInvoice || isServiceInvoice ? SI_LINE_COLUMNS : BL_LINE_COLUMNS
   const categoryLabel = CATEGORY_LABELS[category] ?? category
   const schemaFields = CATEGORY_SCHEMA[category] ?? []
   // 'lignes' is handled by the dedicated line-item grid for these categories;
@@ -1408,7 +1430,7 @@ export function OcrReviewPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      {BL_LINE_COLUMNS.map((col) => (
+                      {activeLineColumns.map((col) => (
                         <TableCell key={col.field}>{col.label}</TableCell>
                       ))}
                       <TableCell sx={{ width: 88 }} />
@@ -1417,7 +1439,7 @@ export function OcrReviewPage() {
                   <TableBody>
                     {blLines.map((row, i) => (
                       <TableRow key={i}>
-                        {BL_LINE_COLUMNS.map((col) => {
+                        {activeLineColumns.map((col) => {
                           const cropKey = `${BL_CROP_PREFIX}${i}:${col.field}`
                           return (
                             <TableCell key={col.field} sx={{ p: 0.5 }}>

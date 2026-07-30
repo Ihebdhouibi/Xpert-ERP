@@ -75,6 +75,7 @@ class IngestLine(BaseModel):
     quantity: Optional[str] = None
     unit_price: Optional[str] = None
     line_total: Optional[str] = None
+    vat_rate: Optional[str] = None
 
 
 class IngestionResult(BaseModel):

@@ -361,14 +361,19 @@ def _si_lines_from_prefill(prefill: "InvoicePrefill") -> list[dict]:
             uph = max(0, int(round(float(raw) * 100))) if raw else 0
         except (TypeError, ValueError):
             uph = 0
+        try:
+            raw_vat = (il.vat_rate or "").replace(",", ".").replace("%", "").strip()
+            vat_rate = float(raw_vat) if raw_vat else 20.0
+        except (TypeError, ValueError):
+            vat_rate = 20.0
         lth = qty * uph
-        lttc = round(lth * 1.2)
+        lttc = round(lth * (1 + vat_rate / 100))
         lines.append({
             "po_line_id": None,
             "description": il.description or "",
             "quantity": qty,
             "unit_price_ht": uph,
-            "vat_rate": 20.0,
+            "vat_rate": vat_rate,
             "line_total_ht": lth,
             "line_total_ttc": lttc,
             "match_status": "ok",
@@ -377,6 +382,63 @@ def _si_lines_from_prefill(prefill: "InvoicePrefill") -> list[dict]:
             "po_unit_price_ht": uph,
         })
     return lines
+
+
+def _fallback_totals(
+    prefill: "InvoicePrefill", si_lines: list[dict]
+) -> tuple[int, int]:
+    """Total HT/TTC from OCR-detected fields, falling back to the sum of the
+    line items when a total wasn't detected on the document."""
+    total_ht = prefill.total_ht_cents
+    if total_ht is None:
+        total_ht = sum(l["line_total_ht"] for l in si_lines)
+    total_ttc = prefill.total_ttc_cents
+    if total_ttc is None:
+        total_ttc = sum(l["line_total_ttc"] for l in si_lines)
+    return total_ht, total_ttc
+
+
+async def _resolve_supplier_by_name(
+    db: AsyncSession, garage_id: int, party: str | None
+) -> int | None:
+    """Find a supplier matching an OCR-detected name.
+
+    Tries an exact (case-insensitive) match first, then falls back to a
+    substring match in either direction — OCR text is often just a brand/logo
+    fragment ("chaussea") rather than the full legal name ("CHAUSSEA SAS").
+    """
+    if not party:
+        return None
+    from app.modules.supplier.models import Supplier as SupplierModel
+    from sqlalchemy import select as _sa_select, func as _sa_func, or_ as _sa_or, literal as _sa_literal
+
+    party_norm = party.strip()
+    if not party_norm:
+        return None
+
+    exact_res = await db.execute(
+        _sa_select(SupplierModel).where(
+            SupplierModel.garage_id == garage_id,
+            _sa_func.lower(SupplierModel.name) == party_norm.lower(),
+            SupplierModel.deleted_at.is_(None),
+        )
+    )
+    sup = exact_res.scalar_one_or_none()
+    if sup:
+        return sup.id
+
+    fuzzy_res = await db.execute(
+        _sa_select(SupplierModel).where(
+            SupplierModel.garage_id == garage_id,
+            SupplierModel.deleted_at.is_(None),
+            _sa_or(
+                SupplierModel.name.ilike(f"%{party_norm}%"),
+                _sa_literal(party_norm.lower()).contains(_sa_func.lower(SupplierModel.name)),
+            ),
+        ).limit(1)
+    )
+    sup = fuzzy_res.scalar_one_or_none()
+    return sup.id if sup else None
 
 
 async def ingest_extraction(
@@ -421,20 +483,7 @@ async def ingest_extraction(
         si_lines = _si_lines_from_prefill(prefill)
 
         # --- Resolve supplier by name from confirmed fields ---
-        supplier_id: int | None = None
-        if prefill.party:
-            from app.modules.supplier.models import Supplier as SupplierModel
-            from sqlalchemy import select as _sa_sel, func as _sa_func
-            sup_res = await db.execute(
-                _sa_sel(SupplierModel).where(
-                    SupplierModel.garage_id == document.garage_id,
-                    _sa_func.lower(SupplierModel.name) == prefill.party.lower().strip(),
-                    SupplierModel.deleted_at.is_(None),
-                )
-            )
-            sup = sup_res.scalar_one_or_none()
-            if sup:
-                supplier_id = sup.id
+        supplier_id = await _resolve_supplier_by_name(db, document.garage_id, prefill.party)
 
         # --- If document is filed under a PO, link invoice + auto-receive ---
         po_db_id: int | None = None
@@ -527,12 +576,13 @@ async def ingest_extraction(
                             garage_id=document.garage_id,
                         )
 
+        total_ht, total_ttc = _fallback_totals(prefill, si_lines)
         si = await create_supplier_invoice_from_ocr(
             db,
             garage_id=document.garage_id,
             number=prefill.number or "(sans numéro)",
-            total_ht=prefill.total_ht_cents or 0,
-            total_ttc=prefill.total_ttc_cents or 0,
+            total_ht=total_ht,
+            total_ttc=total_ttc,
             supplier_id=supplier_id,
             purchase_order_id=po_db_id,
             lines=si_lines if si_lines else None,
@@ -574,31 +624,19 @@ async def ingest_extraction(
         si_lines = _si_lines_from_prefill(prefill)
 
         # Resolve supplier by name — look up or create if document is linked to a supplier.
-        supplier_id = None
-        if prefill.party:
-            from app.modules.supplier.models import Supplier as _SupModel
-            from sqlalchemy import select as _sel3, func as _func3
-            sup_res = await db.execute(
-                _sel3(_SupModel).where(
-                    _SupModel.garage_id == document.garage_id,
-                    _func3.lower(_SupModel.name) == prefill.party.lower().strip(),
-                    _SupModel.deleted_at.is_(None),
-                )
-            )
-            sup = sup_res.scalar_one_or_none()
-            if sup:
-                supplier_id = sup.id
+        supplier_id = await _resolve_supplier_by_name(db, document.garage_id, prefill.party)
 
         # If document is filed under a supplier, inherit that link.
         if not supplier_id and document.owner_entity_type == OwnerEntityType.supplier.value and document.owner_entity_id:
             supplier_id = document.owner_entity_id
 
+        total_ht, total_ttc = _fallback_totals(prefill, si_lines)
         si = await _create_si(
             db,
             garage_id=document.garage_id,
             number=prefill.number or "(sans numéro)",
-            total_ht=prefill.total_ht_cents or 0,
-            total_ttc=prefill.total_ttc_cents or 0,
+            total_ht=total_ht,
+            total_ttc=total_ttc,
             supplier_id=supplier_id,
             purchase_order_id=None,       # service invoices are never PO-linked
             invoice_type="services",
