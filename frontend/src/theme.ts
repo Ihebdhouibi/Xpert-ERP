@@ -3,7 +3,7 @@ import { createTheme } from '@mui/material/styles'
 export const sidebarTokens = {
   width: 260,
   collapsedWidth: 64,
-  bg: '#14161B',
+  bg: '#1E293B',
   hover: 'rgba(255,255,255,0.06)',
   activeBg: 'rgba(245,158,11,0.16)',
   activeBorder: '#F59E0B',
