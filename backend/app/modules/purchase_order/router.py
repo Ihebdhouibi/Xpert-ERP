@@ -97,6 +97,7 @@ class POVersionRequest(BaseModel):
 class POReceiveLineInput(BaseModel):
     line_id: int
     quantity_received: int = Field(..., gt=0)
+    unit_cost_minor: Optional[int] = Field(None, ge=0)
 
 
 class POReceiveRequest(BaseModel):

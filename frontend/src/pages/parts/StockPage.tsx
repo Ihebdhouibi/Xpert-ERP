@@ -10,7 +10,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  InputAdornment,
   MenuItem,
   Paper,
   Select,
@@ -37,10 +36,12 @@ import {
   type StockMovementType,
 } from '../../lib/stockApi'
 import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { purchaseOrderApi } from '../../lib/purchaseOrderApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { TableLoadingSkeleton } from '../../components/ui/LoadingScreen'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
+import { PoReceiveFields, type PoReceiveState } from '../../components/parts/PoReceiveFields'
 
 function money(minor: number) {
   return formatMinor(minor, 'EUR')
@@ -53,9 +54,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
   const qc = useQueryClient()
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | ''>('')
   const [selectedPart, setSelectedPart] = useState<PartSummary | null>(null)
-  const [quantity, setQuantity] = useState('')
-  const [unitCostEur, setUnitCostEur] = useState('')
-  const [reason, setReason] = useState('')
+  const [receiveState, setReceiveState] = useState<PoReceiveState | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const categoriesQ = useQuery({
@@ -70,19 +69,20 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
   })
 
   const handleClose = () => {
-    setSelectedCategoryId(''); setSelectedPart(null); setQuantity(''); setUnitCostEur(''); setReason(''); setError(null)
+    setSelectedCategoryId(''); setSelectedPart(null); setReceiveState(null); setError(null)
     onClose()
   }
 
   const mut = useMutation({
     mutationFn: () => {
-      if (!selectedPart) throw new Error('Aucune pièce sélectionnée')
-      const costEur = parseFloat(unitCostEur)
-      return stockApi.createMovement(selectedPart.id, {
-        type: 'in',
-        quantity: parseInt(quantity),
-        unit_cost_minor: unitCostEur ? Math.round(costEur * 100) : undefined,
-        reason: reason || 'Approvisionnement initial',
+      if (!receiveState) throw new Error('Sélection incomplète')
+      return purchaseOrderApi.receive(receiveState.po.id, {
+        version: receiveState.po.version,
+        lines: [{
+          line_id: receiveState.line.id,
+          quantity_received: receiveState.quantity,
+          unit_cost_minor: receiveState.unitCostMinor,
+        }],
       })
     },
     onSuccess: () => {
@@ -91,12 +91,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
     },
     onError: (err: unknown) => {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-      if (typeof detail === 'object' && detail !== null && 'code' in detail) {
-        const d = detail as { code: string; available: number; requested: number }
-        setError(`Stock insuffisant : disponible=${d.available}, demandé=${d.requested}`)
-      } else {
-        setError(typeof detail === 'string' ? detail : "Erreur lors de l'approvisionnement.")
-      }
+      setError(typeof detail === 'string' ? detail : "Erreur lors de l'approvisionnement.")
     },
   })
 
@@ -117,7 +112,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             onChange={(e) => {
               setSelectedCategoryId(e.target.value === '' ? '' : Number(e.target.value))
               setSelectedPart(null)
-              setUnitCostEur('')
+              setReceiveState(null)
             }}
             fullWidth
           >
@@ -135,7 +130,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             onChange={(e) => {
               const found = parts.find((p) => p.id === e.target.value) ?? null
               setSelectedPart(found)
-              if (found) setUnitCostEur((found.selling_price_minor / 100).toFixed(2))
+              setReceiveState(null)
             }}
             fullWidth
             disabled={selectedCategoryId === '' || partsQ.isLoading}
@@ -154,41 +149,16 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             ))}
           </TextField>
 
-          <TextField
-            label="Quantité à ajouter"
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            inputProps={{ min: 1, step: 1 }}
-            fullWidth
-            disabled={!selectedPart}
-          />
-          <TextField
-            label="Coût unitaire (optionnel)"
-            type="number"
-            value={unitCostEur}
-            onChange={(e) => setUnitCostEur(e.target.value)}
-            InputProps={{ endAdornment: <InputAdornment position="end">€</InputAdornment> }}
-            inputProps={{ min: 0, step: 0.01 }}
-            fullWidth
-            disabled={!selectedPart}
-            helperText="Pré-rempli avec le prix de vente"
-          />
-          <TextField
-            label="Raison"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Approvisionnement initial"
-            fullWidth
-            disabled={!selectedPart}
-          />
+          {selectedPart && (
+            <PoReceiveFields key={selectedPart.id} part={selectedPart} onReady={setReceiveState} />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>Annuler</Button>
         <Button
           variant="contained"
-          disabled={!selectedPart || !quantity || parseInt(quantity) < 1 || mut.isPending}
+          disabled={!receiveState || mut.isPending}
           onClick={() => mut.mutate()}
         >
           Approvisionner
@@ -213,21 +183,35 @@ function MovementDialog({
   const qc = useQueryClient()
   const [type, setType] = useState<StockMovementType>('in')
   const [quantity, setQuantity] = useState('')
-  const [unitCost, setUnitCost] = useState('')
-  const [reason, setReason] = useState('')
+  const [receiveState, setReceiveState] = useState<PoReceiveState | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const handleClose = () => {
+    setQuantity(''); setReceiveState(null); setError(null)
+    onClose()
+  }
+
   const mut = useMutation({
-    mutationFn: () =>
-      stockApi.createMovement(part.id, {
+    mutationFn: (): Promise<unknown> => {
+      if (type === 'in') {
+        if (!receiveState) throw new Error('Sélection incomplète')
+        return purchaseOrderApi.receive(receiveState.po.id, {
+          version: receiveState.po.version,
+          lines: [{
+            line_id: receiveState.line.id,
+            quantity_received: receiveState.quantity,
+            unit_cost_minor: receiveState.unitCostMinor,
+          }],
+        })
+      }
+      return stockApi.createMovement(part.id, {
         type,
         quantity: parseInt(quantity),
-        unit_cost_minor: unitCost ? Math.round(parseFloat(unitCost) * 100) : undefined,
-        reason: reason || undefined,
-      }),
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['stock'] })
-      onClose()
+      handleClose()
     },
     onError: (err: unknown) => {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
@@ -235,55 +219,48 @@ function MovementDialog({
         const d = detail as { code: string; available: number; requested: number }
         setError(`Stock insuffisant : disponible=${d.available}, demandé=${d.requested}`)
       } else {
-        setError('Erreur lors du mouvement.')
+        setError(typeof detail === 'string' ? detail : 'Erreur lors du mouvement.')
       }
     },
   })
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>Enregistrer un mouvement — {part.sku_code}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <Select value={type} onChange={(e) => setType(e.target.value as StockMovementType)} fullWidth>
+          <Select
+            value={type}
+            onChange={(e) => {
+              setType(e.target.value as StockMovementType)
+              setQuantity(''); setReceiveState(null)
+            }}
+            fullWidth
+          >
             {(['in', 'out', 'adjustment'] as StockMovementType[]).map((t) => (
               <MenuItem key={t} value={t}>{MOVEMENT_LABELS[t]}</MenuItem>
             ))}
           </Select>
-          <TextField
-            label="Quantité"
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            fullWidth
-            helperText={type === 'adjustment' ? 'Positif = ajout, négatif = retrait' : undefined}
-          />
-          {type === 'in' && (
+          {type === 'in' ? (
+            <PoReceiveFields part={part} onReady={setReceiveState} />
+          ) : (
             <TextField
-              label="Coût unitaire (€)"
+              label="Quantité"
               type="number"
-              value={unitCost}
-              onChange={(e) => setUnitCost(e.target.value)}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
               fullWidth
-              inputProps={{ min: 0, step: '0.01' }}
+              helperText={type === 'adjustment' ? 'Positif = ajout, négatif = retrait' : undefined}
             />
           )}
-          <TextField
-            label="Raison"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            fullWidth
-            multiline
-            rows={2}
-          />
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Annuler</Button>
+        <Button onClick={handleClose}>Annuler</Button>
         <Button
           variant="contained"
-          disabled={!quantity || mut.isPending}
+          disabled={(type === 'in' ? !receiveState : !quantity) || mut.isPending}
           onClick={() => mut.mutate()}
         >
           Enregistrer

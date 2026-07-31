@@ -323,6 +323,14 @@ async def receive_po(
         # Update received quantity (no over-reception guard; partial is OK)
         line.quantity_received += qty
 
+        # An explicit unit_cost_minor overrides the PO's ordered price for
+        # this receipt's stock valuation only (e.g. actual invoice price
+        # differs from what was ordered) — the PO line's own unit_price_ht
+        # is left untouched so 3-way match still compares against what was
+        # actually ordered.
+        override_cost = item.get("unit_cost_minor")
+        unit_cost = override_cost if override_cost is not None else line.unit_price_ht
+
         # Create stock-in movement atomically (flush happens inside record_movement)
         await record_movement(
             db,
@@ -330,7 +338,7 @@ async def receive_po(
             part_id=line.part_id,
             movement_type=StockMovementType.in_,
             quantity=qty,
-            unit_cost_minor=line.unit_price_ht,
+            unit_cost_minor=unit_cost,
             ref_type="purchase_order",
             ref_id=str(po.public_id),
             reason=f"Reception for PO {po.doc_number}",

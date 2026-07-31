@@ -176,7 +176,7 @@ class TestStockMovements:
         part = await _create_part(stock_client, token, sku="IN-001")
         resp = await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 100, "unit_cost_minor": 1000},
+            json={"type": "in", "quantity": 100, "unit_cost_minor": 1000, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         assert resp.status_code == 201
@@ -191,7 +191,7 @@ class TestStockMovements:
         part = await _create_part(stock_client, token, sku="OUT-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 50, "unit_cost_minor": 1000},
+            json={"type": "in", "quantity": 50, "unit_cost_minor": 1000, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         resp = await stock_client.post(
@@ -210,7 +210,7 @@ class TestStockMovements:
         part = await _create_part(stock_client, token, sku="ADJ-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         await stock_client.post(
@@ -228,7 +228,7 @@ class TestStockMovements:
         part = await _create_part(stock_client, token, sku="ADJ-002")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         await stock_client.post(
@@ -247,7 +247,7 @@ class TestStockMovements:
         for i in range(3):
             await stock_client.post(
                 f"/api/v1/parts/{part['id']}/stock/movements",
-                json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+                json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
                 headers=_auth(token),
             )
         resp = await stock_client.get(
@@ -262,13 +262,13 @@ class TestStockMovements:
         # Buy 10 @ 1000
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 1000},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 1000, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         # Buy 10 @ 2000 → avg = (10*1000 + 10*2000) / 20 = 1500
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 2000},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 2000, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         level = (await stock_client.get(
@@ -293,7 +293,7 @@ class TestNegativeStock:
         part = await _create_part(stock_client, token, sku="NEG-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         resp = await stock_client.post(
@@ -348,7 +348,7 @@ class TestReservationFlow:
         part = await _create_part(stock_client, token, sku="RES-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         resp = await stock_client.post(
@@ -368,7 +368,7 @@ class TestReservationFlow:
         part = await _create_part(stock_client, token, sku="REL-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         await stock_client.post(
@@ -393,7 +393,7 @@ class TestReservationFlow:
         part = await _create_part(stock_client, token, sku="RES-OUT-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         # Reserve 8 → available = 2
@@ -444,7 +444,7 @@ class TestReservationFlow:
         # Add stock
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         # Create an RO
@@ -501,7 +501,7 @@ class TestLowStockAlerts:
         part = await _create_part(stock_client, token, sku="ALRT-API-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         await stock_client.post(
@@ -520,7 +520,7 @@ class TestLowStockAlerts:
         part = await _create_part(stock_client, token, sku="ACK-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 5, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 5, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         await stock_client.post(
@@ -580,7 +580,7 @@ class TestAlertStatusLifecycle:
         part = await _create_part(client, token, sku=sku)
         await client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 5, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 5, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         # Drive stock to threshold (5 → 5 == threshold)
@@ -678,7 +678,7 @@ class TestStockValuation:
         part = await _create_part(stock_client, token, sku="VAL-001")
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 10, "unit_cost_minor": 2000},
+            json={"type": "in", "quantity": 10, "unit_cost_minor": 2000, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         resp = await stock_client.get("/api/v1/stock/valuation", headers=_auth(token))
@@ -702,7 +702,7 @@ class TestROStockIntegration:
         # We need the internal integer id — create a movement first so we can read it
         await client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         ro_id = await _create_ro(client, token)
@@ -717,7 +717,7 @@ class TestROStockIntegration:
         # Add stock via HTTP so stock_level row is created
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         ro_id = await _create_ro(stock_client, token)
@@ -749,7 +749,7 @@ class TestROStockIntegration:
         part = await _create_part(stock_client, token, sku=sku)
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 20, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 20, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         ro_id = await _create_ro(stock_client, token)
@@ -796,7 +796,7 @@ class TestROStockIntegration:
         part = await _create_part(stock_client, token, sku=sku)
         await stock_client.post(
             f"/api/v1/parts/{part['id']}/stock/movements",
-            json={"type": "in", "quantity": 5, "unit_cost_minor": 500},
+            json={"type": "in", "quantity": 5, "unit_cost_minor": 500, "ref_type": "purchase_order", "ref_id": "test-seed"},
             headers=_auth(token),
         )
         ro_id = await _create_ro(stock_client, token)

@@ -235,6 +235,17 @@ async def create_stock_movement(
     settings = get_settings()
     part_id = await _resolve_part_id(db, user.garage_id, public_id)
     try:
+        # Stock increases must be traceable to a purchase order — this
+        # ad-hoc endpoint is not the reception flow (see
+        # purchase_order.service.receive_po, which handles PO-linked
+        # receipts atomically). "out"/"adjustment" movements are unaffected.
+        if body.type == StockMovementType.in_ and (
+            body.ref_type != "purchase_order" or not body.ref_id
+        ):
+            raise InvalidMovementError(
+                "Un mouvement d'entrée doit être lié à un bon de commande "
+                "(réceptionnez-le depuis le bon de commande)."
+            )
         mv = await record_movement(
             db,
             garage_id=user.garage_id,

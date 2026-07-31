@@ -37,6 +37,8 @@ interface PurchaseOrderCreateDialogProps {
   open: boolean
   onClose: () => void
   onCreated: (po: PurchaseOrder) => void
+  /** Pre-select this part as the first line when the dialog opens. */
+  prefillPart?: { id: string; name: string; sku_code: string }
 }
 
 // Sentinel for an "Autre" (uncatalogued) line — selected from the part dropdown.
@@ -50,7 +52,7 @@ interface LineForm {
   unit_price_ht: number
 }
 
-export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: PurchaseOrderCreateDialogProps) {
+export function PurchaseOrderCreateDialog({ open, onClose, onCreated, prefillPart }: PurchaseOrderCreateDialogProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [parts, setParts] = useState<{ id: string; name: string; sku_code: string }[]>([])
   const [supplierPublicId, setSupplierPublicId] = useState('')
@@ -67,7 +69,12 @@ export function PurchaseOrderCreateDialog({ open, onClose, onCreated }: Purchase
     if (!open) return
     supplierApi.list({ status: 'active', page_size: 100 }).then((r) => setSuppliers(r.items))
     partsApi.list({ page_size: 200 }).then((r) => setParts(r.items)).catch(() => setError('Impossible de charger les pièces'))
-  }, [open])
+    setLines([
+      prefillPart
+        ? { part_public_id: prefillPart.id, part_name: prefillPart.name, label: '', quantity_ordered: 1, unit_price_ht: 0 }
+        : { part_public_id: '', part_name: '', label: '', quantity_ordered: 1, unit_price_ht: 0 },
+    ])
+  }, [open, prefillPart])
 
   const handleAddLine = () =>
     setLines((l) => [...l, { part_public_id: '', part_name: '', label: '', quantity_ordered: 1, unit_price_ht: 0 }])

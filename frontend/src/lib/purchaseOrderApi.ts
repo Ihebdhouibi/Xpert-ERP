@@ -70,6 +70,7 @@ export interface POUpdatePayload {
 export interface POReceiveLineInput {
   line_id: number
   quantity_received: number
+  unit_cost_minor?: number
 }
 
 export interface POReceivePayload {
