@@ -228,12 +228,16 @@ async def list_invoices(
     customer_id: Optional[int] = None,
     status: Optional[InvoiceStatus] = None,
     quotation_id: Optional[int] = None,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 25,
 ) -> InvoiceListResponse:
     items, total = await repo.list_invoices(
         db, garage_id,
         customer_id=customer_id, status=status, quotation_id=quotation_id,
+        search=search, sort_by=sort_by, sort_dir=sort_dir,
         page=page, page_size=page_size,
     )
 

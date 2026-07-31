@@ -102,6 +102,9 @@ export const invoiceApi = {
     customer_id?: number
     status?: InvoiceStatus
     quotation_id?: number
+    search?: string
+    sort_by?: string
+    sort_dir?: 'asc' | 'desc'
     page?: number
     page_size?: number
   }): Promise<InvoiceListResponse> {

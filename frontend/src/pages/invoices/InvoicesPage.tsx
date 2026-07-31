@@ -33,9 +33,11 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { SearchField } from '../../components/ui/SearchField'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { CustomerAutocomplete } from '../../components/ui/CustomerAutocomplete'
 import { useToast } from '../../contexts/ToastContext'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 function PaymentProgress({ total, paid, currency }: { total: number; paid: number; currency: string }) {
   const pct = total > 0 ? Math.min((paid / total) * 100, 100) : 0
@@ -70,9 +72,10 @@ const buildColumns = (
   onDelete: (inv: InvoiceOut) => void,
 ): Column<InvoiceOut>[] => [
   {
-    id: 'number',
+    id: 'doc_number',
     label: 'Numéro',
     width: 150,
+    sortable: true,
     render: row => (
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <Box
@@ -106,8 +109,9 @@ const buildColumns = (
     ),
   },
   {
-    id: 'customer',
+    id: 'customer_name',
     label: 'Client',
+    sortable: true,
     render: row => (
       <Typography variant="body2" fontWeight={500}>
         {row.customer_name ?? `Client #${row.customer_id}`}
@@ -152,10 +156,11 @@ const buildColumns = (
       ) : null,
   },
   {
-    id: 'total',
+    id: 'total_minor',
     label: 'Total TTC',
     align: 'right',
     width: 130,
+    sortable: true,
     render: row => (
       <Typography variant="body2" fontWeight={700}>
         {formatMinor(row.total_minor, row.currency)}
@@ -163,10 +168,11 @@ const buildColumns = (
     ),
   },
   {
-    id: 'outstanding',
+    id: 'outstanding_minor',
     label: 'Restant dû',
     align: 'right',
     width: 130,
+    sortable: true,
     render: row => (
       <Typography
         variant="body2"
@@ -193,9 +199,10 @@ const buildColumns = (
       ),
   },
   {
-    id: 'due',
+    id: 'due_at',
     label: 'Échéance',
     width: 120,
+    sortable: true,
     render: row => {
       if (!row.due_at) return <Typography variant="caption" color="text.disabled">—</Typography>
       const isFinal = row.status === 'paid' || row.status === 'cancelled'
@@ -220,6 +227,7 @@ const buildColumns = (
     id: 'status',
     label: 'Statut',
     width: 130,
+    sortable: true,
     render: row => <StatusChip status={row.status} label={INVOICE_STATUS_LABELS[row.status]} />,
   },
 ]
@@ -372,15 +380,32 @@ export function InvoicesPage() {
   const [page, setPage] = useState(0)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search, 300)
+  const [sortBy, setSortBy] = useState<string | undefined>(undefined)
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [assignTarget, setAssignTarget] = useState<InvoiceOut | null>(null)
   const [assignCustomerId, setAssignCustomerId] = useState<number | ''>('')
   const [createOpen, setCreateOpen] = useState(false)
 
+  const handleSort = (columnId: string) => {
+    if (columnId === sortBy) {
+      setSortOrder(o => (o === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortBy(columnId)
+      setSortOrder('asc')
+    }
+    setPage(0)
+  }
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['invoices', { page, pageSize, statusFilter }],
+    queryKey: ['invoices', { page, pageSize, statusFilter, search: debouncedSearch, sortBy, sortOrder }],
     queryFn: () =>
       invoiceApi.list({
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: debouncedSearch || undefined,
+        sort_by: sortBy,
+        sort_dir: sortOrder,
         page: page + 1,
         page_size: pageSize,
       }),
@@ -466,6 +491,13 @@ export function InvoicesPage() {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+        <Box sx={{ minWidth: 260 }}>
+          <SearchField
+            value={search}
+            onChange={v => { setSearch(v); setPage(0) }}
+            placeholder="Rechercher par client ou numéro…"
+          />
+        </Box>
       </Stack>
 
       <DataTable
@@ -480,6 +512,9 @@ export function InvoicesPage() {
         page={page}
         pageSize={pageSize}
         onPageChange={setPage}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
         emptyTitle="Aucune facture"
         emptyDescription="Créez une facture directement ou convertissez un devis approuvé."
         emptyAction={

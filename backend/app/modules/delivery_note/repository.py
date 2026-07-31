@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.query_utils import apply_sort
+from app.modules.customer.models import Customer
 from app.modules.delivery_note.models import DeliveryNote, DeliveryNoteLine, DeliveryNoteStatus
 
 
@@ -69,6 +71,9 @@ async def list_delivery_notes(
     customer_id: Optional[int] = None,
     status: Optional[DeliveryNoteStatus] = None,
     available_for_invoice: bool = False,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[DeliveryNote], int]:
@@ -86,10 +91,33 @@ async def list_delivery_notes(
             DeliveryNote.invoice_id.is_(None),
         )
 
+    needs_customer_join = bool(search) or sort_by == "customer_name"
+    if needs_customer_join:
+        base = base.outerjoin(Customer, Customer.id == DeliveryNote.customer_id)
+    if search:
+        pattern = f"%{search.strip()}%"
+        base = base.where(
+            or_(
+                DeliveryNote.doc_number.ilike(pattern),
+                Customer.full_name.ilike(pattern),
+                func.coalesce(Customer.company_name, "").ilike(pattern),
+            )
+        )
+
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    sortable_columns = {
+        "doc_number": DeliveryNote.doc_number,
+        "total_minor": DeliveryNote.total_minor,
+        "status": DeliveryNote.status,
+        "created_at": DeliveryNote.created_at,
+    }
+    if needs_customer_join:
+        sortable_columns["customer_name"] = Customer.full_name
+    base = apply_sort(base, sort_by, sort_dir, sortable_columns, default=DeliveryNote.created_at)
+
     rows = await db.execute(
         base.options(selectinload(DeliveryNote.lines))
-        .order_by(DeliveryNote.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

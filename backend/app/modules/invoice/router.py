@@ -65,6 +65,9 @@ async def list_invoices(
     customer_id: Optional[int] = Query(None),
     status_filter: Optional[InvoiceStatus] = Query(None, alias="status"),
     quotation_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None, max_length=100),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: Literal["asc", "desc"] = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -72,7 +75,8 @@ async def list_invoices(
     return await service.list_invoices(
         db, user.garage_id,
         customer_id=customer_id, status=status_filter,
-        quotation_id=quotation_id, page=page, page_size=page_size,
+        quotation_id=quotation_id, search=search, sort_by=sort_by, sort_dir=sort_dir,
+        page=page, page_size=page_size,
     )
 
 

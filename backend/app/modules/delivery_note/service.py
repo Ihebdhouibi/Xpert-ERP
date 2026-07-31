@@ -288,6 +288,9 @@ async def list_delivery_notes(
     customer_id: Optional[int] = None,
     status: Optional[DeliveryNoteStatus] = None,
     available_for_invoice: bool = False,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 25,
 ) -> DeliveryNoteListResponse:
@@ -296,7 +299,9 @@ async def list_delivery_notes(
 
     items, total = await repo.list_delivery_notes(
         db, garage_id, customer_id=customer_id, status=status,
-        available_for_invoice=available_for_invoice, page=page, page_size=page_size
+        available_for_invoice=available_for_invoice,
+        search=search, sort_by=sort_by, sort_dir=sort_dir,
+        page=page, page_size=page_size,
     )
     cust_ids = list({d.customer_id for d in items})
     customers_map: dict[int, str] = {}
@@ -610,11 +615,22 @@ async def convert_to_invoice(
     if dn.invoice_id is not None:
         raise DeliveryNoteStateError("This delivery note has already been converted to an invoice.")
 
+    if dn.repair_order_id is not None:
+        from app.modules.invoice import repository as invoice_repo
+        existing = await invoice_repo.get_active_by_repair_order_id(
+            db, garage_id=garage_id, repair_order_id=dn.repair_order_id
+        )
+        if existing:
+            raise DeliveryNoteStateError(
+                "Une facture active existe déjà pour cet ordre de réparation."
+            )
+
     invoice = Invoice(
         public_id=str(uuid.uuid4()),
         garage_id=garage_id,
         customer_id=dn.customer_id,
         vehicle_id=dn.vehicle_id,
+        repair_order_id=dn.repair_order_id,
         currency=dn.currency,
         notes=f"Converti depuis BL {dn.doc_number or dn.public_id}",
         status=InvoiceStatus.draft,

@@ -95,6 +95,9 @@ export const quotationApi = {
   list(params?: {
     customer_id?: number
     status?: QuotationStatus
+    search?: string
+    sort_by?: string
+    sort_dir?: 'asc' | 'desc'
     page?: number
     page_size?: number
   }): Promise<QuotationListResponse> {

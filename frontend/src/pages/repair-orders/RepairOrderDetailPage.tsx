@@ -45,6 +45,7 @@ import DescriptionRoundedIcon from '@mui/icons-material/DescriptionRounded'
 import ReceiptRoundedIcon from '@mui/icons-material/ReceiptRounded'
 import LocalShippingRoundedIcon from '@mui/icons-material/LocalShippingRounded'
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded'
+import SwapHorizRoundedIcon from '@mui/icons-material/SwapHorizRounded'
 import BrokenImageRoundedIcon from '@mui/icons-material/BrokenImageRounded'
 import SavingsRoundedIcon from '@mui/icons-material/SavingsRounded'
 import { PermissionGate } from '../../components/auth/PermissionGate'
@@ -1019,6 +1020,17 @@ export function RepairOrderDetailPage() {
     onError: () => toastError('Impossible de créer le bon de livraison.'),
   })
 
+  const convertBlToInvoiceMutation = useMutation({
+    mutationFn: () => deliveryNoteApi.convertToInvoice(ro!.linked_delivery_note!.public_id),
+    onSuccess: (deliveryNote) => {
+      success('Facture créée depuis le bon de livraison.')
+      if (deliveryNote.invoice_public_id) {
+        navigate(`/invoices/${deliveryNote.invoice_public_id}`)
+      }
+    },
+    onError: () => toastError('Impossible de convertir le bon de livraison en facture.'),
+  })
+
   const addLaborMutation = useMutation({
     mutationFn: () => repairOrderApi.addLaborLine(publicId, {
       labor_type: laborType,
@@ -1877,6 +1889,36 @@ export function RepairOrderDetailPage() {
                           Facture {ro.linked_invoice.doc_number ?? '(brouillon)'} créée le{' '}
                           {new Date(ro.linked_invoice.created_at).toLocaleDateString('fr-FR')}.
                         </Alert>
+                      ) : ro.linked_delivery_note ? (
+                        ro.linked_delivery_note.status === 'issued' || ro.linked_delivery_note.status === 'delivered' ? (
+                          <Button
+                            variant="contained"
+                            color="success"
+                            fullWidth
+                            startIcon={<SwapHorizRoundedIcon />}
+                            disabled={convertBlToInvoiceMutation.isPending}
+                            onClick={() => convertBlToInvoiceMutation.mutate()}
+                            sx={{ textTransform: 'none', fontWeight: 700 }}
+                          >
+                            {convertBlToInvoiceMutation.isPending ? 'Conversion…' : 'Convertir le BL en facture'}
+                          </Button>
+                        ) : (
+                          <Alert
+                            severity="info"
+                            icon={<ReceiptRoundedIcon fontSize="inherit" />}
+                            action={
+                              <IconButton
+                                size="small"
+                                component={RouterLink}
+                                to={`/delivery-notes/${ro.linked_delivery_note.public_id}`}
+                              >
+                                <OpenInNewRoundedIcon fontSize="small" />
+                              </IconButton>
+                            }
+                          >
+                            Émettez le bon de livraison pour pouvoir le convertir en facture.
+                          </Alert>
+                        )
                       ) : (
                         <Button
                           variant="contained"
@@ -1908,7 +1950,7 @@ export function RepairOrderDetailPage() {
                           BL {ro.linked_delivery_note.doc_number ?? '(brouillon)'} créé le{' '}
                           {new Date(ro.linked_delivery_note.created_at).toLocaleDateString('fr-FR')}.
                         </Alert>
-                      ) : (
+                      ) : ro.linked_invoice ? null : (
                         <Button
                           variant="contained"
                           fullWidth

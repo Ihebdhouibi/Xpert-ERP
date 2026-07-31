@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.query_utils import apply_sort
+from app.modules.customer.models import Customer
 from app.modules.invoice.models import Invoice, InvoiceLine, InvoiceStatus
 
 
@@ -71,6 +73,9 @@ async def list_invoices(
     customer_id: Optional[int] = None,
     status: Optional[InvoiceStatus] = None,
     quotation_id: Optional[int] = None,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 25,
 ) -> tuple[list[Invoice], int]:
@@ -85,10 +90,34 @@ async def list_invoices(
     if quotation_id is not None:
         base = base.where(Invoice.quotation_id == quotation_id)
 
+    needs_customer_join = bool(search) or sort_by == "customer_name"
+    if needs_customer_join:
+        base = base.outerjoin(Customer, Customer.id == Invoice.customer_id)
+    if search:
+        pattern = f"%{search.strip()}%"
+        base = base.where(
+            or_(
+                Invoice.doc_number.ilike(pattern),
+                Customer.full_name.ilike(pattern),
+                func.coalesce(Customer.company_name, "").ilike(pattern),
+            )
+        )
+
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+
+    sortable_columns = {
+        "doc_number": Invoice.doc_number,
+        "total_minor": Invoice.total_minor,
+        "outstanding_minor": Invoice.outstanding_minor,
+        "due_at": Invoice.due_at,
+        "status": Invoice.status,
+    }
+    if needs_customer_join:
+        sortable_columns["customer_name"] = Customer.full_name
+    base = apply_sort(base, sort_by, sort_dir, sortable_columns, default=Invoice.created_at)
+
     rows = await db.execute(
         base.options(selectinload(Invoice.lines))
-        .order_by(Invoice.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

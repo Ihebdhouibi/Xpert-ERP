@@ -98,6 +98,9 @@ export const deliveryNoteApi = {
   list: async (params: {
     customer_id?: number
     status?: DeliveryNoteStatus
+    search?: string
+    sort_by?: string
+    sort_dir?: 'asc' | 'desc'
     page?: number
     page_size?: number
   } = {}): Promise<DeliveryNoteListResponse> => {

@@ -381,6 +381,69 @@ class TestInvoiceService:
 
 
 # ---------------------------------------------------------------------------
+# List: server-side search + sort
+# ---------------------------------------------------------------------------
+
+class TestInvoiceListSortSearch:
+
+    async def _seed(self, db: AsyncSession) -> tuple[Customer, Customer]:
+        alice = Customer(garage_id=1, type=CustomerType.individual,
+                          full_name="Alice Martin", status=CustomerStatus.active)
+        bob = Customer(garage_id=1, type=CustomerType.individual,
+                        full_name="Bob Dupont", status=CustomerStatus.active)
+        db.add_all([alice, bob])
+        await db.flush()
+
+        from app.modules.invoice.models import Invoice
+        import uuid as _uuid
+
+        invoices = [
+            Invoice(public_id=str(_uuid.uuid4()), garage_id=1, customer_id=alice.id,
+                    doc_number="INV-2026-00001", status=InvoiceStatus.issued,
+                    total_minor=5000, version=1),
+            Invoice(public_id=str(_uuid.uuid4()), garage_id=1, customer_id=bob.id,
+                    doc_number="INV-2026-00002", status=InvoiceStatus.issued,
+                    total_minor=15000, version=1),
+            Invoice(public_id=str(_uuid.uuid4()), garage_id=1, customer_id=alice.id,
+                    doc_number="INV-2026-00003", status=InvoiceStatus.issued,
+                    total_minor=10000, version=1),
+        ]
+        db.add_all(invoices)
+        await db.commit()
+        return alice, bob
+
+    async def test_search_by_customer_name(self, db_session: AsyncSession):
+        await self._seed(db_session)
+        result = await inv_service.list_invoices(db_session, garage_id=1, search="Alice")
+        assert result.total == 2
+        assert {i.doc_number for i in result.items} == {"INV-2026-00001", "INV-2026-00003"}
+
+    async def test_search_by_doc_number(self, db_session: AsyncSession):
+        await self._seed(db_session)
+        result = await inv_service.list_invoices(db_session, garage_id=1, search="00002")
+        assert result.total == 1
+        assert result.items[0].doc_number == "INV-2026-00002"
+
+    async def test_sort_by_total_minor(self, db_session: AsyncSession):
+        await self._seed(db_session)
+        asc = await inv_service.list_invoices(db_session, garage_id=1, sort_by="total_minor", sort_dir="asc")
+        assert [i.total_minor for i in asc.items] == [5000, 10000, 15000]
+        desc = await inv_service.list_invoices(db_session, garage_id=1, sort_by="total_minor", sort_dir="desc")
+        assert [i.total_minor for i in desc.items] == [15000, 10000, 5000]
+
+    async def test_sort_by_customer_name(self, db_session: AsyncSession):
+        await self._seed(db_session)
+        result = await inv_service.list_invoices(db_session, garage_id=1, sort_by="customer_name", sort_dir="asc")
+        doc_numbers = [i.doc_number for i in result.items]
+        assert doc_numbers.index("INV-2026-00002") > doc_numbers.index("INV-2026-00001")
+
+    async def test_unknown_sort_by_falls_back_to_default(self, db_session: AsyncSession):
+        await self._seed(db_session)
+        result = await inv_service.list_invoices(db_session, garage_id=1, sort_by="not_a_real_column")
+        assert result.total == 3
+
+
+# ---------------------------------------------------------------------------
 # Conversion flow tests
 # ---------------------------------------------------------------------------
 
