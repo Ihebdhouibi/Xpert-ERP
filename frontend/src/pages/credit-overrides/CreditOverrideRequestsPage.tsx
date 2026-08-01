@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
@@ -46,15 +47,41 @@ function formatDate(iso: string) {
 export function CreditOverrideRequestsPage() {
   const { success, error: toastError } = useToast()
   const queryClient = useQueryClient()
+  const { id } = useParams<{ id: string }>()
+  const targetId = id ? Number(id) : null
   const [statusFilter, setStatusFilter] = useState<string>('pending')
   const [rejectTarget, setRejectTarget] = useState<OverrideRequestOut | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const highlightedRowRef = useRef<HTMLTableRowElement | null>(null)
+  const [hasScrolled, setHasScrolled] = useState(false)
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['credit-override-requests', statusFilter],
     queryFn: () => creditOverrideApi.list(statusFilter),
     refetchInterval: 30_000,
   })
+
+  // Deep-linked from a notification: switch to the request's own status tab.
+  const { data: targetRequest } = useQuery({
+    queryKey: ['credit-override-request', targetId],
+    queryFn: () => creditOverrideApi.get(targetId as number),
+    enabled: targetId != null,
+  })
+
+  useEffect(() => {
+    if (targetRequest) setStatusFilter(targetRequest.status)
+  }, [targetRequest])
+
+  useEffect(() => {
+    setHasScrolled(false)
+  }, [targetId])
+
+  useEffect(() => {
+    if (targetId != null && !hasScrolled && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHasScrolled(true)
+    }
+  }, [requests, targetId, hasScrolled])
 
   const approveMutation = useMutation({
     mutationFn: (id: number) => creditOverrideApi.approve(id),
@@ -130,7 +157,12 @@ export function CreditOverrideRequestsPage() {
             {requests.map(req => {
               const cfg = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG]
               return (
-                <TableRow key={req.id} hover>
+                <TableRow
+                  key={req.id}
+                  hover
+                  ref={req.id === targetId ? highlightedRowRef : undefined}
+                  sx={req.id === targetId ? { bgcolor: 'warning.50' } : undefined}
+                >
                   <TableCell>
                     <Typography variant="body2" fontWeight={500}>
                       {req.customer_name ?? `Client #${req.customer_id}`}

@@ -181,6 +181,31 @@ async def list_credit_limit_change_requests(
     return out
 
 
+@router.get(
+    "/{request_id}",
+    response_model=CreditLimitChangeRequestOut,
+    dependencies=[require_permission("customer.update")],
+    summary="Get a single credit limit change request",
+)
+async def get_credit_limit_change_request(
+    request_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> CreditLimitChangeRequestOut:
+    stmt = select(CreditLimitChangeRequest).where(
+        CreditLimitChangeRequest.id == request_id,
+        CreditLimitChangeRequest.garage_id == user.garage_id,
+    )
+    if not user.has_permission("customer.credit_limit.update"):
+        stmt = stmt.where(CreditLimitChangeRequest.requested_by_id == user.user_id)
+    req = (await db.execute(stmt)).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Demande introuvable.")
+
+    customer = await customer_repo.get_by_id(db, user.garage_id, req.customer_id)
+    return _to_out(req, customer.full_name if customer else None)
+
+
 @router.post(
     "/{request_id}/approve",
     response_model=CreditLimitChangeRequestOut,

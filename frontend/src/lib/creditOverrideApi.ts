@@ -42,6 +42,9 @@ export const creditOverrideApi = {
       .get<OverrideRequestOut[]>('/credit-override-requests', { params: status ? { status } : undefined })
       .then(r => r.data),
 
+  get: (id: number) =>
+    apiClient.get<OverrideRequestOut>(`/credit-override-requests/${id}`).then(r => r.data),
+
   approve: (id: number) =>
     apiClient.post<OverrideRequestOut>(`/credit-override-requests/${id}/approve`).then(r => r.data),
 

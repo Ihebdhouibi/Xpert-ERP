@@ -35,6 +35,14 @@ class InboxResponse(BaseModel):
     unread_count: int
 
 
+class NotificationHistoryResponse(BaseModel):
+    items: list[AppNotificationOut]
+    total: int
+    page: int
+    page_size: int
+    unread_count: int
+
+
 async def create_app_notification(
     db: AsyncSession,
     *,
@@ -68,7 +76,7 @@ async def list_my_notifications(
             select(AppNotification)
             .where(AppNotification.recipient_id == user.user_id)
             .order_by(AppNotification.created_at.desc())
-            .limit(30)
+            .limit(10)
         )
     ).scalars().all()
     unread = (
@@ -83,6 +91,53 @@ async def list_my_notifications(
     ).scalar_one()
     return InboxResponse(
         items=[AppNotificationOut.model_validate(r) for r in rows],
+        unread_count=int(unread),
+    )
+
+
+@router.get("/history", response_model=NotificationHistoryResponse)
+async def list_notification_history(
+    user: AuthUser,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    unread_only: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+) -> NotificationHistoryResponse:
+    """Full, paginated notification history for the /notifications page."""
+    filters = [AppNotification.recipient_id == user.user_id]
+    if unread_only:
+        filters.append(AppNotification.read_at.is_(None))
+
+    total = (
+        await db.execute(
+            select(func.count()).select_from(AppNotification).where(*filters)
+        )
+    ).scalar_one()
+    unread = (
+        await db.execute(
+            select(func.count())
+            .select_from(AppNotification)
+            .where(
+                AppNotification.recipient_id == user.user_id,
+                AppNotification.read_at.is_(None),
+            )
+        )
+    ).scalar_one()
+    rows = (
+        await db.execute(
+            select(AppNotification)
+            .where(*filters)
+            .order_by(AppNotification.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).scalars().all()
+
+    return NotificationHistoryResponse(
+        items=[AppNotificationOut.model_validate(r) for r in rows],
+        total=int(total),
+        page=page,
+        page_size=page_size,
         unread_count=int(unread),
     )
 

@@ -50,8 +50,18 @@ export interface InboxResponse {
   unread_count: number
 }
 
+export interface NotificationHistoryResponse {
+  items: AppNotification[]
+  total: number
+  page: number
+  page_size: number
+  unread_count: number
+}
+
 export const inboxApi = {
   list: () => apiClient.get<InboxResponse>('/notifications').then(r => r.data),
+  history: (params: { page: number; page_size: number; unread_only?: boolean }) =>
+    apiClient.get<NotificationHistoryResponse>('/notifications/history', { params }).then(r => r.data),
   markRead: (id: number) => apiClient.post(`/notifications/${id}/read`).then(r => r.data),
   markAllRead: () => apiClient.post('/notifications/read-all').then(r => r.data),
   sendEmail: (id: number, recipient: 'client' | 'admin') =>

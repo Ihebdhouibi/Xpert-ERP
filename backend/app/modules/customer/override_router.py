@@ -228,6 +228,43 @@ async def list_override_requests(
     return out
 
 
+@router.get(
+    "/{request_id}",
+    response_model=OverrideRequestOut,
+    dependencies=[require_permission("credit.override.manage")],
+    summary="Get a single credit override request (admin only)",
+)
+async def get_override_request(
+    request_id: int,
+    user: AuthUser,
+    db: AsyncSession = Depends(get_db),
+) -> OverrideRequestOut:
+    req = (
+        await db.execute(
+            select(CreditOverrideRequest).where(
+                CreditOverrideRequest.id == request_id,
+                CreditOverrideRequest.garage_id == user.garage_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Demande introuvable.")
+
+    customer = await customer_repo.get_by_id(db, user.garage_id, req.customer_id)
+    return OverrideRequestOut(
+        id=req.id,
+        customer_id=req.customer_id,
+        customer_name=customer.full_name if customer else None,
+        requested_by_id=req.requested_by_id,
+        doc_type=req.doc_type,
+        status=req.status.value,
+        approved_by_id=req.approved_by_id,
+        expires_at=req.expires_at,
+        rejection_reason=req.rejection_reason,
+        created_at=req.created_at,
+    )
+
+
 @router.post(
     "/{request_id}/approve",
     response_model=OverrideRequestOut,

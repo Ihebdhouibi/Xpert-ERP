@@ -1,6 +1,6 @@
-import { useState, type MouseEvent } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   AppBar,
   Avatar,
@@ -20,6 +20,7 @@ import {
   Typography,
 } from '@mui/material'
 import { inboxApi, notificationSupportsEmail } from '../../lib/notificationApi'
+import { useNotificationActions } from '../../hooks/useNotificationActions'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
@@ -28,7 +29,6 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import MailRoundedIcon from '@mui/icons-material/MailRounded'
 import { useAuth } from '../../contexts/AuthContext'
-import { useToast } from '../../contexts/ToastContext'
 import { navSections } from './navConfig'
 
 function getPageTitle(pathname: string): string {
@@ -56,11 +56,9 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { success, error: toastError } = useToast()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [notifAnchor, setNotifAnchor] = useState<HTMLElement | null>(null)
-  const [sendingEmailId, setSendingEmailId] = useState<number | null>(null)
+  const { openNotification, markAll, sendNotificationEmail, sendingEmailId } = useNotificationActions()
 
   const { data: inbox } = useQuery({
     queryKey: ['notifications', 'inbox'],
@@ -69,38 +67,14 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
     refetchOnWindowFocus: true,
   })
 
-  const openNotification = async (n: { id: number; link: string | null }) => {
+  const handleOpenNotification = async (n: { id: number; link: string | null }) => {
     setNotifAnchor(null)
-    try {
-      await inboxApi.markRead(n.id)
-    } catch {
-      /* non-blocking */
-    }
-    queryClient.invalidateQueries({ queryKey: ['notifications', 'inbox'] })
-    if (n.link) navigate(n.link)
+    await openNotification(n)
   }
 
-  const markAll = async () => {
-    await inboxApi.markAllRead()
-    queryClient.invalidateQueries({ queryKey: ['notifications', 'inbox'] })
-  }
-
-  const sendNotificationEmail = async (
-    e: MouseEvent,
-    notificationId: number,
-    recipient: 'client' | 'admin',
-  ) => {
-    e.stopPropagation()
-    setSendingEmailId(notificationId)
-    try {
-      await inboxApi.sendEmail(notificationId, recipient)
-      success(recipient === 'client' ? 'Email envoyé au client' : "Email envoyé à l'admin")
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      toastError(typeof detail === 'string' ? detail : "Impossible d'envoyer l'email.")
-    } finally {
-      setSendingEmailId(null)
-    }
+  const goToNotifications = () => {
+    setNotifAnchor(null)
+    navigate('/notifications')
   }
 
   const pageTitle = getPageTitle(location.pathname)
@@ -289,7 +263,7 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
             (inbox?.items ?? []).map((n) => (
               <MenuItem
                 key={n.id}
-                onClick={() => openNotification(n)}
+                onClick={() => handleOpenNotification(n)}
                 sx={{ alignItems: 'flex-start', py: 1, whiteSpace: 'normal', bgcolor: n.read_at ? 'transparent' : 'action.hover' }}
               >
                 <ListItemText
@@ -332,6 +306,12 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
               </MenuItem>
             ))
           )}
+          <Divider />
+          <MenuItem onClick={goToNotifications} sx={{ justifyContent: 'center', py: 1 }}>
+            <Typography variant="body2" fontWeight={600} color="primary">
+              Voir toutes les notifications
+            </Typography>
+          </MenuItem>
         </Menu>
 
         {/* User avatar */}

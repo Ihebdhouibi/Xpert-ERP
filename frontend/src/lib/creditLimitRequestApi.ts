@@ -36,6 +36,9 @@ export const creditLimitRequestApi = {
       .get<CreditLimitChangeRequestOut[]>('/credit-limit-requests', { params })
       .then(r => r.data),
 
+  get: (id: number) =>
+    apiClient.get<CreditLimitChangeRequestOut>(`/credit-limit-requests/${id}`).then(r => r.data),
+
   getPendingForCustomer: async (customerPublicId: string): Promise<CreditLimitChangeRequestOut | null> => {
     const items = await apiClient
       .get<CreditLimitChangeRequestOut[]>('/credit-limit-requests', {
