@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.main import create_app
-from app.modules.auth.models import Permission, Role, RolePermission
+from app.modules.auth.models import AppUser, Permission, Role, RolePermission
 from app.modules.parts.models import Part, PartStatus
 from app.modules.parts.stock_models import StockMovementType
 from app.modules.parts.stock_service import (
@@ -137,6 +137,34 @@ async def _create_ro(client: AsyncClient, token: str) -> str:
     )
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
+
+
+async def _complete_diagnosis(client: AsyncClient, token: str, db: AsyncSession, ro_id: str) -> None:
+    """Assign a mechanic, accept the assignment, and complete the diagnosis form —
+    the preconditions the diagnosis → in_repair transition now enforces."""
+    admin_id = (
+        await db.execute(select(AppUser.id).where(AppUser.email == "admin@test.com"))
+    ).scalar_one()
+    resp = await client.put(
+        f"/api/v1/repair-orders/{ro_id}/assign",
+        json={"user_id": admin_id},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.post(
+        f"/api/v1/repair-orders/{ro_id}/accept-assignment",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.put(
+        f"/api/v1/repair-orders/{ro_id}/diagnosis",
+        json={
+            "answers": {"D1": False, "D2": False, "D3": False, "D4": False, "D5": False},
+            "completed": True,
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -772,6 +800,7 @@ class TestROStockIntegration:
             json={"new_status": "diagnosis"},
             headers=_auth(token),
         )
+        await _complete_diagnosis(stock_client, token, stock_seeded_db, ro_id)
         # Transition to in_repair → should commit the reservation
         resp = await stock_client.post(
             f"/api/v1/repair-orders/{ro_id}/status-transition",
@@ -826,6 +855,7 @@ class TestROStockIntegration:
             json={"new_status": "diagnosis"},
             headers=_auth(token),
         )
+        await _complete_diagnosis(stock_client, token, stock_seeded_db, ro_id)
         resp = await stock_client.post(
             f"/api/v1/repair-orders/{ro_id}/status-transition",
             json={"new_status": "in_repair"},
