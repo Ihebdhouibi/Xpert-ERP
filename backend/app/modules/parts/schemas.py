@@ -101,9 +101,11 @@ class PartSummary(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _remap_public_id(cls, data: Any) -> Any:
-        if hasattr(data, "public_id"):
-            data.__dict__["int_id"] = data.id  # capture integer PK before overwriting
-            data.__dict__["id"] = str(data.public_id)
+        if hasattr(data, "public_id") and not isinstance(data, dict):
+            values = dict(data.__dict__)
+            values["int_id"] = values["id"]
+            values["id"] = str(data.public_id)
+            return values
         return data
 
 

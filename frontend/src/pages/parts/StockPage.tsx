@@ -35,7 +35,7 @@ import {
   ALERT_STATUS_LABELS,
   type StockMovementType,
 } from '../../lib/stockApi'
-import { partsApi, type PartSummary } from '../../lib/partsApi'
+import { partsApi, UNCATEGORIZED_CATEGORY, type PartSummary } from '../../lib/partsApi'
 import { purchaseOrderApi } from '../../lib/purchaseOrderApi'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -64,7 +64,12 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
 
   const partsQ = useQuery({
     queryKey: ['parts', 'by-category', selectedCategoryId],
-    queryFn: () => partsApi.list({ category_id: selectedCategoryId as number, page_size: 100, status: 'active' }),
+    queryFn: () =>
+      partsApi.list(
+        selectedCategoryId === UNCATEGORIZED_CATEGORY.id
+          ? { uncategorized: true, page_size: 100, status: 'active' }
+          : { category_id: selectedCategoryId as number, page_size: 100, status: 'active' }
+      ),
     enabled: selectedCategoryId !== '',
   })
 
@@ -120,6 +125,7 @@ function AddStockDialog({ open, onClose }: { open: boolean; onClose: () => void 
             {categories.map((c) => (
               <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
             ))}
+            <MenuItem value={UNCATEGORIZED_CATEGORY.id}>{UNCATEGORIZED_CATEGORY.name}</MenuItem>
           </TextField>
 
           {/* Step 2: Part in selected category */}
