@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -117,7 +118,13 @@ class Part(Base):
 
     __table_args__ = (
         UniqueConstraint("public_id", name="uq_part_public_id"),
-        UniqueConstraint("garage_id", "sku_code", name="uq_part_garage_sku"),
+        Index(
+            "uq_part_garage_sku",
+            "garage_id",
+            "sku_code",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_part_garage_id", "garage_id"),
         Index("ix_part_garage_sku", "garage_id", "sku_code"),
         Index("ix_part_garage_category", "garage_id", "category_id"),
