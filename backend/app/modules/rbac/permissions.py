@@ -44,6 +44,7 @@ PERMISSIONS: list[dict[str, str]] = [
     {"code": "customer.credit_limit.update", "resource": "customer", "action": "credit_limit.update", "description": "Change credit limit"},
     {"code": "customer.balance.read", "resource": "customer", "action": "balance.read", "description": "View ledger and outstanding"},
     {"code": "customer.merge", "resource": "customer", "action": "merge", "description": "Merge duplicate customers"},
+    {"code": "credit.override.manage", "resource": "credit", "action": "override.manage", "description": "Approve or reject credit-limit override requests"},
     # --- Vehicle ---
     {"code": "vehicle.read", "resource": "vehicle", "action": "read", "description": "View vehicles"},
     {"code": "vehicle.create", "resource": "vehicle", "action": "create", "description": "Create vehicle"},
