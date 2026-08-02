@@ -105,6 +105,7 @@ async def _make_draft_invoice(db: AsyncSession, customer_id: int, total: int = 1
         paid_amount_minor=0,
         outstanding_minor=total,
         version=1,
+        due_at=datetime(2099, 12, 31, tzinfo=timezone.utc),
     )
     db.add(inv)
     await db.flush()

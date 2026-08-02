@@ -108,6 +108,8 @@ def mock_redis() -> AsyncMock:
     r.setex = AsyncMock(return_value=True)
     r.exists = AsyncMock(return_value=0)
     r.getdel = AsyncMock(return_value=None)
+    r.incr = AsyncMock(return_value=1)
+    r.expire = AsyncMock(return_value=True)
     return r
 
 
@@ -508,6 +510,8 @@ class TestQuotationService:
         db_session.add(customer)
         await db_session.flush()
 
+        # vat_rate on creation is ignored — the backend always applies the
+        # fixed TVA_PCT (20%) regardless of what's requested.
         lines = [
             QuotationLineCreateRequest(
                 description="X", quantity=Decimal("1"),
@@ -516,14 +520,14 @@ class TestQuotationService:
         ]
         req = QuotationCreateRequest(customer_id=customer.id, lines=lines)
         out = await quot_service.create_quotation(db_session, request=req, garage_id=1, user_id=1)
-        assert out.total_minor == 5000
+        assert out.total_minor == 6000  # 5000 + 20% VAT
 
         updated = await quot_service.update_line(
             db_session, out.id, out.lines[0].id, 1,
             request=QuotationLineUpdateRequest(unit_price_minor=8000),
             expected_version=out.version, user_id=1,
         )
-        assert updated.total_minor == 8000
+        assert updated.total_minor == 9600  # 8000 + 20% VAT (vat_rate untouched by the update)
 
 
 # ---------------------------------------------------------------------------
@@ -562,7 +566,7 @@ class TestQuotationEndpoints:
         cid = await _get_customer_id(seeded_quot_db)
         created = await self._create_quot(quot_client, token, cid)
         resp = await quot_client.get(
-            f"/api/v1/quotations/{created['id']}",
+            f"/api/v1/quotations/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -584,7 +588,7 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         resp = await quot_client.patch(
-            f"/api/v1/quotations/{created['id']}",
+            f"/api/v1/quotations/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
             json={"notes": "updated via HTTP"},
         )
@@ -600,7 +604,7 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         resp = await quot_client.patch(
-            f"/api/v1/quotations/{created['id']}",
+            f"/api/v1/quotations/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
             json={"notes": "no if-match"},
         )
@@ -614,7 +618,7 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         resp = await quot_client.delete(
-            f"/api/v1/quotations/{created['id']}",
+            f"/api/v1/quotations/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 204
@@ -627,7 +631,7 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/lines",
+            f"/api/v1/quotations/{created['public_id']}/lines",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
             json={
                 "description": "Labour: 1h",
@@ -652,7 +656,7 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/send",
+            f"/api/v1/quotations/{created['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
         )
         assert resp.status_code == 200
@@ -669,14 +673,14 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         send_resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/send",
+            f"/api/v1/quotations/{created['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
         )
         assert send_resp.status_code == 200
         sent = send_resp.json()
 
         approve_resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/approve",
+            f"/api/v1/quotations/{created['public_id']}/approve",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(sent["version"])},
         )
         assert approve_resp.status_code == 200
@@ -690,13 +694,13 @@ class TestQuotationEndpoints:
         created = await self._create_quot(quot_client, token, cid)
 
         send_resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/send",
+            f"/api/v1/quotations/{created['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
         )
         sent = send_resp.json()
 
         reject_resp = await quot_client.post(
-            f"/api/v1/quotations/{created['id']}/reject",
+            f"/api/v1/quotations/{created['public_id']}/reject",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(sent["version"])},
         )
         assert reject_resp.status_code == 200
@@ -716,7 +720,7 @@ class TestQuotationEndpoints:
         q1 = await self._create_quot(quot_client, token, cid)
         q2 = await self._create_quot(quot_client, token, cid)
         await quot_client.post(
-            f"/api/v1/quotations/{q1['id']}/send",
+            f"/api/v1/quotations/{q1['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(q1["version"])},
         )
 

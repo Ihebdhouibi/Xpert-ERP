@@ -11,6 +11,7 @@ os.environ.setdefault("S3_SECRET_ACCESS_KEY", "testsecret")
 os.environ.setdefault("S3_BUCKET_DOCUMENTS", "test-documents")
 os.environ.setdefault("S3_BUCKET_MEDIA", "test-media")
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock
@@ -110,6 +111,8 @@ def mock_redis() -> AsyncMock:
     r.setex = AsyncMock(return_value=True)
     r.exists = AsyncMock(return_value=0)
     r.getdel = AsyncMock(return_value=None)
+    r.incr = AsyncMock(return_value=1)
+    r.expire = AsyncMock(return_value=True)
     return r
 
 
@@ -245,7 +248,11 @@ class TestInvoiceService:
         db_session.add(customer)
         await db_session.flush()
         out = await inv_service.create_invoice(
-            db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
+            db_session,
+            request=InvoiceCreateRequest(
+                customer_id=customer.id, due_at=datetime(2099, 12, 31, tzinfo=timezone.utc)
+            ),
+            garage_id=1, user_id=1
         )
         issued = await inv_service.issue_invoice(
             db_session, out.id, 1, expected_version=out.version, user_id=1
@@ -261,7 +268,11 @@ class TestInvoiceService:
         db_session.add(customer)
         await db_session.flush()
         out = await inv_service.create_invoice(
-            db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
+            db_session,
+            request=InvoiceCreateRequest(
+                customer_id=customer.id, due_at=datetime(2099, 12, 31, tzinfo=timezone.utc)
+            ),
+            garage_id=1, user_id=1
         )
         issued = await inv_service.issue_invoice(
             db_session, out.id, 1, expected_version=out.version, user_id=1
@@ -290,7 +301,11 @@ class TestInvoiceService:
         db_session.add(customer)
         await db_session.flush()
         out = await inv_service.create_invoice(
-            db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
+            db_session,
+            request=InvoiceCreateRequest(
+                customer_id=customer.id, due_at=datetime(2099, 12, 31, tzinfo=timezone.utc)
+            ),
+            garage_id=1, user_id=1
         )
         issued = await inv_service.issue_invoice(
             db_session, out.id, 1, expected_version=out.version, user_id=1
@@ -370,7 +385,11 @@ class TestInvoiceService:
         doc_numbers = []
         for _ in range(3):
             out = await inv_service.create_invoice(
-                db_session, request=InvoiceCreateRequest(customer_id=customer.id), garage_id=1, user_id=1
+                db_session,
+                request=InvoiceCreateRequest(
+                    customer_id=customer.id, due_at=datetime(2099, 12, 31, tzinfo=timezone.utc)
+                ),
+                garage_id=1, user_id=1
             )
             issued = await inv_service.issue_invoice(
                 db_session, out.id, 1, expected_version=out.version, user_id=1
@@ -535,7 +554,10 @@ class TestQuotationConversion:
         await db_session.flush()
 
         quot_id = await self._make_approved_quotation(db_session, customer.id)
-        inv = await inv_service.convert_quotation(db_session, quot_id, 1, user_id=1)
+        inv = await inv_service.convert_quotation(
+            db_session, quot_id, 1,
+            due_at=datetime(2099, 12, 31, tzinfo=timezone.utc), user_id=1,
+        )
         issued = await inv_service.issue_invoice(
             db_session, inv.id, 1, expected_version=inv.version, user_id=1
         )
@@ -553,7 +575,9 @@ class TestInvoiceEndpoints:
         r = await client.post(
             "/api/v1/invoices",
             headers={"Authorization": f"Bearer {token}"},
-            json={"customer_id": customer_id},
+            # due_at is required to issue an invoice; set it here so every
+            # test that issues can reuse this helper unmodified.
+            json={"customer_id": customer_id, "due_at": "2099-12-31T00:00:00Z"},
         )
         assert r.status_code == 201, r.text
         return r.json()
@@ -576,7 +600,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.get(
-            f"/api/v1/invoices/{created['id']}",
+            f"/api/v1/invoices/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert r.status_code == 200
@@ -594,7 +618,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.patch(
-            f"/api/v1/invoices/{created['id']}",
+            f"/api/v1/invoices/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
             json={"notes": "test note"},
         )
@@ -606,7 +630,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.patch(
-            f"/api/v1/invoices/{created['id']}",
+            f"/api/v1/invoices/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
             json={"notes": "no header"},
         )
@@ -617,7 +641,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.post(
-            f"/api/v1/invoices/{created['id']}/lines",
+            f"/api/v1/invoices/{created['public_id']}/lines",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
             json={
                 "description": "Parts", "quantity": "2.000",
@@ -634,7 +658,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.post(
-            f"/api/v1/invoices/{created['id']}/issue",
+            f"/api/v1/invoices/{created['public_id']}/issue",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
         )
         assert r.status_code == 200
@@ -646,7 +670,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.post(
-            f"/api/v1/invoices/{created['id']}/cancel",
+            f"/api/v1/invoices/{created['public_id']}/cancel",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(created["version"])},
         )
         assert r.status_code == 200
@@ -657,7 +681,7 @@ class TestInvoiceEndpoints:
         cid = await _customer_id(seeded_inv_db)
         created = await self._create_inv(inv_client, token, cid)
         r = await inv_client.delete(
-            f"/api/v1/invoices/{created['id']}",
+            f"/api/v1/invoices/{created['public_id']}",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert r.status_code == 204
@@ -681,12 +705,12 @@ class TestInvoiceEndpoints:
         q = q_resp.json()
 
         send_r = await inv_client.post(
-            f"/api/v1/quotations/{q['id']}/send",
+            f"/api/v1/quotations/{q['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(q["version"])},
         )
         sent = send_r.json()
         approve_r = await inv_client.post(
-            f"/api/v1/quotations/{q['id']}/approve",
+            f"/api/v1/quotations/{q['public_id']}/approve",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(sent["version"])},
         )
         assert approve_r.status_code == 200
@@ -715,12 +739,12 @@ class TestInvoiceEndpoints:
         )
         q = q_resp.json()
         send_r = await inv_client.post(
-            f"/api/v1/quotations/{q['id']}/send",
+            f"/api/v1/quotations/{q['public_id']}/send",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(q["version"])},
         )
         sent = send_r.json()
         await inv_client.post(
-            f"/api/v1/quotations/{q['id']}/approve",
+            f"/api/v1/quotations/{q['public_id']}/approve",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(sent["version"])},
         )
         # First conversion
@@ -746,7 +770,7 @@ class TestInvoiceEndpoints:
         i2 = await self._create_inv(inv_client, token, cid)
 
         await inv_client.post(
-            f"/api/v1/invoices/{i1['id']}/issue",
+            f"/api/v1/invoices/{i1['public_id']}/issue",
             headers={"Authorization": f"Bearer {token}", "If-Match": str(i1["version"])},
         )
         r = await inv_client.get(
