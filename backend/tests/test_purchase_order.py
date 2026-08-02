@@ -429,7 +429,10 @@ class TestPOReception:
         # 6/10 = 40% discrepancy > 5% tolerance
         assert data["lines"][0]["match_flag"] == "qty_mismatch"
 
-    async def test_reception_on_draft_fails(self, po_client: AsyncClient) -> None:
+    async def test_reception_on_draft_implicitly_sends_po(self, po_client: AsyncClient) -> None:
+        """Receiving straight off a draft PO is allowed: sending is not a
+        formal step in this garage's workflow, so the draft is implicitly
+        marked 'sent' before the reception is recorded."""
         token = await _login(po_client)
         supplier_id = await _create_supplier(po_client, token)
         part_id = await _create_part(po_client, token, sku="SKU-R02")
@@ -442,6 +445,7 @@ class TestPOReception:
             },
             headers={"Authorization": f"Bearer {token}", "X-Garage-ID": "1"},
         )
+        assert create_resp.json()["status"] == "draft"
         po_id = create_resp.json()["id"]
         line_id = create_resp.json()["lines"][0]["id"]
         version = create_resp.json()["version"]
@@ -449,6 +453,28 @@ class TestPOReception:
         resp = await po_client.post(
             f"/api/v1/purchase-orders/{po_id}/receive",
             json={"version": version, "lines": [{"line_id": line_id, "quantity_received": 3}]},
+            headers={"Authorization": f"Bearer {token}", "X-Garage-ID": "1"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["status"] == "completed"
+        assert data["lines"][0]["quantity_received"] == 3
+
+    async def test_reception_on_cancelled_po_fails(self, po_client: AsyncClient) -> None:
+        token = await _login(po_client)
+        po_id, line_id, version, _ = await self._setup_sent_po(po_client, token, qty=3)
+
+        cancel_resp = await po_client.post(
+            f"/api/v1/purchase-orders/{po_id}/cancel",
+            json={"version": version},
+            headers={"Authorization": f"Bearer {token}", "X-Garage-ID": "1"},
+        )
+        assert cancel_resp.status_code == 200, cancel_resp.text
+        cancelled_version = cancel_resp.json()["version"]
+
+        resp = await po_client.post(
+            f"/api/v1/purchase-orders/{po_id}/receive",
+            json={"version": cancelled_version, "lines": [{"line_id": line_id, "quantity_received": 3}]},
             headers={"Authorization": f"Bearer {token}", "X-Garage-ID": "1"},
         )
         assert resp.status_code == 422
