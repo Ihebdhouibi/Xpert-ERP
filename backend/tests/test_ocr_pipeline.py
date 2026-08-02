@@ -72,6 +72,8 @@ def mock_redis_ocr() -> AsyncMock:
     redis.setex = AsyncMock(return_value=True)
     redis.exists = AsyncMock(return_value=0)
     redis.getdel = AsyncMock(return_value=None)
+    redis.incr = AsyncMock(return_value=1)
+    redis.expire = AsyncMock(return_value=True)
     return redis
 
 
@@ -122,15 +124,35 @@ class TestEnqueueOcr:
         ocr_client: AsyncClient,
         ocr_db: AsyncSession,
     ) -> None:
-        """POST /ocr/enqueue/{document_id} returns 202 with a pending extraction."""
+        """POST /ocr/enqueue/{document_public_id} returns 202 with a pending extraction."""
         mock_upload.return_value = None
         mock_process.return_value = None
+
+        # The endpoint resolves the path UUID to a real document row first
+        # (enqueue_ocr/process_ocr_job are mocked, but that lookup isn't).
+        from app.modules.documents import repository as doc_repo
+        from app.modules.documents.models import DocumentCategory, OwnerEntityType
+
+        doc = await doc_repo.create_document(
+            ocr_db,
+            garage_id=1,
+            owner_entity_type=OwnerEntityType.vehicle,
+            owner_entity_id=None,
+            category=DocumentCategory.registration_card,
+            filename="carte_grise.jpg",
+            mime_type="image/jpeg",
+            size_bytes=512,
+            sha256="aabbcc",
+            storage_key="1/registration_card/carte_grise.jpg",
+            uploaded_by=1,
+        )
+        await ocr_db.commit()
 
         # Create a fake extraction to return
         from app.modules.ocr.models import OcrExtraction
         fake_extraction = OcrExtraction(
             public_id=uuid.uuid4(),
-            document_id=1,
+            document_id=doc.id,
             engine_version="paddleocr-3",
             status=OcrStatus.pending,
         )
@@ -151,7 +173,7 @@ class TestEnqueueOcr:
         user = result.scalar_one()
 
         resp = await ocr_client.post(
-            "/api/v1/ocr/enqueue/1",
+            f"/api/v1/ocr/enqueue/{doc.public_id}",
             headers=_auth_header(user.id),
         )
         assert resp.status_code == 202
@@ -204,10 +226,12 @@ class TestProcessOcrJob:
 
         with (
             patch("app.modules.documents.storage.download_object", new_callable=AsyncMock) as mock_dl,
-            patch("app.modules.ocr.engine.PaddleOcrEngine.run_ocr", new_callable=AsyncMock) as mock_ocr,
+            patch("app.modules.ocr.service.get_ocr_engine") as mock_get_engine,
         ):
             mock_dl.return_value = b"\xff\xd8\xff\xe0" + b"x" * 512
-            mock_ocr.return_value = high_conf_result
+            mock_get_engine.return_value = MagicMock(
+                run_ocr=AsyncMock(return_value=high_conf_result)
+            )
 
             updated = await process_ocr_job(ocr_db, extraction_id=extraction.id)
 
@@ -251,10 +275,12 @@ class TestProcessOcrJob:
 
         with (
             patch("app.modules.documents.storage.download_object", new_callable=AsyncMock) as mock_dl,
-            patch("app.modules.ocr.engine.PaddleOcrEngine.run_ocr", new_callable=AsyncMock) as mock_ocr,
+            patch("app.modules.ocr.service.get_ocr_engine") as mock_get_engine,
         ):
             mock_dl.return_value = b"\xff\xd8\xff\xe0" + b"x" * 512
-            mock_ocr.return_value = low_conf_result
+            mock_get_engine.return_value = MagicMock(
+                run_ocr=AsyncMock(return_value=low_conf_result)
+            )
 
             updated = await process_ocr_job(ocr_db, extraction_id=extraction.id)
 
@@ -391,10 +417,10 @@ class TestSupplierInvoiceOcr:
         )
         with (
             patch("app.modules.documents.storage.download_object", new_callable=AsyncMock) as mock_dl,
-            patch("app.modules.ocr.engine.PaddleOcrEngine.run_ocr", new_callable=AsyncMock) as mock_ocr,
+            patch("app.modules.ocr.service.get_ocr_engine") as mock_get_engine,
         ):
             mock_dl.return_value = b"%PDF-1.7 fake"
-            mock_ocr.return_value = result
+            mock_get_engine.return_value = MagicMock(run_ocr=AsyncMock(return_value=result))
             updated = await process_ocr_job(ocr_db, extraction_id=extraction.id)
         return extraction, updated
 
