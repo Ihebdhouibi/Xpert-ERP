@@ -103,6 +103,8 @@ def mock_redis() -> AsyncMock:
     r.setex = AsyncMock(return_value=True)
     r.exists = AsyncMock(return_value=0)
     r.getdel = AsyncMock(return_value=None)
+    r.incr = AsyncMock(return_value=1)
+    r.expire = AsyncMock(return_value=True)
     return r
 
 
