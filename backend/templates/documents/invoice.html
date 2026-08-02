@@ -3,7 +3,11 @@
 {% block content %}
 
 <!-- Document title -->
-<div class="doc-title">FACTURE</div>
+{% if doc.status.value == "cancelled" %}
+  <div class="doc-title" style="background-color:#c0392b;">FACTURE — ANNULÉE</div>
+{% else %}
+  <div class="doc-title">FACTURE</div>
+{% endif %}
 
 <!-- Document meta -->
 <div class="doc-meta">
