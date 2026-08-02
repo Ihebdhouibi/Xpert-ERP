@@ -34,8 +34,8 @@ export function CustomerAutocomplete({
 
   const { data, isFetching } = useQuery({
     queryKey: ['customer-search', inputValue],
-    queryFn: () => customerApi.list({ q: inputValue, page_size: 10, status: 'active' }),
-    enabled: inputValue.length >= 1 || value === null,
+    queryFn: () => customerApi.list({ q: inputValue, page_size: 20, status: 'active' }),
+    enabled: inputValue.length >= 1,
     staleTime: 10_000,
   })
 
