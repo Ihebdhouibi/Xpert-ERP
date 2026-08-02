@@ -395,5 +395,3 @@ async def send_credit_limit_alert_email(
             context=context,
             respect_quiet_hours=False,
         )
-
-    return total
