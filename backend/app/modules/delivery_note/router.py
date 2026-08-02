@@ -1,6 +1,7 @@
 """Delivery Note router — CRUD and lifecycle endpoints."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -75,6 +76,8 @@ async def list_delivery_notes(
     status_filter: Optional[DeliveryNoteStatus] = Query(None, alias="status"),
     available_for_invoice: bool = Query(False),
     search: Optional[str] = Query(None, max_length=100),
+    date_from: Optional[datetime] = Query(None, description="Only delivery notes created on/after this date"),
+    date_to: Optional[datetime] = Query(None, description="Only delivery notes created on/before this date"),
     sort_by: Optional[str] = Query(None),
     sort_dir: Literal["asc", "desc"] = Query("desc"),
     page: int = Query(1, ge=1),
@@ -85,7 +88,8 @@ async def list_delivery_notes(
         db, user.garage_id,
         customer_id=customer_id, status=status_filter,
         available_for_invoice=available_for_invoice,
-        search=search, sort_by=sort_by, sort_dir=sort_dir,
+        search=search, date_from=date_from, date_to=date_to,
+        sort_by=sort_by, sort_dir=sort_dir,
         page=page, page_size=page_size,
     )
 

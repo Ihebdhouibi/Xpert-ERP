@@ -1,6 +1,7 @@
 """Delivery Note repository — all DB queries."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import func, or_, select
@@ -72,6 +73,8 @@ async def list_delivery_notes(
     status: Optional[DeliveryNoteStatus] = None,
     available_for_invoice: bool = False,
     search: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     sort_by: Optional[str] = None,
     sort_dir: str = "desc",
     page: int = 1,
@@ -90,6 +93,10 @@ async def list_delivery_notes(
             DeliveryNote.status.in_([DeliveryNoteStatus.issued, DeliveryNoteStatus.delivered]),
             DeliveryNote.invoice_id.is_(None),
         )
+    if date_from is not None:
+        base = base.where(DeliveryNote.created_at >= date_from)
+    if date_to is not None:
+        base = base.where(DeliveryNote.created_at <= date_to)
 
     needs_customer_join = bool(search) or sort_by == "customer_name"
     if needs_customer_join:

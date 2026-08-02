@@ -289,6 +289,8 @@ async def list_delivery_notes(
     status: Optional[DeliveryNoteStatus] = None,
     available_for_invoice: bool = False,
     search: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
     sort_by: Optional[str] = None,
     sort_dir: str = "desc",
     page: int = 1,
@@ -300,7 +302,8 @@ async def list_delivery_notes(
     items, total = await repo.list_delivery_notes(
         db, garage_id, customer_id=customer_id, status=status,
         available_for_invoice=available_for_invoice,
-        search=search, sort_by=sort_by, sort_dir=sort_dir,
+        search=search, date_from=date_from, date_to=date_to,
+        sort_by=sort_by, sort_dir=sort_dir,
         page=page, page_size=page_size,
     )
     cust_ids = list({d.customer_id for d in items})
