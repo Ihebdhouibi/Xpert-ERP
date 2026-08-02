@@ -26,7 +26,7 @@ from app.modules.payment.schemas import PaymentCreateRequest
 # Permissions needed
 # ---------------------------------------------------------------------------
 
-PERMISSIONS = ["invoice.pay", "invoice.read", "quotation.read"]
+PERMISSIONS = ["payment.record", "invoice.read", "quotation.read"]
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -70,6 +70,8 @@ def mock_redis() -> AsyncMock:
     redis.setex = AsyncMock(return_value=True)
     redis.exists = AsyncMock(return_value=0)
     redis.getdel = AsyncMock(return_value=None)
+    redis.incr = AsyncMock(return_value=1)
+    redis.expire = AsyncMock(return_value=True)
     return redis
 
 
