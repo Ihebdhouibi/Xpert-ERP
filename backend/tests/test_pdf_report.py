@@ -139,26 +139,26 @@ class _FakeRO:
 class TestTemplateRendering:
     def _make_settings(self, **overrides):
         cfg = MagicMock()
-        cfg.cfg_garage_name = overrides.get("cfg_garage_name", "Test Garage")
-        cfg.cfg_garage_address = overrides.get("cfg_garage_address", "1 Rue Test, 1000 Tunis")
-        cfg.cfg_garage_phone = overrides.get("cfg_garage_phone", "+216 71 000 000")
-        cfg.cfg_garage_email = overrides.get("cfg_garage_email", "test@garage.tn")
-        cfg.cfg_logo_url = overrides.get("cfg_logo_url", "")
-        cfg.cfg_legal_footer = overrides.get("cfg_legal_footer", "SARL — RC 12345")
+        cfg.pdf_garage_name = overrides.get("pdf_garage_name", "Test Garage")
+        cfg.pdf_garage_address = overrides.get("pdf_garage_address", "1 Rue Test, 1000 Tunis")
+        cfg.pdf_garage_phone = overrides.get("pdf_garage_phone", "+216 71 000 000")
+        cfg.pdf_garage_email = overrides.get("pdf_garage_email", "test@garage.tn")
+        cfg.pdf_garage_logo_path = overrides.get("pdf_garage_logo_path", "")
+        cfg.pdf_legal_mention = overrides.get("pdf_legal_mention", "SARL — RC 12345")
         cfg.cfg_gtk3_dll_dir = ""
         return cfg
 
     async def test_html_contains_garage_name(self):
         from app.modules.repair_order.pdf_service import _render_html
         ro = _FakeRO()
-        settings = self._make_settings(cfg_garage_name="Garage Dupont")
+        settings = self._make_settings(pdf_garage_name="Garage Dupont")
         html = _render_html(ro, None, None, "—", settings)
         assert "Garage Dupont" in html
 
     async def test_html_contains_legal_footer(self):
         from app.modules.repair_order.pdf_service import _render_html
         ro = _FakeRO()
-        settings = self._make_settings(cfg_legal_footer="RC 99999 — TVA FR12345678901")
+        settings = self._make_settings(pdf_legal_mention="RC 99999 — TVA FR12345678901")
         html = _render_html(ro, None, None, "—", settings)
         assert "RC 99999" in html
 
@@ -186,7 +186,7 @@ class TestTemplateRendering:
     async def test_html_uses_logo_url_when_set(self):
         from app.modules.repair_order.pdf_service import _render_html
         ro = _FakeRO()
-        settings = self._make_settings(cfg_logo_url="https://example.com/logo.png")
+        settings = self._make_settings(pdf_garage_logo_path="https://example.com/logo.png")
         html = _render_html(ro, None, None, "—", settings)
         assert "https://example.com/logo.png" in html
         assert '<img' in html
@@ -194,7 +194,7 @@ class TestTemplateRendering:
     async def test_html_falls_back_to_text_name_when_no_logo(self):
         from app.modules.repair_order.pdf_service import _render_html
         ro = _FakeRO()
-        settings = self._make_settings(cfg_logo_url="", cfg_garage_name="No Logo Garage")
+        settings = self._make_settings(pdf_garage_logo_path="", pdf_garage_name="No Logo Garage")
         html = _render_html(ro, None, None, "—", settings)
         assert "No Logo Garage" in html
         assert '<img' not in html
