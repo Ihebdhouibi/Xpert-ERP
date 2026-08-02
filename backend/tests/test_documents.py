@@ -29,9 +29,20 @@ def _make_pdf(size: int = 512) -> bytes:
     return header + b"x" * max(0, size - len(header))
 
 
-def _make_jpeg(size: int = 512) -> bytes:
-    header = b"\xff\xd8\xff\xe0"
-    return header + b"x" * max(0, size - len(header))
+def _make_jpeg() -> bytes:
+    """A real, tiny, PIL-decodable JPEG.
+
+    Documents uploaded under an OCR-triggering category (e.g.
+    registration_card) get processed by the OCR background task on
+    upload, which decodes the bytes with PIL — a fake magic-byte
+    placeholder (like _make_pdf's) fails there with UnidentifiedImageError.
+    """
+    from PIL import Image
+
+    img = Image.new("RGB", (32, 32), color=(255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +96,8 @@ def mock_redis_doc() -> AsyncMock:
     redis.setex = AsyncMock(return_value=True)
     redis.exists = AsyncMock(return_value=0)
     redis.getdel = AsyncMock(return_value=None)
+    redis.incr = AsyncMock(return_value=1)
+    redis.expire = AsyncMock(return_value=True)
     return redis
 
 
@@ -452,4 +465,3 @@ class TestDocumentArchiver:
         assert archived >= 1
         mock_copy.assert_awaited()
         mock_delete.assert_awaited()
-
