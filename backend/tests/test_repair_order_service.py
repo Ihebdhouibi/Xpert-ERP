@@ -77,15 +77,8 @@ class TestStateMachine:
     def test_paused_parts_can_go_back_to_in_repair(self):
         assert can_transition(ROStatus.paused_parts, ROStatus.in_repair)
 
-    def test_paused_approval_can_go_back_to_diagnosis(self):
-        assert can_transition(ROStatus.paused_approval, ROStatus.diagnosis)
-
-    def test_all_active_states_can_reach_paused_approval(self):
-        pausable = {ROStatus.created, ROStatus.diagnosis, ROStatus.in_repair, ROStatus.finished}
-        for status in pausable:
-            assert can_transition(status, ROStatus.paused_approval), (
-                f"Expected {status} → paused_approval to be allowed"
-            )
+    def test_paused_parts_can_go_back_to_diagnosis(self):
+        assert can_transition(ROStatus.paused_parts, ROStatus.diagnosis)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +184,10 @@ class TestStatusTransition:
         pid = str(ro.public_id)
 
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis)
+        ro.assigned_user_id = ACTOR
+        ro.assignment_accepted_at = datetime.now()
+        ro.diagnosis_completed_at = datetime.now()
+        await db_session.flush()
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.in_repair)
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.finished)
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.delivered)
@@ -202,6 +199,10 @@ class TestStatusTransition:
         pid = str(ro.public_id)
 
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.diagnosis)
+        ro.assigned_user_id = ACTOR
+        ro.assignment_accepted_at = datetime.now()
+        ro.diagnosis_completed_at = datetime.now()
+        await db_session.flush()
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.in_repair)
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.paused_parts)
         ro = await RepairOrderService.transition_status(db_session, GARAGE, ACTOR, pid, ROStatus.in_repair)
@@ -311,8 +312,9 @@ class TestLaborLines:
             duration_minutes=0,
             rate_minor=5000,  # 50.00
         )
-        # Labor is a flat price: amount = rate (duration is no longer a factor)
-        assert updated.actual_cost_minor == 5000
+        # Labor is a flat price with TVA (20%) added: amount = rate * 1.20
+        # (duration is no longer a factor)
+        assert updated.actual_cost_minor == 6000
 
     async def test_multiple_labor_lines_sum_correctly(self, db_session: AsyncSession):
         ro = await _create_ro(db_session)
@@ -325,8 +327,8 @@ class TestLaborLines:
         updated = await RepairOrderService.add_labor_line(
             db_session, GARAGE, ACTOR, pid, "Labor B", 0, 5000
         )
-        # Flat price per line: 4000 + 5000 = 9,000
-        assert updated.actual_cost_minor == 9000
+        # Flat price per line with TVA (20%): 4000*1.2 + 5000*1.2 = 4800 + 6000 = 10,800
+        assert updated.actual_cost_minor == 10800
 
 
 # ---------------------------------------------------------------------------
@@ -345,8 +347,8 @@ class TestPartLines:
             quantity=2,
             unit_cost_minor=1500,  # 15.00
         )
-        # amount = 2 * 1500 = 3,000
-        assert updated.actual_cost_minor == 3000
+        # amount = 2 * 1500 * 1.20 TVA = 3,600
+        assert updated.actual_cost_minor == 3600
 
     async def test_labor_and_part_combined_cost(self, db_session: AsyncSession):
         ro = await _create_ro(db_session)
@@ -355,11 +357,11 @@ class TestPartLines:
 
         await RepairOrderService.add_labor_line(
             db_session, GARAGE, ACTOR, pid, "Labor", 0, 5000
-        )  # flat 5,000
+        )  # 5000 * 1.2 TVA = 6,000
         updated = await RepairOrderService.add_part_line(
             db_session, GARAGE, ACTOR, pid, "Filter", 1, 2000
-        )  # 2,000
-        assert updated.actual_cost_minor == 7000
+        )  # 2000 * 1.2 TVA = 2,400
+        assert updated.actual_cost_minor == 8400
 
 
 # ---------------------------------------------------------------------------

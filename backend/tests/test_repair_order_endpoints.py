@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.redis import get_redis
 from app.main import create_app
-from app.modules.auth.models import Permission, Role, RolePermission
+from app.modules.auth.models import AppUser, Permission, Role, RolePermission
 
 RO_PERMISSIONS = (
     "repair_order.read",
@@ -87,6 +87,34 @@ async def _login(client: AsyncClient) -> str:
 
 def _auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}", "X-Garage-ID": "1"}
+
+
+async def _complete_diagnosis(client: AsyncClient, token: str, db: AsyncSession, ro_id: str) -> None:
+    """Assign a mechanic, accept the assignment, and complete the diagnosis form —
+    the preconditions the diagnosis → in_repair transition now enforces."""
+    admin_id = (
+        await db.execute(select(AppUser.id).where(AppUser.email == "admin@test.com"))
+    ).scalar_one()
+    resp = await client.put(
+        f"/api/v1/repair-orders/{ro_id}/assign",
+        json={"user_id": admin_id},
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.post(
+        f"/api/v1/repair-orders/{ro_id}/accept-assignment",
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await client.put(
+        f"/api/v1/repair-orders/{ro_id}/diagnosis",
+        json={
+            "answers": {"D1": False, "D2": False, "D3": False, "D4": False, "D5": False},
+            "completed": True,
+        },
+        headers=_auth(token),
+    )
+    assert resp.status_code == 200, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -311,7 +339,7 @@ class TestStatusTransition:
         assert resp.status_code == 409
         assert resp.json()["detail"]["code"] == "invalid_transition"
 
-    async def test_full_lifecycle(self, ro_client: AsyncClient):
+    async def test_full_lifecycle(self, ro_client: AsyncClient, ro_seeded_db: AsyncSession):
         token = await _login(ro_client)
         create_resp = await ro_client.post(
             "/api/v1/repair-orders",
@@ -321,6 +349,10 @@ class TestStatusTransition:
         pid = create_resp.json()["id"]
 
         for new_status in ["diagnosis", "in_repair", "finished", "delivered"]:
+            if new_status == "in_repair":
+                # diagnosis → in_repair now requires an accepted mechanic
+                # assignment and a completed diagnosis form.
+                await _complete_diagnosis(ro_client, token, ro_seeded_db, pid)
             resp = await ro_client.post(
                 f"/api/v1/repair-orders/{pid}/status-transition",
                 json={"new_status": new_status},
@@ -351,8 +383,9 @@ class TestLaborLines:
             headers=_auth(token),
         )
         assert resp.status_code == 200
-        # Labor is a flat price: amount = rate, duration is no longer sent
-        assert resp.json()["actual_cost_minor"] == 4000
+        # Labor is a flat price with TVA (20%) added: amount = rate * 1.20
+        # (duration is no longer sent)
+        assert resp.json()["actual_cost_minor"] == 4800
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +409,8 @@ class TestPartLines:
             headers=_auth(token),
         )
         assert resp.status_code == 200
-        assert resp.json()["actual_cost_minor"] == 2500
+        # amount = 1 * 2500 * 1.20 TVA = 3,000
+        assert resp.json()["actual_cost_minor"] == 3000
 
 
 # ---------------------------------------------------------------------------
