@@ -29,6 +29,7 @@ import PersonAddRoundedIcon from '@mui/icons-material/PersonAddRounded'
 import { invoiceApi, INVOICE_STATUS_LABELS, type InvoiceOut, type InvoiceStatus } from '../../lib/invoiceApi'
 import { customerApi } from '../../lib/customerApi'
 import { deliveryNoteApi, type DeliveryNoteOut } from '../../lib/deliveryNoteApi'
+import { getPeriodRange, DATE_RANGE_PERIOD_LABELS, type DateRangePeriod } from '../../lib/dateRangePresets'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
@@ -244,10 +245,13 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
   const [customerError, setCustomerError] = useState(false)
   const [dueAtError, setDueAtError] = useState(false)
   const [selectedBls, setSelectedBls] = useState<DeliveryNoteOut[]>([])
+  const [blPeriod, setBlPeriod] = useState<DateRangePeriod | 'all'>('all')
+
+  const blRange = blPeriod === 'all' ? undefined : getPeriodRange(blPeriod)
 
   const { data: blsData, isLoading: blsLoading } = useQuery({
-    queryKey: ['delivery-notes', 'available-for-invoice', customerId],
-    queryFn: () => deliveryNoteApi.listAvailableForInvoice(customerId!),
+    queryKey: ['delivery-notes', 'available-for-invoice', customerId, blPeriod],
+    queryFn: () => deliveryNoteApi.listAvailableForInvoice(customerId!, blRange),
     enabled: !!customerId,
   })
 
@@ -283,6 +287,12 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
     setCustomerId(id)
     setCustomerError(false)
     setSelectedBls([])
+    setBlPeriod('all')
+  }
+
+  function handlePeriodChange(newPeriod: DateRangePeriod | 'all') {
+    setBlPeriod(newPeriod)
+    setSelectedBls([])
   }
 
   function handleSubmit() {
@@ -299,6 +309,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
     setDueAt('')
     setNotes('')
     setSelectedBls([])
+    setBlPeriod('all')
     setCustomerError(false)
     setDueAtError(false)
     onClose()
@@ -316,6 +327,20 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
             error={customerError}
             helperText={customerError ? 'Sélectionnez un client' : undefined}
           />
+          {customerId && (
+            <ToggleButtonGroup
+              value={blPeriod}
+              exclusive
+              size="small"
+              onChange={(_, newPeriod) => { if (newPeriod) handlePeriodChange(newPeriod) }}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              <ToggleButton value="all">Tous</ToggleButton>
+              {(Object.keys(DATE_RANGE_PERIOD_LABELS) as DateRangePeriod[]).map(p => (
+                <ToggleButton key={p} value={p}>{DATE_RANGE_PERIOD_LABELS[p]}</ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          )}
           {customerId && (
             <Autocomplete
               multiple

@@ -99,6 +99,8 @@ export const deliveryNoteApi = {
     customer_id?: number
     status?: DeliveryNoteStatus
     search?: string
+    date_from?: string
+    date_to?: string
     sort_by?: string
     sort_dir?: 'asc' | 'desc'
     page?: number
@@ -108,9 +110,18 @@ export const deliveryNoteApi = {
     return data
   },
 
-  listAvailableForInvoice: async (customerId: number): Promise<DeliveryNoteListResponse> => {
+  listAvailableForInvoice: async (
+    customerId: number,
+    range?: { date_from?: string; date_to?: string },
+  ): Promise<DeliveryNoteListResponse> => {
     const { data } = await apiClient.get<DeliveryNoteListResponse>('/delivery-notes', {
-      params: { customer_id: customerId, available_for_invoice: true, page_size: 200 },
+      params: {
+        customer_id: customerId,
+        available_for_invoice: true,
+        page_size: 200,
+        date_from: range?.date_from,
+        date_to: range?.date_to,
+      },
     })
     return data
   },
