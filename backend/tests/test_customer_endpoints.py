@@ -145,7 +145,10 @@ class TestCreateEndpoint:
         resp = await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "Alice"},
+            json={
+                "type": "individual", "full_name": "Alice",
+                "fiscal_id": "FID-ALICE", "phone_e164": "+33611111111",
+            },
         )
         assert resp.status_code == 201
         data = resp.json()
@@ -164,6 +167,8 @@ class TestCreateEndpoint:
                 "type": "company",
                 "full_name": "ACME Auto",
                 "company_name": "ACME Auto SARL",
+                "fiscal_id": "12345678901234",
+                "phone_e164": "+33612345678",
                 "contacts": [
                     {"channel": "phone", "value": "+212611111111", "is_primary": True},
                     {"channel": "email", "value": "c@a.com"},
@@ -205,7 +210,7 @@ class TestCreateEndpoint:
             headers=_auth(token),
             json={
                 "type": "individual", "full_name": "Original",
-                "fiscal_id": "F-1", "phone_e164": "+212611111111",
+                "fiscal_id": "F-1", "phone_e164": "+33611111111",
             },
         )
         resp = await customer_client.post(
@@ -213,7 +218,7 @@ class TestCreateEndpoint:
             headers=_auth(token),
             json={
                 "type": "individual", "full_name": "Duplicate",
-                "fiscal_id": "F-1", "phone_e164": "+212611111111",
+                "fiscal_id": "F-1", "phone_e164": "+33611111111",
             },
         )
         assert resp.status_code == 409
@@ -234,7 +239,10 @@ class TestUpdateEndpoint:
         resp = await client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "Original"},
+            json={
+                "type": "individual", "full_name": "Original",
+                "fiscal_id": "FID-UPDATE", "phone_e164": "+33611111111",
+            },
         )
         assert resp.status_code == 201
         return resp.json()
@@ -303,7 +311,10 @@ class TestDeleteRestore:
         created = (await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "DeleteMe"},
+            json={
+                "type": "individual", "full_name": "DeleteMe",
+                "fiscal_id": "FID-DELETE", "phone_e164": "+33611111111",
+            },
         )).json()
         pid = created["id"]
 
@@ -324,7 +335,10 @@ class TestDeleteRestore:
         created = (await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "Restore"},
+            json={
+                "type": "individual", "full_name": "Restore",
+                "fiscal_id": "FID-RESTORE", "phone_e164": "+33611111111",
+            },
         )).json()
         pid = created["id"]
         await customer_client.delete(f"/api/v1/customers/{pid}", headers=_auth(token))
@@ -347,11 +361,14 @@ class TestSearch:
         self, customer_client: AsyncClient
     ) -> None:
         token = await _login(customer_client)
-        for name in ("Sami Hammoussi", "Mohammed Ali", "Atlas Auto"):
+        for i, name in enumerate(("Sami Hammoussi", "Mohammed Ali", "Atlas Auto")):
             await customer_client.post(
                 "/api/v1/customers",
                 headers=_auth(token),
-                json={"type": "individual", "full_name": name},
+                json={
+                    "type": "individual", "full_name": name,
+                    "fiscal_id": f"FID-SEARCH-{i}", "phone_e164": f"+3361111111{i}",
+                },
             )
 
         resp = await customer_client.get(
@@ -379,7 +396,10 @@ class TestAuditPersisted:
         await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "Audited"},
+            json={
+                "type": "individual", "full_name": "Audited",
+                "fiscal_id": "FID-AUDITED", "phone_e164": "+33611111111",
+            },
         )
 
         result = await customer_seeded_db.execute(

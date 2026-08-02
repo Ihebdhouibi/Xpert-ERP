@@ -29,11 +29,15 @@ ACTOR = 1  # in tests we just store an int; no FK enforcement on SQLite tests
 
 def _basic_payload(
     *,
-    fiscal_id: str | None = None,
-    phone: str | None = None,
+    fiscal_id: str = "FID-DEFAULT",
+    phone: str = "+33600000000",
     email: str | None = None,
     full_name: str = "Test Customer",
 ) -> CustomerCreateRequest:
+    """fiscal_id and phone_e164 are mandatory on CustomerCreateRequest (French
+    clients only — phone must be a +33 number); default to harmless values so
+    callers only need to override them when the test is about duplicate
+    detection or fiscal_id/phone specifically."""
     return CustomerCreateRequest(
         type="individual",
         full_name=full_name,
@@ -70,8 +74,10 @@ class TestCreateCustomer:
             type="company",
             full_name="ACME Auto",
             company_name="ACME Auto SARL",
+            fiscal_id="12345678901234",
+            phone_e164="+33612345678",
             contacts=[
-                CustomerContactCreate(channel="phone", value="+212611111111", is_primary=True),
+                CustomerContactCreate(channel="phone", value="+33611111111", is_primary=True),
                 CustomerContactCreate(channel="email", value="contact@acme.ma"),
             ],
         )
@@ -86,13 +92,13 @@ class TestCreateCustomer:
     ) -> None:
         await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212611111111"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111"),
         )
         await db_session.commit()
 
         result = await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212611111111", full_name="Other"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111", full_name="Other"),
         )
         assert isinstance(result, svc.DuplicateMatch)
         assert result.reason == MergeMatchReason.PHONE_AND_FISCAL_ID
@@ -102,13 +108,15 @@ class TestCreateCustomer:
     ) -> None:
         await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", email="x@y.com"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111", email="x@y.com"),
         )
         await db_session.commit()
 
         result = await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", email="x@y.com", full_name="Other"),
+            payload=_basic_payload(
+                fiscal_id="F-1", phone="+33622222222", email="x@y.com", full_name="Other",
+            ),
         )
         assert isinstance(result, svc.DuplicateMatch)
         assert result.reason == MergeMatchReason.EMAIL_AND_FISCAL_ID
@@ -118,30 +126,32 @@ class TestCreateCustomer:
         merge prompt (cleaner than letting the DB partial-unique 500)."""
         await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212611111111"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111"),
         )
         await db_session.commit()
 
         result = await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212699999999", full_name="X"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33699999999", full_name="X"),
         )
         assert isinstance(result, svc.DuplicateMatch)
         assert result.reason == MergeMatchReason.FISCAL_ID_ONLY
 
-    async def test_no_fiscal_id_no_merge_check(
+    async def test_different_fiscal_id_no_merge_check(
         self, db_session: AsyncSession
     ) -> None:
-        """Without fiscal_id the merge rule has no anchor: always creates."""
+        """fiscal_id is mandatory now, but it's still the merge anchor: a
+        matching phone alone (different fiscal_id) never triggers a merge
+        prompt."""
         await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(phone="+212611111111"),
+            payload=_basic_payload(fiscal_id="F-A", phone="+33611111111"),
         )
         await db_session.commit()
 
         result = await svc.create_customer(
             db_session, garage_id=GARAGE, actor_user_id=ACTOR,
-            payload=_basic_payload(phone="+212611111111", full_name="Other"),
+            payload=_basic_payload(fiscal_id="F-B", phone="+33611111111", full_name="Other"),
         )
         assert isinstance(result, Customer)
 
@@ -151,13 +161,13 @@ class TestCreateCustomer:
         """Two garages can hold customers with the same fiscal_id + phone."""
         await svc.create_customer(
             db_session, garage_id=1, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212611111111"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111"),
         )
         await db_session.commit()
 
         result = await svc.create_customer(
             db_session, garage_id=2, actor_user_id=ACTOR,
-            payload=_basic_payload(fiscal_id="F-1", phone="+212611111111", full_name="Garage2"),
+            payload=_basic_payload(fiscal_id="F-1", phone="+33611111111", full_name="Garage2"),
         )
         assert isinstance(result, Customer)
 
