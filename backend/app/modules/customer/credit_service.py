@@ -335,6 +335,8 @@ async def recompute_outstanding(
         db.add(customer)
         await db.flush()
 
+    return total
+
 
 # ---------------------------------------------------------------------------
 # Manual credit-limit alert email (triggered from the in-app notification)
