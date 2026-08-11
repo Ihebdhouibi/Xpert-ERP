@@ -94,6 +94,7 @@ async def seeded_pdf_db(db_session: AsyncSession) -> AsyncSession:
 @pytest.fixture
 def mock_redis() -> AsyncMock:
     redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
     redis.setex = AsyncMock(return_value=True)
     redis.exists = AsyncMock(return_value=0)
     redis.getdel = AsyncMock(return_value=None)
@@ -243,7 +244,9 @@ def _base_ctx(*, currency_symbol: str = "€") -> dict:
         "garage_logo_path": "",
         "vat_number": "FR99123456789",
         "legal_mention": "Mention légale de test.",
-        "bank_details": "IBAN: FR76 0000 0000 0000 0000 0000 000",
+        "bank_iban": "FR76 0000 0000 0000 0000 0000 000",
+        "bank_bic": "TESTFRPP",
+        "bank_holder": "TEST GARAGE SARL",
         "footer_text": "Merci de votre confiance.",
         "payment_terms": "Paiement à 30 jours",
         "currency_symbol": currency_symbol,
@@ -418,12 +421,16 @@ class TestInvoiceTemplate:
         assert "INV-2026-00001" in html
 
     def test_shows_paid_status_colour(self) -> None:
+        """Invoices only get a distinct title treatment for "cancelled" —
+        "paid" must still render the plain title without crashing or
+        picking up the cancelled wording."""
         env = _make_jinja_env()
         tmpl = env.get_template("invoice.html")
         doc = _make_invoice()
         doc.status = SimpleNamespace(value="paid")
         html = tmpl.render(**_base_ctx(), doc=doc, customer=_make_customer(), vehicle=None)
-        assert "SOLDÉE" in html or "paid" in html.lower()
+        assert "FACTURE" in html
+        assert "Annulée" not in html
 
     def test_shows_cancelled_status_colour(self) -> None:
         env = _make_jinja_env()
@@ -431,7 +438,7 @@ class TestInvoiceTemplate:
         doc = _make_invoice()
         doc.status = SimpleNamespace(value="cancelled")
         html = tmpl.render(**_base_ctx(), doc=doc, customer=_make_customer(), vehicle=None)
-        assert "ANNULÉE" in html
+        assert "Annulée" in html
 
     def test_shows_partial_payment(self) -> None:
         env = _make_jinja_env()
@@ -443,15 +450,19 @@ class TestInvoiceTemplate:
             vehicle=None,
         )
         assert "Montant réglé" in html
-        assert "Reste à payer" in html
+        assert "Net à payer" in html
 
     def test_renders_bank_details(self) -> None:
+        """Bank details render once, in the shared running footer — not
+        inline in the invoice body — so every document type gets them."""
         env = _make_jinja_env()
         tmpl = env.get_template("invoice.html")
         html = tmpl.render(
             **_base_ctx(), doc=_make_invoice(), customer=_make_customer(), vehicle=None
         )
-        assert "IBAN" in html
+        assert "FR76 0000 0000 0000 0000 0000 000" in html
+        assert "TESTFRPP" in html
+        assert "TEST GARAGE SARL" in html
 
     def test_renders_without_customer(self) -> None:
         env = _make_jinja_env()
@@ -467,7 +478,9 @@ class TestInvoiceTemplate:
 
 @pytest.mark.asyncio
 class TestPdfServiceQuotation:
-    async def test_render_quotation_pdf_returns_bytes(self, db_session: AsyncSession) -> None:
+    async def test_render_quotation_pdf_returns_bytes(
+        self, db_session: AsyncSession, mock_redis: AsyncMock
+    ) -> None:
         from app.modules.pdf import service as pdf_svc
 
         mock_quotation = _make_quotation()
@@ -493,7 +506,7 @@ class TestPdfServiceQuotation:
             ),
         ):
             result = await pdf_svc.render_quotation_pdf(
-                db_session, quotation_id=1, garage_id=1
+                db_session, quotation_id=1, garage_id=1, redis=mock_redis
             )
             assert isinstance(result, bytes)
             assert result == fake_pdf_bytes
@@ -510,13 +523,15 @@ class TestPdfServiceQuotation:
         ):
             with pytest.raises(ValueError, match="not found"):
                 await pdf_svc.render_quotation_pdf(
-                    db_session, quotation_id=999, garage_id=1
+                    db_session, quotation_id=999, garage_id=1, redis=AsyncMock()
                 )
 
 
 @pytest.mark.asyncio
 class TestPdfServiceInvoice:
-    async def test_render_invoice_pdf_returns_bytes(self, db_session: AsyncSession) -> None:
+    async def test_render_invoice_pdf_returns_bytes(
+        self, db_session: AsyncSession, mock_redis: AsyncMock
+    ) -> None:
         from app.modules.pdf import service as pdf_svc
 
         mock_invoice = _make_invoice()
@@ -542,7 +557,7 @@ class TestPdfServiceInvoice:
             ),
         ):
             result = await pdf_svc.render_invoice_pdf(
-                db_session, invoice_id=1, garage_id=1
+                db_session, invoice_id=1, garage_id=1, redis=mock_redis
             )
             assert isinstance(result, bytes)
             assert result == fake_pdf_bytes
@@ -559,11 +574,11 @@ class TestPdfServiceInvoice:
         ):
             with pytest.raises(ValueError, match="not found"):
                 await pdf_svc.render_invoice_pdf(
-                    db_session, invoice_id=999, garage_id=1
+                    db_session, invoice_id=999, garage_id=1, redis=AsyncMock()
                 )
 
     async def test_render_invoice_pdf_fetches_vehicle_when_present(
-        self, db_session: AsyncSession
+        self, db_session: AsyncSession, mock_redis: AsyncMock
     ) -> None:
         from app.modules.pdf import service as pdf_svc
 
@@ -592,7 +607,7 @@ class TestPdfServiceInvoice:
             ) as mock_veh_repo,
         ):
             result = await pdf_svc.render_invoice_pdf(
-                db_session, invoice_id=1, garage_id=1
+                db_session, invoice_id=1, garage_id=1, redis=mock_redis
             )
             mock_veh_repo.assert_called_once()
             assert result == fake_pdf_bytes
