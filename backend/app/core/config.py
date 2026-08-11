@@ -169,8 +169,8 @@ class Settings(BaseSettings):
     # PDF / Document printing
     # -------------------------------------------------------------------------
     pdf_garage_name: str = "Motors Utilitaires"
-    pdf_garage_address: str = ""
-    pdf_garage_phone: str = ""
+    pdf_garage_address: str = "868 boulevard de la Libération\n13730 Saint-Victoret, France"
+    pdf_garage_phone: str = "07 82 07 26 02"
     pdf_garage_email: str = ""
     pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
     pdf_vat_number: str = ""
