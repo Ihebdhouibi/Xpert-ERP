@@ -1,59 +1,32 @@
 {% extends "base.html" %}
 
-{% block content %}
+{% block doc_title %}
+<div class="doc-title-text">
+  BON DE COMMANDE
+  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulé</span>
+  {% elif doc.status.value == "completed" %}<span class="status-suffix status-green"> — Complété</span>
+  {% endif %}
+</div>
+<div class="doc-meta-line">
+  N° {{ doc.doc_number or "—" }}
+  &nbsp;·&nbsp; Émission {{ doc.created_at.strftime("%d/%m/%Y") if doc.created_at else "—" }}
+  &nbsp;·&nbsp; Livraison prévue {{ doc.expected_delivery_date.strftime("%d/%m/%Y") if doc.expected_delivery_date else "—" }}
+</div>
+{% endblock %}
 
-<!-- Document title -->
-{% if doc.status.value == "cancelled" %}
-  <div class="doc-title" style="background-color:#c0392b;">BON DE COMMANDE — ANNULÉ</div>
-{% elif doc.status.value == "completed" %}
-  <div class="doc-title" style="background-color:#27ae60;">BON DE COMMANDE — COMPLÉTÉ</div>
+{% block counterpart_info %}
+<div class="party-col-title">Fournisseur</div>
+{% if supplier %}
+  <div class="party-name">{{ supplier.name }}</div>
+  {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
+  {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
+  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
 {% else %}
-  <div class="doc-title">BON DE COMMANDE</div>
+  <div class="status-red">Fournisseur introuvable</div>
 {% endif %}
+{% endblock %}
 
-<!-- Document meta -->
-<div class="doc-meta">
-  <table>
-    <tr>
-      <td class="label">N° de BC</td>
-      <td><strong>{{ doc.doc_number or "—" }}</strong></td>
-      <td class="label">Date d'émission</td>
-      <td>{{ doc.created_at.strftime("%d/%m/%Y") if doc.created_at else "—" }}</td>
-    </tr>
-    <tr>
-      <td class="label">Livraison prévue</td>
-      <td>{{ doc.expected_delivery_date.strftime("%d/%m/%Y") if doc.expected_delivery_date else "—" }}</td>
-      <td class="label">Statut</td>
-      <td>{{ doc.status.value | upper }}</td>
-    </tr>
-  </table>
-</div>
-
-<!-- Supplier box -->
-<div class="parties">
-  <table>
-    <tr>
-      <td>
-        <div class="box-title">Fournisseur</div>
-        {% if supplier %}
-          <div><strong>{{ supplier.name }}</strong></div>
-          {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
-          {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
-          {% if supplier.email %}<div>Email : {{ supplier.email }}</div>{% endif %}
-        {% else %}
-          <div style="color:#c0392b;">Fournisseur introuvable</div>
-        {% endif %}
-      </td>
-      <td>
-        <div class="box-title">Livrer à</div>
-        <div><strong>{{ garage_name }}</strong></div>
-        {% if garage_address %}<div>{{ garage_address }}</div>{% endif %}
-        {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
-        {% if garage_email %}<div>Email : {{ garage_email }}</div>{% endif %}
-      </td>
-    </tr>
-  </table>
-</div>
+{% block content %}
 
 <!-- Line items -->
 <table class="lines-table">
@@ -85,12 +58,14 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
-  <table class="totals-table">
+  <div class="totals-box">
+  <table>
     <tr class="total">
       <td class="t-label">TOTAL HT</td>
       <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
     </tr>
   </table>
+  </div>
 </div>
 
 <!-- Notes -->
@@ -99,11 +74,6 @@
   <div class="block-title">Remarques</div>
   <div>{{ doc.notes }}</div>
 </div>
-{% endif %}
-
-<!-- Legal -->
-{% if legal_mention %}
-<div class="legal-block">{{ legal_mention }}</div>
 {% endif %}
 
 {% endblock %}

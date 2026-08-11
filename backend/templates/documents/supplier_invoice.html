@@ -1,74 +1,38 @@
 {% extends "base.html" %}
 
-{% block content %}
-
-<!-- Document title -->
-{% if doc.status.value == "cancelled" %}
-  <div class="doc-title" style="background-color:#c0392b;">FACTURE FOURNISSEUR — ANNULÉE</div>
-{% elif doc.status.value == "paid" %}
-  <div class="doc-title" style="background-color:#27ae60;">FACTURE FOURNISSEUR — PAYÉE</div>
-{% elif doc.status.value == "approved" %}
-  <div class="doc-title" style="background-color:#2980b9;">FACTURE FOURNISSEUR — APPROUVÉE</div>
-{% else %}
-  <div class="doc-title">FACTURE FOURNISSEUR</div>
+{% block doc_title %}
+<div class="doc-title-text">
+  FACTURE FOURNISSEUR
+  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulée</span>
+  {% elif doc.status.value == "paid" %}<span class="status-suffix status-green"> — Payée</span>
+  {% elif doc.status.value == "approved" %}<span class="status-suffix status-blue"> — Approuvée</span>
+  {% endif %}
+</div>
+<div class="doc-meta-line">
+  N° {{ doc.number }}
+  &nbsp;·&nbsp; Réception {{ doc.received_at.strftime("%d/%m/%Y") if doc.received_at else "—" }}
+  &nbsp;·&nbsp; Échéance {{ doc.due_date.strftime("%d/%m/%Y") if doc.due_date else "—" }}
+</div>
+{% if doc.has_discrepancy %}
+<div class="doc-meta-line status-red" style="font-weight:bold; margin-top:2pt;">
+  {% if doc.override_reason %}Écart accepté — {{ doc.override_reason }}{% else %}Écarts détectés{% endif %}
+</div>
 {% endif %}
+{% endblock %}
 
-<!-- Document meta -->
-<div class="doc-meta">
-  <table>
-    <tr>
-      <td class="label">N° facture</td>
-      <td><strong>{{ doc.number }}</strong></td>
-      <td class="label">Date de réception</td>
-      <td>{{ doc.received_at.strftime("%d/%m/%Y") if doc.received_at else "—" }}</td>
-    </tr>
-    <tr>
-      <td class="label">Échéance</td>
-      <td>{{ doc.due_date.strftime("%d/%m/%Y") if doc.due_date else "—" }}</td>
-      <td class="label">Statut</td>
-      <td>{{ doc.status.value | upper }}</td>
-    </tr>
-    {% if doc.has_discrepancy %}
-    <tr>
-      <td class="label">Rapprochement</td>
-      <td colspan="3" style="color:#c0392b; font-weight:bold;">
-        {% if doc.override_reason %}
-          Écart accepté — {{ doc.override_reason }}
-        {% else %}
-          Écarts détectés
-        {% endif %}
-      </td>
-    </tr>
-    {% endif %}
-  </table>
-</div>
+{% block counterpart_info %}
+<div class="party-col-title">Fournisseur</div>
+{% if supplier %}
+  <div class="party-name">{{ supplier.name }}</div>
+  {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
+  {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
+  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
+{% else %}
+  <div class="status-red">Fournisseur introuvable</div>
+{% endif %}
+{% endblock %}
 
-<!-- Supplier box -->
-<div class="parties">
-  <table>
-    <tr>
-      <td>
-        <div class="box-title">Fournisseur</div>
-        {% if supplier %}
-          <div><strong>{{ supplier.name }}</strong></div>
-          {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
-          {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
-          {% if supplier.email %}<div>Email : {{ supplier.email }}</div>{% endif %}
-        {% else %}
-          <div style="color:#c0392b;">Fournisseur introuvable</div>
-        {% endif %}
-      </td>
-      <td>
-        <div class="box-title">Destinataire</div>
-        <div><strong>{{ garage_name }}</strong></div>
-        {% if garage_address %}<div>{{ garage_address }}</div>{% endif %}
-        {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
-        {% if garage_email %}<div>Email : {{ garage_email }}</div>{% endif %}
-        {% if vat_number %}<div>N° TVA : {{ vat_number }}</div>{% endif %}
-      </td>
-    </tr>
-  </table>
-</div>
+{% block content %}
 
 <!-- Lines table -->
 <table class="lines-table">
@@ -104,7 +68,8 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
-  <table class="totals-table">
+  <div class="totals-box">
+  <table>
     <tr class="subtotal">
       <td class="t-label">Total HT</td>
       <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
@@ -118,14 +83,10 @@
       <td class="t-value">{{ doc.total_ttc | money(currency_symbol) }}</td>
     </tr>
   </table>
+  </div>
 </div>
 
 <!-- Notes are intentionally excluded from the PDF — they are internal platform
      annotations for staff only and must not appear on printed/shared documents. -->
-
-<!-- Legal -->
-{% if legal_mention %}
-<div class="legal-block">{{ legal_mention }}</div>
-{% endif %}
 
 {% endblock %}

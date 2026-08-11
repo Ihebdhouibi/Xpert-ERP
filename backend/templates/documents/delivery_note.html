@@ -1,74 +1,53 @@
 {% extends "base.html" %}
 
+{% block doc_title %}
+<div class="doc-title-text">
+  BON DE LIVRAISON
+  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulé</span>
+  {% elif doc.status.value == "delivered" %}<span class="status-suffix status-green"> — Livré</span>
+  {% endif %}
+</div>
+<div class="doc-meta-line">
+  N° {{ doc.doc_number or "—" }}
+  &nbsp;·&nbsp; Émission {{ doc.issued_at.strftime("%d/%m/%Y") if doc.issued_at else "—" }}
+  &nbsp;·&nbsp; Livraison {{ doc.delivered_at.strftime("%d/%m/%Y") if doc.delivered_at else "—" }}
+</div>
+{% endblock %}
+
+{% block counterpart_info %}
+<div class="party-col-title">Livré à</div>
+{% if customer %}
+  <div class="party-name">{{ customer.full_name }}</div>
+  {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
+  {% if customer.address %}
+    {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
+    {% if customer.address.get("city") %}
+      <div>
+        {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
+        {{ customer.address.get("city") }}
+      </div>
+    {% endif %}
+  {% endif %}
+  {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
+  {% if customer.email %}<div>{{ customer.email }}</div>{% endif %}
+  {% if customer.fiscal_id %}<div>N° fiscal : {{ customer.fiscal_id }}</div>{% endif %}
+{% else %}
+  <div class="status-red">Client introuvable</div>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 
-<!-- Document title -->
-{% if doc.status.value == "cancelled" %}
-  <div class="doc-title" style="background-color:#c0392b;">BON DE LIVRAISON — ANNULÉ</div>
-{% elif doc.status.value == "delivered" %}
-  <div class="doc-title" style="background-color:#27ae60;">BON DE LIVRAISON — LIVRÉ</div>
-{% else %}
-  <div class="doc-title">BON DE LIVRAISON</div>
+<!-- Vehicle -->
+{% if vehicle %}
+<div class="vehicle-row">
+  <span><strong>{{ vehicle.make }} {{ vehicle.model }}</strong></span>
+  {% if vehicle.registration %}<span>Immatriculation : {{ vehicle.registration }}</span>{% endif %}
+  {% if vehicle.vin %}<span>VIN : {{ vehicle.vin }}</span>{% endif %}
+  {% if vehicle.year %}<span>Année : {{ vehicle.year }}</span>{% endif %}
+  {% if vehicle.mileage %}<span>Kilométrage : {{ vehicle.mileage | int }} km</span>{% endif %}
+</div>
 {% endif %}
-
-<!-- Document meta -->
-<div class="doc-meta">
-  <table>
-    <tr>
-      <td class="label">N° de BL</td>
-      <td><strong>{{ doc.doc_number or "—" }}</strong></td>
-      <td class="label">Date d'émission</td>
-      <td>{{ doc.issued_at.strftime("%d/%m/%Y") if doc.issued_at else "—" }}</td>
-    </tr>
-    <tr>
-      <td class="label">Date de livraison</td>
-      <td>{{ doc.delivered_at.strftime("%d/%m/%Y") if doc.delivered_at else "—" }}</td>
-      <td class="label">Statut</td>
-      <td>{{ doc.status.value | upper }}</td>
-    </tr>
-  </table>
-</div>
-
-<!-- Customer + Vehicle boxes -->
-<div class="parties">
-  <table>
-    <tr>
-      <td>
-        <div class="box-title">Livré à</div>
-        {% if customer %}
-          <div><strong>{{ customer.full_name }}</strong></div>
-          {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
-          {% if customer.address %}
-            {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
-            {% if customer.address.get("city") %}
-              <div>
-                {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
-                {{ customer.address.get("city") }}
-              </div>
-            {% endif %}
-          {% endif %}
-          {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
-          {% if customer.email %}<div>Email : {{ customer.email }}</div>{% endif %}
-          {% if customer.fiscal_id %}<div>N° fiscal : {{ customer.fiscal_id }}</div>{% endif %}
-        {% else %}
-          <div style="color:#c0392b;">Client introuvable</div>
-        {% endif %}
-      </td>
-      <td>
-        <div class="box-title">Véhicule</div>
-        {% if vehicle %}
-          <div><strong>{{ vehicle.make }} {{ vehicle.model }}</strong></div>
-          {% if vehicle.registration %}<div>Immatriculation : {{ vehicle.registration }}</div>{% endif %}
-          {% if vehicle.vin %}<div>VIN : {{ vehicle.vin }}</div>{% endif %}
-          {% if vehicle.year %}<div>Année : {{ vehicle.year }}</div>{% endif %}
-          {% if vehicle.mileage %}<div>Kilométrage : {{ vehicle.mileage | int }} km</div>{% endif %}
-        {% else %}
-          <div style="color:#888;">Aucun véhicule associé</div>
-        {% endif %}
-      </td>
-    </tr>
-  </table>
-</div>
 
 <!-- Line items -->
 <table class="lines-table">
@@ -105,7 +84,8 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
-  <table class="totals-table">
+  <div class="totals-box">
+  <table>
     <tr class="subtotal">
       <td class="t-label">Sous-total HT</td>
       <td class="t-value">{{ doc.subtotal_minor | money(currency_symbol) }}</td>
@@ -136,6 +116,7 @@
       <td class="t-value">{{ doc.total_minor | money(currency_symbol) }}</td>
     </tr>
   </table>
+  </div>
 </div>
 
 <!-- Notes -->
@@ -144,11 +125,6 @@
   <div class="block-title">Remarques</div>
   <div>{{ doc.notes }}</div>
 </div>
-{% endif %}
-
-<!-- Legal -->
-{% if legal_mention %}
-<div class="legal-block">{{ legal_mention }}</div>
 {% endif %}
 
 {% endblock %}

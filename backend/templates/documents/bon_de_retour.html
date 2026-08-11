@@ -1,86 +1,49 @@
 {% extends "base.html" %}
 
-{% block content %}
-
-<!-- Document title -->
-<div class="doc-title" style="background-color: {% if is_supplier %}#2c5f8a{% else %}#EA580C{% endif %};">
+{% block doc_title %}
+<div class="doc-title-text {% if is_supplier %}status-blue{% else %}status-orange{% endif %}">
   {% if is_supplier %}RETOUR FOURNISSEUR{% else %}RETOUR CLIENT{% endif %}
 </div>
-
-<!-- Document meta -->
-<div class="doc-meta">
-  <table>
-    <tr>
-      <td class="label">N° bon de retour</td>
-      <td><strong>{{ doc.doc_number or "Brouillon" }}</strong></td>
-      <td class="label">Date</td>
-      <td>{{ (doc.confirmed_at.strftime("%d/%m/%Y") if doc.confirmed_at else doc.created_at.strftime("%d/%m/%Y")) }}</td>
-    </tr>
-    <tr>
-      <td class="label">Type de retour</td>
-      <td>{% if is_supplier %}Retour fournisseur{% else %}Retour client{% endif %}</td>
-      <td class="label">Statut</td>
-      <td>{{ status_display | upper }}</td>
-    </tr>
-  </table>
+<div class="doc-meta-line">
+  N° {{ doc.doc_number or "Brouillon" }}
+  &nbsp;·&nbsp; Date {{ (doc.confirmed_at.strftime("%d/%m/%Y") if doc.confirmed_at else doc.created_at.strftime("%d/%m/%Y")) }}
+  &nbsp;·&nbsp; Statut {{ status_display | upper }}
 </div>
+{% endblock %}
 
-<!-- Party info box -->
-<div class="parties">
-  <table>
-    <tr>
-      {% if is_supplier %}
-      <td>
-        <div class="box-title">Fournisseur</div>
-        {% if supplier %}
-          <div><strong>{{ supplier.name }}</strong></div>
-          {% if supplier.email %}<div>Email : {{ supplier.email }}</div>{% endif %}
-          {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
-        {% else %}
-          <div style="color:#888;">Fournisseur introuvable</div>
-        {% endif %}
-      </td>
-      {% else %}
-      <td>
-        <div class="box-title">Client</div>
-        {% if customer %}
-          <div><strong>{{ customer.full_name }}</strong></div>
-          {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
-          {% if customer.address %}
-            {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
-            {% if customer.address.get("city") %}
-              <div>
-                {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
-                {{ customer.address.get("city") }}
-              </div>
-            {% endif %}
-          {% endif %}
-          {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
-          {% if customer.email %}<div>Email : {{ customer.email }}</div>{% endif %}
-        {% else %}
-          <div style="color:#888;">Client introuvable</div>
-        {% endif %}
-      </td>
-      {% endif %}
-      <td>
-        <div class="box-title">Référence</div>
-        <div>
-          {% if doc.reason %}
-            <span style="color:#555; font-size:8pt;">{{ doc.reason }}</span>
-          {% else %}
-            <span style="color:#aaa; font-size:8pt;">—</span>
-          {% endif %}
-        </div>
-        {% if doc.doc_number %}
-        <div style="margin-top:4pt;">
-          <span style="font-size:8pt; color:#888;">N°</span>
-          <strong>{{ doc.doc_number }}</strong>
-        </div>
-        {% endif %}
-      </td>
-    </tr>
-  </table>
-</div>
+{% block counterpart_info %}
+{% if is_supplier %}
+<div class="party-col-title">Fournisseur</div>
+{% if supplier %}
+  <div class="party-name">{{ supplier.name }}</div>
+  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
+  {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
+{% else %}
+  <div style="color:#888;">Fournisseur introuvable</div>
+{% endif %}
+{% else %}
+<div class="party-col-title">Client</div>
+{% if customer %}
+  <div class="party-name">{{ customer.full_name }}</div>
+  {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
+  {% if customer.address %}
+    {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
+    {% if customer.address.get("city") %}
+      <div>
+        {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
+        {{ customer.address.get("city") }}
+      </div>
+    {% endif %}
+  {% endif %}
+  {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
+  {% if customer.email %}<div>{{ customer.email }}</div>{% endif %}
+{% else %}
+  <div style="color:#888;">Client introuvable</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block content %}
 
 <!-- Lines table -->
 <table class="lines-table">
@@ -128,7 +91,8 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
-  <table class="totals-table">
+  <div class="totals-box">
+  <table>
     <tr class="subtotal">
       <td class="t-label">Sous-total HT</td>
       <td class="t-value">{{ doc.subtotal_minor | money(currency_symbol) }}</td>
@@ -142,6 +106,7 @@
       <td class="t-value">{{ doc.total_minor | money(currency_symbol) }}</td>
     </tr>
   </table>
+  </div>
 </div>
 
 <!-- Reason / notes -->
@@ -157,11 +122,6 @@
   <div class="block-title">Notes internes</div>
   <div>{{ doc.notes }}</div>
 </div>
-{% endif %}
-
-<!-- Legal mention -->
-{% if legal_mention %}
-<div class="legal-block">{{ legal_mention }}</div>
 {% endif %}
 
 {% endblock %}

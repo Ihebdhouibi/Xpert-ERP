@@ -8,11 +8,21 @@
   /* ------------------------------------------------------------------ */
   @page {
     size: A4 portrait;
-    margin: 15mm 15mm 20mm 15mm;
+    margin: 15mm 15mm 26mm 15mm;
+    @bottom-left {
+      content: element(footer-legal);
+      vertical-align: top;
+    }
     @bottom-center {
-      content: element(page-footer);
-      font-size: 8pt;
-      color: #666;
+      content: "Page " counter(page) " / " counter(pages);
+      font-size: 7.5pt;
+      color: #999;
+      vertical-align: top;
+      padding-top: 3pt;
+    }
+    @bottom-right {
+      content: element(footer-bank);
+      vertical-align: top;
     }
   }
 
@@ -26,98 +36,113 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Fixed page footer (page numbers + custom text)                      */
+  /* Running footer — legal/custom text (left) + bank details (right)   */
   /* ------------------------------------------------------------------ */
-  #page-footer {
-    position: running(page-footer);
-    text-align: center;
-    font-size: 8pt;
+  #footer-legal {
+    position: running(footer-legal);
+    font-size: 7.5pt;
     color: #888;
-    border-top: 0.5pt solid #ccc;
+    border-top: 0.5pt solid #ddd;
+    padding-top: 3pt;
+    max-width: 110mm;
+  }
+  #footer-bank {
+    position: running(footer-bank);
+    font-size: 7.5pt;
+    color: #555;
+    text-align: right;
+    border-top: 0.5pt solid #ddd;
     padding-top: 3pt;
   }
 
   /* ------------------------------------------------------------------ */
-  /* Header area: logo left, garage info right                           */
+  /* Header: logo left, title + meta right                               */
   /* ------------------------------------------------------------------ */
   .header {
     width: 100%;
-    border-bottom: 2pt solid #2c5f8a;
-    padding-bottom: 6pt;
-    margin-bottom: 10pt;
+    border-bottom: 0.75pt solid #ddd;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
   }
   .header table {
     width: 100%;
     border-collapse: collapse;
   }
   .header td { vertical-align: top; }
-  .header .logo-cell { width: 35%; }
+  .header .logo-cell { width: 40%; }
   .header .logo-cell img {
-    max-height: 40mm;
-    max-width: 60mm;
+    max-height: 30mm;
+    max-width: 55mm;
   }
-  .header .garage-cell {
-    text-align: right;
-    font-size: 9pt;
-    color: #333;
-  }
-  .header .garage-name {
+  .header .logo-fallback {
     font-size: 13pt;
-    font-weight: bold;
-    color: #2c5f8a;
+    font-weight: 700;
+    color: #1a1a1a;
   }
-
-  /* ------------------------------------------------------------------ */
-  /* Document title banner                                               */
-  /* ------------------------------------------------------------------ */
-  .doc-title {
-    background-color: #2c5f8a;
-    color: #fff;
-    font-size: 14pt;
-    font-weight: bold;
-    padding: 5pt 10pt;
-    margin-bottom: 10pt;
-  }
-  .doc-meta {
-    font-size: 9pt;
-    margin-bottom: 10pt;
-  }
-  .doc-meta table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  .doc-meta td {
-    padding: 2pt 4pt;
-    vertical-align: top;
-  }
-  .doc-meta .label { color: #555; width: 35%; }
-
-  /* ------------------------------------------------------------------ */
-  /* Customer + vehicle info boxes                                       */
-  /* ------------------------------------------------------------------ */
-  .parties {
-    margin-bottom: 10pt;
-  }
-  .parties table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .parties td {
-    vertical-align: top;
-    width: 50%;
-    padding: 4pt 6pt;
-    border: 0.5pt solid #ccc;
-    background: #f9f9f9;
-  }
-  .box-title {
-    font-weight: bold;
-    font-size: 8pt;
-    text-transform: uppercase;
-    color: #2c5f8a;
-    border-bottom: 0.5pt solid #ddd;
-    padding-bottom: 2pt;
+  .header .title-cell { text-align: right; }
+  .doc-title-text {
+    font-size: 19pt;
+    font-weight: 700;
+    color: #1a1a1a;
     margin-bottom: 3pt;
   }
+  .doc-title-text .status-suffix { font-size: 12pt; font-weight: 700; }
+  .doc-meta-line {
+    font-size: 8.5pt;
+    color: #555;
+  }
+
+  /* Semantic status colours (used inline, no more full-width banners) */
+  .status-red    { color: #c0392b; }
+  .status-green  { color: #27ae60; }
+  .status-blue   { color: #2980b9; }
+  .status-orange { color: #EA580C; }
+
+  /* ------------------------------------------------------------------ */
+  /* Issuer / counterpart — plain two-column text, no boxes              */
+  /* ------------------------------------------------------------------ */
+  .parties-plain {
+    margin-bottom: 10pt;
+  }
+  .parties-plain table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .parties-plain td {
+    vertical-align: top;
+    width: 50%;
+    padding: 0 6pt 0 0;
+    font-size: 8.5pt;
+  }
+  .parties-plain td.party-col-right { padding: 0 0 0 6pt; }
+  .parties-plain .party-name {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #1a1a1a;
+    margin-bottom: 2pt;
+  }
+  .party-col-title {
+    font-weight: 700;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3pt;
+    color: #888;
+    margin-bottom: 2pt;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Vehicle info — inline row, not a boxed card                         */
+  /* ------------------------------------------------------------------ */
+  .vehicle-row {
+    margin-bottom: 10pt;
+    padding: 6pt 0;
+    border-top: 0.5pt solid #eee;
+    border-bottom: 0.5pt solid #eee;
+    font-size: 8.5pt;
+    color: #333;
+  }
+  .vehicle-row span { margin-right: 16pt; }
+  .vehicle-row span:last-child { margin-right: 0; }
 
   /* ------------------------------------------------------------------ */
   /* Line items table                                                    */
@@ -129,55 +154,69 @@
     font-size: 8.5pt;
   }
   .lines-table thead tr {
-    background-color: #2c5f8a;
-    color: #fff;
+    background-color: #f7f7f7;
+    border-bottom: 1pt solid #333;
   }
   .lines-table thead th {
-    padding: 4pt 5pt;
+    padding: 5pt;
     text-align: left;
-    font-weight: bold;
+    font-weight: 700;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.3pt;
+    color: #333;
     border: none;
   }
   .lines-table thead th.num { text-align: center; }
   .lines-table thead th.amount { text-align: right; }
-  .lines-table tbody tr:nth-child(even) { background: #f5f8fc; }
-  .lines-table tbody tr:nth-child(odd)  { background: #ffffff; }
   .lines-table tbody td {
-    padding: 3pt 5pt;
-    border-bottom: 0.25pt solid #e0e0e0;
+    padding: 4pt 5pt;
+    border-bottom: 0.5pt solid #e5e5e5;
     vertical-align: top;
   }
   .lines-table tbody td.num   { text-align: center; }
   .lines-table tbody td.amount { text-align: right; font-family: monospace; }
 
   /* ------------------------------------------------------------------ */
-  /* Totals summary                                                      */
+  /* Totals — single gray panel, bottom-right                            */
   /* ------------------------------------------------------------------ */
   .totals-wrapper {
     text-align: right;
     margin-bottom: 10pt;
   }
-  .totals-table {
-    display: inline-table;
+  .totals-box {
+    display: inline-block;
+    min-width: 65mm;
+    background: #f5f5f5;
+    border: 0.5pt solid #e0e0e0;
+    padding: 8pt 10pt;
+  }
+  .totals-box table {
     border-collapse: collapse;
-    min-width: 55mm;
+    width: 100%;
     font-size: 9pt;
   }
-  .totals-table td {
-    padding: 2pt 6pt;
+  .totals-box td {
+    padding: 2pt 0;
     border: none;
   }
-  .totals-table td.t-label { text-align: left; color: #555; }
-  .totals-table td.t-value { text-align: right; font-family: monospace; }
-  .totals-table tr.subtotal td { color: #333; }
-  .totals-table tr.discount td { color: #c0392b; }
-  .totals-table tr.vat td { color: #555; }
-  .totals-table tr.total td {
-    font-size: 11pt;
+  .totals-box td.t-label { text-align: left; color: #555; }
+  .totals-box td.t-value { text-align: right; font-family: monospace; }
+  .totals-box tr.discount td { color: #c0392b; }
+  .totals-box tr.total td {
+    font-size: 12pt;
     font-weight: bold;
-    color: #2c5f8a;
-    border-top: 1.5pt solid #2c5f8a;
-    padding-top: 4pt;
+    color: #1a1a1a;
+    border-top: 1pt solid #333;
+    padding-top: 5pt;
+  }
+  .totals-box tr.balance td {
+    font-weight: bold;
+  }
+  .totals-box .vat-recap {
+    margin-top: 6pt;
+    font-size: 7.5pt;
+    color: #777;
   }
 
   /* ------------------------------------------------------------------ */
@@ -195,32 +234,26 @@
     font-weight: bold;
     font-size: 8pt;
     text-transform: uppercase;
-    color: #2c5f8a;
+    color: #333;
     margin-bottom: 3pt;
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Legal footer                                                        */
-  /* ------------------------------------------------------------------ */
-  .legal-block {
-    margin-top: 12pt;
-    font-size: 7.5pt;
-    color: #888;
-    border-top: 0.5pt solid #ccc;
-    padding-top: 4pt;
   }
 </style>
 </head>
 <body>
 
 <!-- Running footer -->
-<div id="page-footer">
-  {% if footer_text %}{{ footer_text }}{% endif %}
-  &nbsp;·&nbsp; Page <pdf:pagenumber /> / <pdf:pagecount />
+<div id="footer-legal">
+  {% if legal_mention %}<div>{{ legal_mention }}</div>{% endif %}
+  {% if footer_text %}<div>{{ footer_text }}</div>{% endif %}
+</div>
+<div id="footer-bank">
+  {% if bank_iban %}<div>IBAN : {{ bank_iban }}</div>{% endif %}
+  {% if bank_bic %}<div>BIC : {{ bank_bic }}</div>{% endif %}
+  {% if bank_holder %}<div>Titulaire : {{ bank_holder }}</div>{% endif %}
 </div>
 
 <!-- ------------------------------------------------------------------- -->
-<!-- HEADER                                                               -->
+<!-- HEADER: logo left, title + meta right                                -->
 <!-- ------------------------------------------------------------------- -->
 <div class="header">
   <table>
@@ -229,15 +262,31 @@
         {% if garage_logo_path %}
           <img src="{{ garage_logo_path }}" alt="Logo" />
         {% else %}
-          <span style="font-size:14pt; font-weight:bold; color:#2c5f8a;">{{ garage_name }}</span>
+          <span class="logo-fallback">{{ garage_name }}</span>
         {% endif %}
       </td>
-      <td class="garage-cell">
-        <div class="garage-name">{{ garage_name }}</div>
+      <td class="title-cell">
+        {% block doc_title %}{% endblock %}
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- ------------------------------------------------------------------- -->
+<!-- ISSUER (garage, static) / COUNTERPART (per-document, overridable)    -->
+<!-- ------------------------------------------------------------------- -->
+<div class="parties-plain">
+  <table>
+    <tr>
+      <td class="party-col">
+        <div class="party-name">{{ garage_name }}</div>
         {% if garage_address %}<div>{{ garage_address }}</div>{% endif %}
         {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
-        {% if garage_email %}<div>Email : {{ garage_email }}</div>{% endif %}
+        {% if garage_email %}<div>{{ garage_email }}</div>{% endif %}
         {% if vat_number %}<div>N° TVA : {{ vat_number }}</div>{% endif %}
+      </td>
+      <td class="party-col party-col-right">
+        {% block counterpart_info %}{% endblock %}
       </td>
     </tr>
   </table>
