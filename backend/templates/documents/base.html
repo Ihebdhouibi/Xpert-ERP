@@ -104,7 +104,6 @@
     width: 50%;
     padding: 0 6pt 0 0;
     font-size: 8.5pt;
-    white-space: pre-line;
   }
   .parties-plain td.party-col-right { padding: 0 0 0 6pt; }
   .parties-plain .party-name {
@@ -112,6 +111,12 @@
     font-size: 10pt;
     color: #1a1a1a;
     margin-bottom: 2pt;
+  }
+  /* Only the free-text address field needs its embedded newlines to
+     render as line breaks — scoped narrowly so it doesn't turn ordinary
+     template-source whitespace into visible blank lines. */
+  .address-block {
+    white-space: pre-line;
   }
   .party-col-title {
     font-weight: 700;
@@ -284,7 +289,7 @@
     <tr>
       <td class="party-col">
         <div class="party-name">{{ garage_name }}</div>
-        {% if garage_address %}<div>{{ garage_address }}</div>{% endif %}
+        {% if garage_address %}<div class="address-block">{{ garage_address }}</div>{% endif %}
         {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
         {% if garage_email %}<div>{{ garage_email }}</div>{% endif %}
         {% if vat_number %}<div>N° TVA : {{ vat_number }}</div>{% endif %}
