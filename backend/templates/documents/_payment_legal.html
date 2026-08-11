@@ -1,0 +1,6 @@
+{% if payment_terms or legal_mention %}
+<div class="payment-legal-block">
+  {% if payment_terms %}<div>{{ payment_terms }}</div>{% endif %}
+  {% if legal_mention %}<div>{{ legal_mention }}</div>{% endif %}
+</div>
+{% endif %}

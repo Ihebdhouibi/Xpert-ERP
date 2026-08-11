@@ -91,6 +91,7 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
+  {% include "_bank_info.html" %}
   <div class="totals-box">
   <table>
     <tr class="subtotal">
@@ -108,6 +109,8 @@
   </table>
   </div>
 </div>
+
+{% include "_payment_legal.html" %}
 
 <!-- Reason / notes -->
 {% if doc.reason %}

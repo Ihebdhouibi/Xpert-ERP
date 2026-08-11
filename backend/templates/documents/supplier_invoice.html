@@ -68,6 +68,7 @@
 
 <!-- Totals -->
 <div class="totals-wrapper">
+  {% include "_bank_info.html" %}
   <div class="totals-box">
   <table>
     <tr class="subtotal">
@@ -85,6 +86,8 @@
   </table>
   </div>
 </div>
+
+{% include "_payment_legal.html" %}
 
 <!-- Notes are intentionally excluded from the PDF — they are internal platform
      annotations for staff only and must not appear on printed/shared documents. -->

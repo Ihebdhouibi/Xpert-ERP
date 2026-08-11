@@ -8,7 +8,7 @@
   /* ------------------------------------------------------------------ */
   @page {
     size: A4 portrait;
-    margin: 15mm 15mm 26mm 15mm;
+    margin: 15mm 15mm 22mm 15mm;
     @bottom-left {
       content: element(footer-legal);
       vertical-align: top;
@@ -19,10 +19,6 @@
       color: #999;
       vertical-align: top;
       padding-top: 3pt;
-    }
-    @bottom-right {
-      content: element(footer-bank);
-      vertical-align: top;
     }
   }
 
@@ -36,7 +32,10 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Running footer — legal/custom text (left) + bank details (right)   */
+  /* Running footer — page numbers + optional custom text only.          */
+  /* Payment terms / legal mention / bank details live in the body now,  */
+  /* next to the totals box — see .totals-row / .bank-info-block /       */
+  /* .payment-legal-block below.                                        */
   /* ------------------------------------------------------------------ */
   #footer-legal {
     position: running(footer-legal);
@@ -45,14 +44,6 @@
     border-top: 0.5pt solid #ddd;
     padding-top: 3pt;
     max-width: 110mm;
-  }
-  #footer-bank {
-    position: running(footer-bank);
-    font-size: 7.5pt;
-    color: #555;
-    text-align: right;
-    border-top: 0.5pt solid #ddd;
-    padding-top: 3pt;
   }
 
   /* ------------------------------------------------------------------ */
@@ -178,12 +169,20 @@
   .lines-table tbody td.amount { text-align: right; font-family: monospace; }
 
   /* ------------------------------------------------------------------ */
-  /* Totals — single gray panel, bottom-right                            */
+  /* Totals row — bank details (left) + single gray totals panel (right) */
   /* ------------------------------------------------------------------ */
   .totals-wrapper {
-    text-align: right;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
     margin-bottom: 10pt;
   }
+  .bank-info-block {
+    font-size: 8pt;
+    color: #555;
+    padding-top: 2pt;
+  }
+  .bank-info-block div { margin-bottom: 1pt; }
   .totals-box {
     display: inline-block;
     min-width: 65mm;
@@ -220,6 +219,16 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Payment terms + legal mention — below the bank-info/totals row      */
+  /* ------------------------------------------------------------------ */
+  .payment-legal-block {
+    font-size: 7.5pt;
+    color: #777;
+    margin-bottom: 8pt;
+  }
+  .payment-legal-block div { margin-bottom: 1pt; }
+
+  /* ------------------------------------------------------------------ */
   /* Notes / terms block                                                 */
   /* ------------------------------------------------------------------ */
   .notes-block {
@@ -241,16 +250,9 @@
 </head>
 <body>
 
-<!-- Running footer -->
+<!-- Running footer (page numbers + optional custom text only) -->
 <div id="footer-legal">
-  {% if payment_terms %}<div>{{ payment_terms }}</div>{% endif %}
-  {% if legal_mention %}<div>{{ legal_mention }}</div>{% endif %}
   {% if footer_text %}<div>{{ footer_text }}</div>{% endif %}
-</div>
-<div id="footer-bank">
-  {% if bank_iban %}<div>IBAN : {{ bank_iban }}</div>{% endif %}
-  {% if bank_bic %}<div>BIC : {{ bank_bic }}</div>{% endif %}
-  {% if bank_holder %}<div>Titulaire : {{ bank_holder }}</div>{% endif %}
 </div>
 
 <!-- ------------------------------------------------------------------- -->
