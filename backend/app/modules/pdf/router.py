@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.redis import get_redis
 from app.modules.pdf import service as pdf_service
 from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.core.logging import get_logger
@@ -33,10 +35,11 @@ async def download_purchase_order_pdf(
     public_id: str,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_purchase_order_pdf(
-            db, public_id=public_id, garage_id=current_user.garage_id
+            db, public_id=public_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -63,10 +66,11 @@ async def download_supplier_invoice_pdf(
     public_id: str,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_supplier_invoice_pdf(
-            db, public_id=public_id, garage_id=current_user.garage_id
+            db, public_id=public_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -93,10 +97,11 @@ async def download_advance_payment_pdf(
     advance_id: int,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_advance_payment_pdf(
-            db, advance_id=advance_id, garage_id=current_user.garage_id
+            db, advance_id=advance_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -123,10 +128,11 @@ async def download_credit_note_pdf(
     credit_note_id: int,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_credit_note_pdf(
-            db, credit_note_id=credit_note_id, garage_id=current_user.garage_id
+            db, credit_note_id=credit_note_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -153,10 +159,11 @@ async def download_quotation_pdf(
     quotation_id: int,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_quotation_pdf(
-            db, quotation_id=quotation_id, garage_id=current_user.garage_id
+            db, quotation_id=quotation_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -184,10 +191,11 @@ async def download_invoice_pdf(
     invoice_id: int,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_invoice_pdf(
-            db, invoice_id=invoice_id, garage_id=current_user.garage_id
+            db, invoice_id=invoice_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -215,10 +223,11 @@ async def download_bon_de_retour_pdf(
     public_id: str,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_bon_de_retour_pdf(
-            db, public_id=public_id, garage_id=current_user.garage_id
+            db, public_id=public_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException
@@ -245,10 +254,11 @@ async def download_delivery_note_pdf(
     delivery_note_id: int,
     current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> Response:
     try:
         pdf_bytes = await pdf_service.render_delivery_note_pdf(
-            db, delivery_note_id=delivery_note_id, garage_id=current_user.garage_id
+            db, delivery_note_id=delivery_note_id, garage_id=current_user.garage_id, redis=redis
         )
     except ValueError:
         from fastapi import HTTPException

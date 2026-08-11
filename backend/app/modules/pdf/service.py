@@ -13,11 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from redis.asyncio import Redis
 
 from app.core.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.modules.config.service import SettingsService
 from app.modules.credit_note import repository as credit_note_repo
 from app.modules.customer import repository as customer_repo
 from app.modules.delivery_note import repository as delivery_note_repo
@@ -85,20 +87,34 @@ def _render_pdf_sync(html_string: str, base_url: str) -> bytes:
     return HTML(string=html_string, base_url=base_url).write_pdf()
 
 
-def _garage_context() -> dict[str, Any]:
-    s = get_settings()
+async def _garage_context(db: AsyncSession, redis: Redis, garage_id: int) -> dict[str, Any]:
+    """Branding/legal/bank context shared by every document template.
+
+    Reads through SettingsService (DB row for this garage → DB row for the
+    global garage_id=0 default → the .env-sourced Settings value) so the
+    admin Settings page can actually change what PDFs render, instead of
+    only the static .env file.
+    """
+    env = get_settings()
+    svc = SettingsService(db, redis)
+    fields = {
+        "garage_name": ("pdf_garage_name", env.pdf_garage_name),
+        "garage_address": ("pdf_garage_address", env.pdf_garage_address),
+        "garage_phone": ("pdf_garage_phone", env.pdf_garage_phone),
+        "garage_email": ("pdf_garage_email", env.pdf_garage_email),
+        "garage_logo_path": ("pdf_garage_logo_path", env.pdf_garage_logo_path),
+        "vat_number": ("pdf_vat_number", env.pdf_vat_number),
+        "legal_mention": ("pdf_legal_mention", env.pdf_legal_mention),
+        "bank_iban": ("pdf_bank_iban", env.pdf_bank_iban),
+        "bank_bic": ("pdf_bank_bic", env.pdf_bank_bic),
+        "bank_holder": ("pdf_bank_holder", env.pdf_bank_holder),
+        "footer_text": ("pdf_footer_text", env.pdf_footer_text),
+        "currency_symbol": ("pdf_currency_symbol", env.pdf_currency_symbol),
+        "payment_terms": ("pdf_payment_terms", env.pdf_payment_terms),
+    }
     return {
-        "garage_name": s.pdf_garage_name,
-        "garage_address": s.pdf_garage_address,
-        "garage_phone": s.pdf_garage_phone,
-        "garage_email": s.pdf_garage_email,
-        "garage_logo_path": s.pdf_garage_logo_path,
-        "vat_number": s.pdf_vat_number,
-        "legal_mention": s.pdf_legal_mention,
-        "bank_details": s.pdf_bank_details,
-        "footer_text": s.pdf_footer_text,
-        "currency_symbol": s.pdf_currency_symbol,
-        "payment_terms": s.pdf_payment_terms,
+        ctx_key: await svc.get_setting(cfg_key, garage_id, default=default)
+        for ctx_key, (cfg_key, default) in fields.items()
     }
 
 
@@ -108,7 +124,7 @@ def _garage_context() -> dict[str, Any]:
 
 
 async def render_quotation_pdf(
-    db: AsyncSession, *, quotation_id: int, garage_id: int
+    db: AsyncSession, *, quotation_id: int, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the quotation from DB, render HTML template, return PDF bytes."""
     logger.info("render_quotation_pdf_start", quotation_id=quotation_id, garage_id=garage_id)
@@ -124,13 +140,11 @@ async def render_quotation_pdf(
                 db, vehicle_id=quotation.vehicle_id, garage_id=garage_id
             )
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": quotation,
             "customer": customer,
             "vehicle": vehicle,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -149,7 +163,7 @@ async def render_quotation_pdf(
 
 
 async def render_delivery_note_pdf(
-    db: AsyncSession, *, delivery_note_id: int, garage_id: int
+    db: AsyncSession, *, delivery_note_id: int, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the delivery note from DB, render HTML template, return PDF bytes."""
     logger.info("render_delivery_note_pdf_start", delivery_note_id=delivery_note_id, garage_id=garage_id)
@@ -165,13 +179,11 @@ async def render_delivery_note_pdf(
                 db, vehicle_id=dn.vehicle_id, garage_id=garage_id
             )
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": dn,
             "customer": customer,
             "vehicle": vehicle,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -190,7 +202,7 @@ async def render_delivery_note_pdf(
 
 
 async def render_purchase_order_pdf(
-    db: AsyncSession, *, public_id: str, garage_id: int
+    db: AsyncSession, *, public_id: str, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the purchase order from DB, resolve names, render HTML template, return PDF bytes."""
     from sqlalchemy import select
@@ -212,13 +224,11 @@ async def render_purchase_order_pdf(
             parts_res = await db.execute(select(Part).where(Part.id.in_(part_ids)))
             parts_map = {p.id: p.name for p in parts_res.scalars()}
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": po,
             "supplier": supplier,
             "parts_map": parts_map,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -235,7 +245,7 @@ async def render_purchase_order_pdf(
 
 
 async def render_supplier_invoice_pdf(
-    db: AsyncSession, *, public_id: str, garage_id: int
+    db: AsyncSession, *, public_id: str, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch supplier invoice, resolve supplier name, render PDF."""
     from sqlalchemy import select
@@ -251,12 +261,10 @@ async def render_supplier_invoice_pdf(
         supplier_res = await db.execute(select(Supplier).where(Supplier.id == si.supplier_id))
         supplier = supplier_res.scalar_one_or_none()
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": si,
             "supplier": supplier,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -273,7 +281,7 @@ async def render_supplier_invoice_pdf(
 
 
 async def render_credit_note_pdf(
-    db: AsyncSession, *, credit_note_id: int, garage_id: int
+    db: AsyncSession, *, credit_note_id: int, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the credit note and its linked invoice, render HTML template, return PDF bytes."""
     logger.info("render_credit_note_pdf_start", credit_note_id=credit_note_id, garage_id=garage_id)
@@ -287,13 +295,11 @@ async def render_credit_note_pdf(
         if invoice:
             customer = await customer_repo.get_by_id(db, garage_id, invoice.customer_id)
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": cn,
             "invoice": invoice,
             "customer": customer,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -312,7 +318,7 @@ async def render_credit_note_pdf(
 
 
 async def render_bon_de_retour_pdf(
-    db: AsyncSession, *, public_id: str, garage_id: int
+    db: AsyncSession, *, public_id: str, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch bon de retour, resolve party (supplier or customer), render PDF."""
     from sqlalchemy import select
@@ -334,15 +340,13 @@ async def render_bon_de_retour_pdf(
             sup_res = await db.execute(select(Supplier).where(Supplier.id == bdr.supplier_id))
             supplier = sup_res.scalar_one_or_none()
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": bdr,
             "customer": customer,
             "supplier": supplier,
             "is_supplier": party_val == "supplier",
             "status_display": getattr(bdr.status, "value", bdr.status),
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -359,7 +363,7 @@ async def render_bon_de_retour_pdf(
 
 
 async def render_advance_payment_pdf(
-    db: AsyncSession, *, advance_id: int, garage_id: int
+    db: AsyncSession, *, advance_id: int, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the advance payment from DB, render HTML receipt template, return PDF bytes."""
     from app.modules.advance_payment import repository as advance_repo
@@ -381,13 +385,11 @@ async def render_advance_payment_pdf(
 
         customer = await customer_repo.get_by_id(db, garage_id, advance.customer_id)
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": advance,
             "customer": customer,
             "payment_method_label": _PAYMENT_METHOD_LABELS.get(advance.payment_method, advance.payment_method.value),
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()
@@ -406,7 +408,7 @@ async def render_advance_payment_pdf(
 
 
 async def render_invoice_pdf(
-    db: AsyncSession, *, invoice_id: int, garage_id: int
+    db: AsyncSession, *, invoice_id: int, garage_id: int, redis: Redis
 ) -> bytes:
     """Fetch the invoice from DB, render HTML template, return PDF bytes."""
     logger.info("render_invoice_pdf_start", invoice_id=invoice_id, garage_id=garage_id)
@@ -422,13 +424,11 @@ async def render_invoice_pdf(
                 db, vehicle_id=invoice.vehicle_id, garage_id=garage_id
             )
 
-        settings = get_settings()
         ctx: dict[str, Any] = {
-            **_garage_context(),
+            **await _garage_context(db, redis, garage_id),
             "doc": invoice,
             "customer": customer,
             "vehicle": vehicle,
-            "currency_symbol": settings.pdf_currency_symbol,
         }
 
         env = _get_jinja_env()

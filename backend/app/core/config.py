@@ -175,7 +175,9 @@ class Settings(BaseSettings):
     pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
     pdf_vat_number: str = ""
     pdf_legal_mention: str = ""
-    pdf_bank_details: str = ""
+    pdf_bank_iban: str = ""
+    pdf_bank_bic: str = ""
+    pdf_bank_holder: str = ""
     pdf_footer_text: str = ""
     pdf_currency_symbol: str = "€"
     pdf_payment_terms: str = "Paiement à 30 jours"

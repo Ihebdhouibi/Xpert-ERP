@@ -95,7 +95,9 @@ per-garage override that takes precedence over the global default.
 | `pdf_garage_logo_path` | string | `` | Absolute path to logo file; empty = no logo |
 | `pdf_vat_number` | string | `` | VAT registration number |
 | `pdf_legal_mention` | string | `` | Legal mentions block |
-| `pdf_bank_details` | string | `` | Bank details for payments |
+| `pdf_bank_iban` | string | `` | Bank IBAN shown on every document footer |
+| `pdf_bank_bic` | string | `` | Bank BIC/SWIFT shown on every document footer |
+| `pdf_bank_holder` | string | `` | Bank account holder name shown on every document footer |
 | `pdf_footer_text` | string | `` | Custom footer text |
 | `pdf_currency_symbol` | string | `€` | Currency symbol |
 | `pdf_payment_terms` | string | `Paiement à 30 jours` | Default payment terms text |
