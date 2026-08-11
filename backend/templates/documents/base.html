@@ -243,6 +243,7 @@
 
 <!-- Running footer -->
 <div id="footer-legal">
+  {% if payment_terms %}<div>{{ payment_terms }}</div>{% endif %}
   {% if legal_mention %}<div>{{ legal_mention }}</div>{% endif %}
   {% if footer_text %}<div>{{ footer_text }}</div>{% endif %}
 </div>

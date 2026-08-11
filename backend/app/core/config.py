@@ -168,19 +168,19 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # PDF / Document printing
     # -------------------------------------------------------------------------
-    pdf_garage_name: str = "Xpert Garage"
+    pdf_garage_name: str = "Motors Utilitaires"
     pdf_garage_address: str = ""
     pdf_garage_phone: str = ""
     pdf_garage_email: str = ""
     pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
     pdf_vat_number: str = ""
-    pdf_legal_mention: str = ""
-    pdf_bank_iban: str = ""
-    pdf_bank_bic: str = ""
-    pdf_bank_holder: str = ""
+    pdf_legal_mention: str = "Pénalités de retard : taux annuel de 10 % – Indemnité forfaitaire : 40 € (art. L441-10 C. com.)."
+    pdf_bank_iban: str = "FR76 3083 3830 0001 1362 3852 907"
+    pdf_bank_bic: str = "FNOMFRP2"
+    pdf_bank_holder: str = "MOTORS UTILITAIRES"
     pdf_footer_text: str = ""
     pdf_currency_symbol: str = "€"
-    pdf_payment_terms: str = "Paiement à 30 jours"
+    pdf_payment_terms: str = "Paiement accepté : Espèces, carte bancaire, virement."
 
     # -------------------------------------------------------------------------
     # Cash register
