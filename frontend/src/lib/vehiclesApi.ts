@@ -27,6 +27,7 @@ export interface VehicleOut {
   vin: string | null
   make: string
   model: string
+  trim: string | null
   year: number | null
   fuel_type: FuelType | null
   color: string | null
@@ -53,6 +54,7 @@ export interface VehicleCreateInput {
   vin?: string | null
   make: string
   model: string
+  trim?: string | null
   year?: number | null
   fuel_type?: FuelType | null
   color?: string | null
@@ -65,6 +67,7 @@ export interface VehicleUpdateInput {
   customer_id?: number | null
   make?: string
   model?: string
+  trim?: string | null
   year?: number | null
   fuel_type?: FuelType | null
   color?: string | null

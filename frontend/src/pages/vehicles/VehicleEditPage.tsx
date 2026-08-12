@@ -124,6 +124,7 @@ export function VehicleEditPage() {
   // Form state
   const [make, setMake] = useState('')
   const [model, setModel] = useState('')
+  const [trim, setTrim] = useState('')
   const [year, setYear] = useState('')
   const [fuelType, setFuelType] = useState<FuelType | ''>('')
   const [color, setColor] = useState('')
@@ -150,6 +151,7 @@ export function VehicleEditPage() {
   if (vehicle && !initialised) {
     setMake(vehicle.make)
     setModel(vehicle.model)
+    setTrim(vehicle.trim ?? '')
     setYear(vehicle.year != null ? String(vehicle.year) : '')
     setFuelType(vehicle.fuel_type ?? '')
     setColor(vehicle.color ?? '')
@@ -257,6 +259,7 @@ export function VehicleEditPage() {
       await vehiclesApi.update(vehicleId, vehicle!.version, {
         make: make.trim(),
         model: model.trim(),
+        trim: trim.trim() || null,
         year: year ? Number(year) : null,
         fuel_type: fuelType || null,
         color: color.trim() || null,
@@ -373,6 +376,15 @@ export function VehicleEditPage() {
                     helperText={submitted ? errors.model : make ? undefined : 'Choisissez d’abord une marque'}
                     canDeleteCustomOptions={canDeleteCustomOptions}
                     onDeleteCustomOption={handleDeleteCustomModel}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Version"
+                    value={trim}
+                    onChange={e => setTrim(e.target.value)}
+                    fullWidth
+                    placeholder="ex. 2.3 dCi 145 FWD 146cv"
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>

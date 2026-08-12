@@ -196,6 +196,8 @@ export function VehicleDetailPage() {
               <Divider />
               <InfoRow label="Modèle" value={v.model} />
               <Divider />
+              <InfoRow label="Version" value={v.trim} />
+              <Divider />
               <InfoRow label="Année" value={v.year} />
               <Divider />
               <InfoRow label="Carburant" value={v.fuel_type ? FUEL_TYPE_LABELS[v.fuel_type] : null} />

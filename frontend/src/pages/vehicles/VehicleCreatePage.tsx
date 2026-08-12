@@ -147,6 +147,7 @@ export function VehicleCreatePage() {
 
   const [make, setMake] = useState('')
   const [model, setModel] = useState('')
+  const [trim, setTrim] = useState('')
   const [year, setYear] = useState('')
   const [fuelType, setFuelType] = useState<FuelType | ''>('')
   const [color, setColor] = useState('')
@@ -242,6 +243,7 @@ export function VehicleCreatePage() {
       const input: VehicleCreateInput = {
         make: make.trim(),
         model: model.trim(),
+        trim: trim.trim() || undefined,
         year: year ? Number(year) : undefined,
         fuel_type: fuelType || undefined,
         color: color.trim() || undefined,
@@ -355,6 +357,15 @@ export function VehicleCreatePage() {
                     helperText={submitted ? errors.model : make ? undefined : 'Choisissez d’abord une marque'}
                     canDeleteCustomOptions={canDeleteCustomOptions}
                     onDeleteCustomOption={handleDeleteCustomModel}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Version"
+                    value={trim}
+                    onChange={e => setTrim(e.target.value)}
+                    fullWidth
+                    placeholder="ex. 2.3 dCi 145 FWD 146cv"
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
