@@ -228,6 +228,7 @@ def _make_vehicle() -> SimpleNamespace:
     return SimpleNamespace(
         make="Renault",
         model="Clio",
+        trim="1.5 dCi 90ch",
         registration="AB-123-CD",
         vin="VF1BB1C0H12345678",
         year=2019,
@@ -374,6 +375,7 @@ class TestQuotationTemplate:
         assert "Clio" in html
         assert "AB-123-CD" in html
         assert "75000" in html
+        assert "1.5 dCi 90ch" in html
 
     def test_renders_with_discount(self) -> None:
         env = _make_jinja_env()
