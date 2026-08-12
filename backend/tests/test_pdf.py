@@ -30,7 +30,7 @@ from app.core.redis import get_redis
 from app.main import create_app
 from app.modules.auth.models import AppUser, Permission, Role, RolePermission, UserRole
 from app.modules.auth.service import hash_password
-from app.modules.pdf.service import _fmt_money, _get_jinja_env, _make_jinja_env
+from app.modules.pdf.service import _fmt_money, _get_jinja_env, _make_jinja_env, _nature_of_operation
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -282,6 +282,30 @@ class TestFmtMoney:
     def test_large_amount(self) -> None:
         result = _fmt_money(1_000_000)  # 10 000.00
         assert "€" in result
+
+
+class TestNatureOfOperation:
+    def _line(self, kind: str) -> SimpleNamespace:
+        return SimpleNamespace(kind=SimpleNamespace(value=kind))
+
+    def test_all_labor_is_services(self) -> None:
+        assert _nature_of_operation([self._line("labor")]) == "Prestation de services"
+
+    def test_all_service_kind_is_services(self) -> None:
+        assert _nature_of_operation([self._line("service")]) == "Prestation de services"
+
+    def test_all_part_is_goods(self) -> None:
+        assert _nature_of_operation([self._line("part")]) == "Vente de biens"
+
+    def test_mixed_is_both(self) -> None:
+        result = _nature_of_operation([self._line("labor"), self._line("part")])
+        assert result == "Vente de biens et prestation de services"
+
+    def test_other_kind_defaults_to_services(self) -> None:
+        assert _nature_of_operation([self._line("other")]) == "Prestation de services"
+
+    def test_no_lines_defaults_to_services(self) -> None:
+        assert _nature_of_operation([]) == "Prestation de services"
 
 
 # ---------------------------------------------------------------------------

@@ -293,6 +293,7 @@
         {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
         {% if garage_email %}<div>{{ garage_email }}</div>{% endif %}
         {% if vat_number %}<div>N° TVA : {{ vat_number }}</div>{% endif %}
+        {% if nature_of_operation %}<div>Nature de l'opération : {{ nature_of_operation }}</div>{% endif %}
       </td>
       <td class="party-col party-col-right">
         {% block counterpart_info %}{% endblock %}

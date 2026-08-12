@@ -77,6 +77,31 @@ def _fmt_money(minor: int | None, symbol: str = "€") -> str:
     return f"{formatted} {symbol}"
 
 
+_GOODS_KINDS = {"part"}
+_SERVICE_KINDS = {"labor", "service"}
+
+
+def _nature_of_operation(lines: Any) -> str:
+    """Classify invoice/credit-note lines as goods, services, or both — the
+    French tax-invoice "nature de l'opération" disclosure. Lines with no
+    goods/service signal (e.g. kind="other", or no lines at all) default to
+    services, since that's the common case for a garage."""
+    has_goods = False
+    has_services = False
+    for line in lines:
+        kind = getattr(line.kind, "value", line.kind)
+        if kind in _GOODS_KINDS:
+            has_goods = True
+        elif kind in _SERVICE_KINDS:
+            has_services = True
+
+    if has_goods and has_services:
+        return "Vente de biens et prestation de services"
+    if has_goods:
+        return "Vente de biens"
+    return "Prestation de services"
+
+
 def _render_pdf_sync(html_string: str, base_url: str) -> bytes:
     """Blocking WeasyPrint call — must be run in a thread executor."""
     gtk3_dll_dir = get_settings().cfg_gtk3_dll_dir
@@ -265,6 +290,9 @@ async def render_supplier_invoice_pdf(
             **await _garage_context(db, redis, garage_id),
             "doc": si,
             "supplier": supplier,
+            "nature_of_operation": (
+                "Prestation de services" if si.invoice_type == "services" else "Vente de biens"
+            ),
         }
 
         env = _get_jinja_env()
@@ -300,6 +328,7 @@ async def render_credit_note_pdf(
             "doc": cn,
             "invoice": invoice,
             "customer": customer,
+            "nature_of_operation": _nature_of_operation(invoice.lines) if invoice else None,
         }
 
         env = _get_jinja_env()
@@ -429,6 +458,7 @@ async def render_invoice_pdf(
             "doc": invoice,
             "customer": customer,
             "vehicle": vehicle,
+            "nature_of_operation": _nature_of_operation(invoice.lines),
         }
 
         env = _get_jinja_env()
