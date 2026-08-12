@@ -44,7 +44,7 @@
   {% if vehicle.registration %}<span>Immatriculation : {{ vehicle.registration }}</span>{% endif %}
   {% if vehicle.vin %}<span>VIN : {{ vehicle.vin }}</span>{% endif %}
   {% if vehicle.year %}<span>Année : {{ vehicle.year }}</span>{% endif %}
-  {% if vehicle.mileage %}<span>Kilométrage : {{ vehicle.mileage | int }} km</span>{% endif %}
+  {% if vehicle.mileage_current %}<span>Kilométrage : {{ vehicle.mileage_current | int }} km</span>{% endif %}
 </div>
 {% endif %}
 

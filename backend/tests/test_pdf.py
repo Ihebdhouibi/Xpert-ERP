@@ -231,7 +231,7 @@ def _make_vehicle() -> SimpleNamespace:
         registration="AB-123-CD",
         vin="VF1BB1C0H12345678",
         year=2019,
-        mileage=75000,
+        mileage_current=75000,
     )
 
 
@@ -349,6 +349,7 @@ class TestQuotationTemplate:
         assert "Renault" in html
         assert "Clio" in html
         assert "AB-123-CD" in html
+        assert "75000" in html
 
     def test_renders_with_discount(self) -> None:
         env = _make_jinja_env()
