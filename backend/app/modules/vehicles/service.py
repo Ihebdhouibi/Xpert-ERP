@@ -65,6 +65,7 @@ async def create_vehicle(
             vin=data.vin,
             make=data.make,
             model=data.model,
+            trim=data.trim,
             year=data.year,
             fuel_type=data.fuel_type.value if data.fuel_type else None,
             color=data.color,

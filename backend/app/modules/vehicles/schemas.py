@@ -19,6 +19,7 @@ class VehicleCreateRequest(BaseModel):
     vin: Optional[str] = Field(None, min_length=11, max_length=17)
     make: str = Field(..., min_length=1, max_length=100)
     model: str = Field(..., min_length=1, max_length=100)
+    trim: Optional[str] = Field(None, max_length=150)
     year: Optional[int] = Field(None, ge=1900, le=2100)
     fuel_type: Optional[FuelType] = None
     color: Optional[str] = Field(None, max_length=50)
@@ -37,6 +38,7 @@ class VehicleUpdateRequest(BaseModel):
     customer_id: Optional[int] = None
     make: Optional[str] = Field(None, min_length=1, max_length=100)
     model: Optional[str] = Field(None, min_length=1, max_length=100)
+    trim: Optional[str] = Field(None, max_length=150)
     year: Optional[int] = Field(None, ge=1900, le=2100)
     fuel_type: Optional[FuelType] = None
     color: Optional[str] = Field(None, max_length=50)
@@ -94,6 +96,7 @@ class VehicleOut(BaseModel):
     vin: Optional[str]
     make: str
     model: str
+    trim: Optional[str] = None
     year: Optional[int]
     fuel_type: Optional[FuelType]
     color: Optional[str]

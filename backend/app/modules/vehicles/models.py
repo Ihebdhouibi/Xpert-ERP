@@ -53,6 +53,8 @@ class Vehicle(Base):
 
     make: Mapped[str] = mapped_column(String(100), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
+    # Trim/engine descriptor shown on documents as "Version" (e.g. "2.3 dCi 145 FWD 146cv")
+    trim: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     year: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
 
     fuel_type: Mapped[Optional[str]] = mapped_column(
