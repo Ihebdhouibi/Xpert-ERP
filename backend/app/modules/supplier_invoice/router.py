@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.payment.models import PaymentMethod
+from app.modules.pdf.service import _resolve_logo_url
 from app.modules.rbac.dependencies import AuthUser, require_permission
 from app.modules.supplier_invoice.models import SupplierInvoiceStatus
 from app.modules.supplier_invoice.repository import SupplierInvoiceRepository
@@ -321,7 +322,7 @@ async def export_paid_invoices_pdf(
         garage_address=getattr(settings, "pdf_garage_address", ""),
         garage_phone=getattr(settings, "pdf_garage_phone", ""),
         garage_email=getattr(settings, "pdf_garage_email", ""),
-        garage_logo_path=getattr(settings, "pdf_garage_logo_path", ""),
+        garage_logo_path=_resolve_logo_url(getattr(settings, "pdf_garage_logo_path", "")),
         vat_number=getattr(settings, "pdf_vat_number", ""),
         footer_text=getattr(settings, "pdf_footer_text", ""),
     )

@@ -1,14 +1,9 @@
 {# Counterpart identity for customer-facing documents. Right-aligned by the
    .party-col-right cell it sits in; no heading label, per the reference
-   layout — the position alone identifies it as the addressee.
-
-   `identifiant` and `siret` are resolved leniently: on a Customer row that
-   predates those columns Jinja yields Undefined, which is falsy, so the
-   lines simply do not render. #}
+   layout — the position alone identifies it as the addressee. #}
 {% if customer %}
   <div class="party-name">{{ customer.company_name or customer.full_name }}</div>
-  {% if customer.identifiant %}<div>Identifiant: {{ customer.identifiant }}</div>{% endif %}
-  {% if customer.siret %}<div>SIRET {{ customer.siret }}</div>{% endif %}
+  {% if customer.fiscal_id %}<div>SIRET {{ customer.fiscal_id }}</div>{% endif %}
   {% if customer.address %}
     {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
     {% if customer.address.get("city") %}
