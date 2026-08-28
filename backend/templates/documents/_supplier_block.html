@@ -1,0 +1,10 @@
+{# Counterpart identity for supplier-facing documents (purchase order,
+   supplier return, supplier invoice). Mirrors _customer_block.html. #}
+{% if supplier %}
+  <div class="party-name">{{ supplier.name }}</div>
+  {% if supplier.address %}<div class="address-block">{{ supplier.address }}</div>{% endif %}
+  {% if supplier.phone %}<div>{{ supplier.phone }}</div>{% endif %}
+  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
+{% else %}
+  <div class="status-red">Fournisseur introuvable</div>
+{% endif %}

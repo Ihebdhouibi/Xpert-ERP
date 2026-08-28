@@ -55,6 +55,7 @@ const CATALOG: SettingSection[] = [
       { key: 'pdf_garage_address', label: 'Adresse', type: 'textarea', description: 'Adresse complète du garage (peut contenir des retours à la ligne)' },
       { key: 'pdf_garage_phone', label: 'Téléphone', type: 'string', description: 'Numéro affiché sur les documents', placeholder: 'Ex: +33 1 23 45 67 89' },
       { key: 'pdf_garage_email', label: 'Email de contact', type: 'string', description: 'Email affiché sur les PDF', placeholder: 'contact@garage.fr' },
+      { key: 'pdf_garage_siret', label: 'N° SIRET', type: 'string', description: 'Affiché dans le pied de page légal de chaque document', placeholder: '94404362900012' },
       { key: 'pdf_vat_number', label: 'N° TVA', type: 'string', description: 'Numéro de TVA intracommunautaire', placeholder: 'FR12345678901' },
       { key: 'pdf_currency_symbol', label: 'Symbole monétaire', type: 'string', description: 'Symbole utilisé sur les documents (€, DT, MAD…)', placeholder: '€' },
       { key: 'pdf_payment_terms', label: 'Conditions de paiement', type: 'string', description: 'Texte en pied de facture', placeholder: 'Paiement à 30 jours' },

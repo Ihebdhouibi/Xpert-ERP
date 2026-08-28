@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -34,14 +35,14 @@ logger = get_logger("pdf.service")
 # Jinja2 environment
 # ---------------------------------------------------------------------------
 
-_TEMPLATES_DIR = (
+_BACKEND_DIR = (
     Path(__file__).parent  # …/app/modules/pdf/
     .parent  # …/app/modules/
     .parent  # …/app/
     .parent  # …/backend/
-    / "templates"
-    / "documents"
 )
+
+_TEMPLATES_DIR = _BACKEND_DIR / "templates" / "documents"
 
 
 def _make_jinja_env() -> Environment:
@@ -50,6 +51,9 @@ def _make_jinja_env() -> Environment:
         autoescape=select_autoescape(["html"]),
     )
     env.filters["money"] = _fmt_money
+    env.filters["qty"] = _fmt_qty
+    env.filters["pct"] = _fmt_pct
+    env.filters["date_fr"] = _fmt_date_fr
     return env
 
 
@@ -68,13 +72,53 @@ def _get_jinja_env() -> Environment:
 # ---------------------------------------------------------------------------
 
 
+_FR_MONTHS = (
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+)
+
+
+def _fr_number(value: float, decimals: int = 2) -> str:
+    """Render a number the French way: comma decimal, narrow-space thousands.
+
+    ``1234.5`` → ``1 234,50``.  Python's ``,`` grouping produces the
+    Anglo-Saxon form first, so the two separators are swapped through a NUL
+    placeholder — replacing them in sequence would clobber one with the other.
+    """
+    formatted = f"{value:,.{decimals}f}"
+    return formatted.replace(",", "\x00").replace(".", ",").replace("\x00", " ")
+
+
 def _fmt_money(minor: int | None, symbol: str = "€") -> str:
-    """Format a minor-unit amount (cents) as a human-readable string."""
+    """Format a minor-unit amount (cents) as French currency: ``175,00 €``."""
     if minor is None:
-        return f"0.00 {symbol}"
+        minor = 0
     value = minor / 100
-    formatted = f"{value:,.2f}".replace(",", "\u202f")  # narrow no-break space
-    return f"{formatted} {symbol}"
+    return f"{_fr_number(value)} {symbol}"
+
+
+def _fmt_qty(quantity: Any, decimals: int = 2) -> str:
+    """Quantities / labour hours, French-formatted: ``1,00``."""
+    return _fr_number(float(quantity or 0), decimals)
+
+
+def _fmt_pct(rate: Any, decimals: int = 2) -> str:
+    """Percentages, French-formatted with the sign attached: ``20,00%``."""
+    if rate is None:
+        return ""
+    return f"{_fr_number(float(rate), decimals)}%"
+
+
+def _fmt_date_fr(value: Any) -> str:
+    """Long-form French date: ``1 juin 2026``. Empty string when unset.
+
+    Assembled from the date parts rather than ``strftime``: the no-pad day
+    directive differs across platforms (``%-d`` vs ``%#d``), and the month
+    names would follow the server locale instead of always being French.
+    """
+    if value is None:
+        return ""
+    return f"{value.day} {_FR_MONTHS[value.month - 1]} {value.year}"
 
 
 _GOODS_KINDS = {"part"}
@@ -112,6 +156,36 @@ def _render_pdf_sync(html_string: str, base_url: str) -> bytes:
     return HTML(string=html_string, base_url=base_url).write_pdf()
 
 
+def _resolve_logo_url(raw: str | None) -> str:
+    """Turn a configured logo location into something WeasyPrint can fetch.
+
+    A bare filesystem path is not a URL. On Windows ``D:\\assets\\logo.png``
+    parses as scheme ``d:``, so the image silently fails to load and the
+    document renders with only the alt text. Any value that resolves to an
+    existing file — absolute, or relative to the templates directory — is
+    converted to a proper ``file://`` URI. Already-qualified URLs and values
+    that resolve to nothing are passed through untouched.
+    """
+    if not raw:
+        return ""
+    if re.match(r"^(?:https?|file|data):", raw, re.IGNORECASE):
+        return raw
+
+    candidates = [Path(raw)]
+    if not candidates[0].is_absolute():
+        # Relative values are resolved against the templates directory first
+        # (next to the markup that references them), then the backend root,
+        # which is where shared assets like the logo live.
+        candidates = [_TEMPLATES_DIR / raw, _BACKEND_DIR / raw]
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.resolve().as_uri()
+        except OSError:  # malformed path for this platform
+            continue
+    return raw
+
+
 async def _garage_context(db: AsyncSession, redis: Redis, garage_id: int) -> dict[str, Any]:
     """Branding/legal/bank context shared by every document template.
 
@@ -128,6 +202,7 @@ async def _garage_context(db: AsyncSession, redis: Redis, garage_id: int) -> dic
         "garage_phone": ("pdf_garage_phone", env.pdf_garage_phone),
         "garage_email": ("pdf_garage_email", env.pdf_garage_email),
         "garage_logo_path": ("pdf_garage_logo_path", env.pdf_garage_logo_path),
+        "garage_siret": ("pdf_garage_siret", env.pdf_garage_siret),
         "vat_number": ("pdf_vat_number", env.pdf_vat_number),
         "legal_mention": ("pdf_legal_mention", env.pdf_legal_mention),
         "bank_iban": ("pdf_bank_iban", env.pdf_bank_iban),
@@ -137,10 +212,12 @@ async def _garage_context(db: AsyncSession, redis: Redis, garage_id: int) -> dic
         "currency_symbol": ("pdf_currency_symbol", env.pdf_currency_symbol),
         "payment_terms": ("pdf_payment_terms", env.pdf_payment_terms),
     }
-    return {
+    ctx = {
         ctx_key: await svc.get_setting(cfg_key, garage_id, default=default)
         for ctx_key, (cfg_key, default) in fields.items()
     }
+    ctx["garage_logo_path"] = _resolve_logo_url(ctx["garage_logo_path"])
+    return ctx
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,24 @@
+{# Counterpart identity for customer-facing documents. Right-aligned by the
+   .party-col-right cell it sits in; no heading label, per the reference
+   layout — the position alone identifies it as the addressee.
+
+   `identifiant` and `siret` are resolved leniently: on a Customer row that
+   predates those columns Jinja yields Undefined, which is falsy, so the
+   lines simply do not render. #}
+{% if customer %}
+  <div class="party-name">{{ customer.company_name or customer.full_name }}</div>
+  {% if customer.identifiant %}<div>Identifiant: {{ customer.identifiant }}</div>{% endif %}
+  {% if customer.siret %}<div>SIRET {{ customer.siret }}</div>{% endif %}
+  {% if customer.address %}
+    {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
+    {% if customer.address.get("city") %}
+      <div>
+        {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
+        {{ customer.address.get("city") }}
+      </div>
+    {% endif %}
+  {% endif %}
+  {% if customer.phone_e164 %}<div>{{ customer.phone_e164 }}</div>{% endif %}
+{% else %}
+  <div class="status-red">Client introuvable</div>
+{% endif %}

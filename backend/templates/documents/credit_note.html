@@ -1,83 +1,84 @@
 {% extends "base.html" %}
 
 {% block doc_title %}
-<div class="doc-title-text status-red">AVOIR</div>
-<div class="doc-meta-line">
-  N° {{ doc.doc_number or "Brouillon" }}
-  &nbsp;·&nbsp; Émission {{ doc.issued_at.strftime("%d/%m/%Y") if doc.issued_at else "—" }}
-  &nbsp;·&nbsp; Facture d'origine {{ invoice.doc_number if invoice else "#" ~ doc.invoice_id }}
-  {% if invoice and invoice.issued_at %}du {{ invoice.issued_at.strftime("%d/%m/%Y") }}{% endif %}
-</div>
+<div class="doc-title-text">Avoir</div>
 {% endblock %}
 
-{% block counterpart_info %}
-<div class="party-col-title">Avoir établi au nom de</div>
-{% if customer %}
-  <div class="party-name">{{ customer.full_name }}</div>
-  {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
-  {% if customer.address %}
-    {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
-    {% if customer.address.get("city") %}
-      <div>
-        {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
-        {{ customer.address.get("city") }}
-      </div>
-    {% endif %}
-  {% endif %}
-  {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
-  {% if customer.email %}<div>{{ customer.email }}</div>{% endif %}
-  {% if customer.fiscal_id %}<div>N° fiscal : {{ customer.fiscal_id }}</div>{% endif %}
-{% else %}
-  <div class="status-red">Client introuvable</div>
-{% endif %}
+{% block doc_meta %}
+<span class="meta-item">
+  <span class="meta-label">Numéro d'avoir</span>
+  <span class="meta-value">{{ doc.doc_number or "Brouillon" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date d'émission</span>
+  <span class="meta-value">{{ doc.issued_at | date_fr or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Facture d'origine</span>
+  <span class="meta-value">
+    {{ invoice.doc_number if invoice else "#" ~ doc.invoice_id }}
+    {% if invoice and invoice.issued_at %}du {{ invoice.issued_at | date_fr }}{% endif %}
+  </span>
+</span>
 {% endblock %}
+
+{% block counterpart_info %}{% include "_customer_block.html" %}{% endblock %}
 
 {% block content %}
 
-<!-- Amount table -->
-<table class="lines-table">
-  <thead>
-    <tr>
-      <th>Désignation</th>
-      <th class="amount" style="width:20%">Montant TTC</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>
-        Avoir sur facture {{ invoice.doc_number if invoice else "#" ~ doc.invoice_id }}
-        {% if doc.reason %}
-        <br><span style="font-size:8pt; color:#555;">Motif : {{ doc.reason }}</span>
-        {% endif %}
-      </td>
-      <td class="amount status-red" style="font-weight:bold;">
-        - {{ doc.total_minor | money(currency_symbol) }}
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-<!-- Totals -->
-<div class="totals-wrapper">
-  {% include "_bank_info.html" %}
-  <div class="totals-box">
-  <table>
-    <tr class="total">
-      <td class="t-label status-red">TOTAL AVOIR TTC</td>
-      <td class="t-value status-red">- {{ doc.total_minor | money(currency_symbol) }}</td>
-    </tr>
+<div class="lines-card">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:75%">Désignation</th>
+        <th class="amount" style="width:25%">Montant (TTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="designation">
+          Avoir sur facture {{ invoice.doc_number if invoice else "#" ~ doc.invoice_id }}
+        </td>
+        <td class="amount">- {{ doc.total_minor | money(currency_symbol) }}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="st-total">
+        <td class="st-label">Total avoir TTC</td>
+        <td class="st-value">- {{ doc.total_minor | money(currency_symbol) }}</td>
+      </tr>
+    </tfoot>
   </table>
-  </div>
 </div>
 
-{% include "_payment_legal.html" %}
+<table class="settlement">
+  <tr>
+    <td class="terms-cell">
+      {% include "_settlement_terms.html" %}
+    </td>
+    <td class="totals-cell">
+      <div class="totals-panel">
+        <table>
+          <tr class="grand">
+            <td class="t-label">Total avoir TTC</td>
+            <td class="t-value">- {{ doc.total_minor | money(currency_symbol) }}</td>
+          </tr>
+        </table>
+        <div class="vat-recap">
+          <div>TVA exigible sur les encaissements</div>
+        </div>
+      </div>
+    </td>
+  </tr>
+</table>
 
-<!-- Motif block -->
 {% if doc.reason %}
 <div class="notes-block">
   <div class="block-title">Motif de l'avoir</div>
   <div>{{ doc.reason }}</div>
 </div>
 {% endif %}
+
+<div class="rule-tight"></div>
 
 {% endblock %}

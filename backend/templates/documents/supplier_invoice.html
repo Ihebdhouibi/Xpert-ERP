@@ -2,94 +2,114 @@
 
 {% block doc_title %}
 <div class="doc-title-text">
-  FACTURE FOURNISSEUR
-  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulée</span>
-  {% elif doc.status.value == "paid" %}<span class="status-suffix status-green"> — Payée</span>
-  {% elif doc.status.value == "approved" %}<span class="status-suffix status-blue"> — Approuvée</span>
-  {% endif %}
+  Facture fournisseur
+  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulée</span>{% endif %}
 </div>
-<div class="doc-meta-line">
-  N° {{ doc.number }}
-  &nbsp;·&nbsp; Réception {{ doc.received_at.strftime("%d/%m/%Y") if doc.received_at else "—" }}
-  &nbsp;·&nbsp; Échéance {{ doc.due_date.strftime("%d/%m/%Y") if doc.due_date else "—" }}
-</div>
+{% endblock %}
+
+{% block doc_meta %}
+<span class="meta-item">
+  <span class="meta-label">Numéro de facture</span>
+  <span class="meta-value">{{ doc.number }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date de réception</span>
+  <span class="meta-value">{{ doc.received_at | date_fr or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date d'échéance</span>
+  <span class="meta-value">{{ doc.due_date | date_fr or "—" }}</span>
+</span>
 {% if doc.has_discrepancy %}
-<div class="doc-meta-line status-red" style="font-weight:bold; margin-top:2pt;">
-  {% if doc.override_reason %}Écart accepté — {{ doc.override_reason }}{% else %}Écarts détectés{% endif %}
-</div>
+<span class="meta-item">
+  <span class="meta-label">Écart</span>
+  <span class="meta-value status-red">
+    {% if doc.override_reason %}Accepté — {{ doc.override_reason }}{% else %}Détecté{% endif %}
+  </span>
+</span>
 {% endif %}
 {% endblock %}
 
-{% block counterpart_info %}
-<div class="party-col-title">Fournisseur</div>
-{% if supplier %}
-  <div class="party-name">{{ supplier.name }}</div>
-  {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
-  {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
-  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
-{% else %}
-  <div class="status-red">Fournisseur introuvable</div>
-{% endif %}
-{% endblock %}
+{% block counterpart_info %}{% include "_supplier_block.html" %}{% endblock %}
 
 {% block content %}
 
-<!-- Lines table -->
-<table class="lines-table">
-  <thead>
-    <tr>
-      <th style="width:4%">#</th>
-      <th>Désignation</th>
-      <th class="num" style="width:8%">Qté</th>
-      <th class="amount" style="width:14%">Prix U. HT</th>
-      <th class="amount" style="width:8%">TVA</th>
-      <th class="amount" style="width:14%">Total HT</th>
-      <th class="amount" style="width:14%">Total TTC</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for line in doc.lines %}
-    <tr>
-      <td class="num">{{ loop.index }}</td>
-      <td>{{ line.description or "—" }}</td>
-      <td class="num">{{ line.quantity }}</td>
-      <td class="amount">{{ line.unit_price_ht | money(currency_symbol) }}</td>
-      <td class="num">{{ line.vat_rate }}%</td>
-      <td class="amount">{{ line.line_total_ht | money(currency_symbol) }}</td>
-      <td class="amount">{{ line.line_total_ttc | money(currency_symbol) }}</td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="7" style="text-align:center; color:#888; padding:8pt;">Aucune ligne</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<!-- Totals -->
-<div class="totals-wrapper">
-  {% include "_bank_info.html" %}
-  <div class="totals-box">
-  <table>
-    <tr class="subtotal">
-      <td class="t-label">Total HT</td>
-      <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
-    </tr>
-    <tr class="vat">
-      <td class="t-label">TVA</td>
-      <td class="t-value">{{ (doc.total_ttc - doc.total_ht) | money(currency_symbol) }}</td>
-    </tr>
-    <tr class="total">
-      <td class="t-label">TOTAL TTC</td>
-      <td class="t-value">{{ doc.total_ttc | money(currency_symbol) }}</td>
-    </tr>
+<div class="lines-card">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:38%">Désignation</th>
+        <th class="amount" style="width:10%">Qté</th>
+        <th class="amount" style="width:14%">PU (HT)</th>
+        <th class="amount" style="width:10%">TVA<br />(%)</th>
+        <th class="amount" style="width:14%">Total<br />(HT)</th>
+        <th class="amount" style="width:14%">Total<br />(TTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in doc.lines %}
+      <tr>
+        <td class="designation">{{ line.description or "—" }}</td>
+        <td class="amount">{{ line.quantity | qty }}</td>
+        <td class="amount">{{ line.unit_price_ht | money(currency_symbol) }}</td>
+        <td class="amount">{{ line.vat_rate | pct }}</td>
+        <td class="amount">{{ line.line_total_ht | money(currency_symbol) }}</td>
+        <td class="amount">{{ line.line_total_ttc | money(currency_symbol) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" style="text-align:center; color:#9CA3AF; padding:10pt;">Aucune ligne</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if doc.lines %}
+    <tfoot>
+      <tr>
+        <td class="st-label" colspan="5">Total HT</td>
+        <td class="st-value">{{ doc.total_ht | money(currency_symbol) }}</td>
+      </tr>
+      <tr>
+        <td class="st-label" colspan="5">TVA</td>
+        <td class="st-value">{{ (doc.total_ttc - doc.total_ht) | money(currency_symbol) }}</td>
+      </tr>
+      <tr class="st-total">
+        <td class="st-label" colspan="5">Total TTC</td>
+        <td class="st-value">{{ doc.total_ttc | money(currency_symbol) }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
-  </div>
 </div>
 
-{% include "_payment_legal.html" %}
+<table class="settlement">
+  <tr>
+    <td class="terms-cell">
+      {% include "_settlement_terms.html" %}
+    </td>
+    <td class="totals-cell">
+      <div class="totals-panel">
+        <table>
+          <tr>
+            <td class="t-label">Total à payer HT</td>
+            <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
+          </tr>
+          <tr>
+            <td class="t-label">TVA</td>
+            <td class="t-value">{{ (doc.total_ttc - doc.total_ht) | money(currency_symbol) }}</td>
+          </tr>
+          <tr class="grand">
+            <td class="t-label">Total à payer TTC</td>
+            <td class="t-value">{{ doc.total_ttc | money(currency_symbol) }}</td>
+          </tr>
+        </table>
+      </div>
+    </td>
+  </tr>
+</table>
 
 <!-- Notes are intentionally excluded from the PDF — they are internal platform
      annotations for staff only and must not appear on printed/shared documents. -->
+
+<div class="rule-tight"></div>
 
 {% endblock %}

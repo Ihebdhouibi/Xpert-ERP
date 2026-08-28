@@ -30,7 +30,14 @@ from app.core.redis import get_redis
 from app.main import create_app
 from app.modules.auth.models import AppUser, Permission, Role, RolePermission, UserRole
 from app.modules.auth.service import hash_password
-from app.modules.pdf.service import _fmt_money, _get_jinja_env, _make_jinja_env, _nature_of_operation
+from app.modules.pdf.service import (
+    _BACKEND_DIR,
+    _fmt_money,
+    _get_jinja_env,
+    _make_jinja_env,
+    _nature_of_operation,
+    _resolve_logo_url,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -259,6 +266,34 @@ def _base_ctx(*, currency_symbol: str = "€") -> dict:
 # ---------------------------------------------------------------------------
 
 
+class TestResolveLogoUrl:
+    """A bare filesystem path is not a URL: on Windows ``D:\\x\\logo.png``
+    parses as scheme ``d:`` and the image silently fails to load, leaving the
+    document with only alt text where the logo should be."""
+
+    def test_absolute_path_becomes_file_uri(self) -> None:
+        logo = _BACKEND_DIR / "assets" / "logo-pdf.png"
+        result = _resolve_logo_url(str(logo))
+        assert result.startswith("file://")
+        assert result.endswith("logo-pdf.png")
+
+    def test_path_relative_to_backend_root_is_resolved(self) -> None:
+        result = _resolve_logo_url("assets/logo-pdf.png")
+        assert result.startswith("file://")
+        assert result.endswith("logo-pdf.png")
+
+    def test_empty_stays_empty(self) -> None:
+        assert _resolve_logo_url("") == ""
+        assert _resolve_logo_url(None) == ""
+
+    def test_qualified_urls_pass_through(self) -> None:
+        for url in ("https://cdn.example/logo.png", "file:///tmp/logo.png", "data:image/png;base64,AA=="):
+            assert _resolve_logo_url(url) == url
+
+    def test_unresolvable_path_passes_through(self) -> None:
+        assert _resolve_logo_url("assets/does-not-exist.png") == "assets/does-not-exist.png"
+
+
 class TestFmtMoney:
     def test_basic_cents(self) -> None:
         result = _fmt_money(1050)
@@ -268,17 +303,23 @@ class TestFmtMoney:
 
     def test_zero(self) -> None:
         result = _fmt_money(0)
-        assert "0.00" in result
+        assert "0,00" in result
 
     def test_none_returns_zero(self) -> None:
         result = _fmt_money(None)  # type: ignore[arg-type]
-        assert "0.00" in result
+        assert "0,00" in result
         assert "€" in result
 
     def test_custom_symbol(self) -> None:
         result = _fmt_money(500, "TND")
         assert "TND" in result
-        assert "5.00" in result
+        assert "5,00" in result
+
+    def test_french_decimal_and_thousands_separators(self) -> None:
+        """Comma decimal separator, narrow no-break space for thousands."""
+        result = _fmt_money(1_234_567)
+        assert result.replace(chr(0x202F), " ") == "12 345,67 \u20ac"
+        assert "." not in result
 
     def test_large_amount(self) -> None:
         result = _fmt_money(1_000_000)  # 10 000.00
@@ -325,7 +366,7 @@ class TestQuotationTemplate:
             vehicle=None,
         )
         assert "<!DOCTYPE html>" in html
-        assert "DEVIS" in html
+        assert "Devis" in html
 
     def test_contains_doc_number(self) -> None:
         env = _make_jinja_env()
@@ -340,7 +381,8 @@ class TestQuotationTemplate:
         html = tmpl.render(
             **_base_ctx(), doc=_make_quotation(), customer=_make_customer(), vehicle=None
         )
-        assert "Jean Dupont" in html
+        # Company customers are addressed by their company name — the legal
+        # addressee — rather than by the contact person's name.
         assert "Garage Central" in html
         assert "75001" in html
 
@@ -359,8 +401,8 @@ class TestQuotationTemplate:
         html = tmpl.render(
             **_base_ctx(), doc=_make_quotation(), customer=_make_customer(), vehicle=None
         )
-        assert "TOTAL TTC" in html
-        assert "Total HT" in html
+        assert "Total estimé TTC" in html
+        assert "Total estimé HT" in html
 
     def test_renders_with_vehicle(self) -> None:
         env = _make_jinja_env()
@@ -437,7 +479,7 @@ class TestInvoiceTemplate:
             **_base_ctx(), doc=_make_invoice(), customer=_make_customer(), vehicle=None
         )
         assert "<!DOCTYPE html>" in html
-        assert "FACTURE" in html
+        assert "Facture" in html
 
     def test_contains_doc_number(self) -> None:
         env = _make_jinja_env()
@@ -456,7 +498,7 @@ class TestInvoiceTemplate:
         doc = _make_invoice()
         doc.status = SimpleNamespace(value="paid")
         html = tmpl.render(**_base_ctx(), doc=doc, customer=_make_customer(), vehicle=None)
-        assert "FACTURE" in html
+        assert "Facture" in html
         assert "Annulée" not in html
 
     def test_shows_cancelled_status_colour(self) -> None:

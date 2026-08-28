@@ -172,8 +172,12 @@ class Settings(BaseSettings):
     pdf_garage_address: str = "868 boulevard de la Libération\n13730 Saint-Victoret, France"
     pdf_garage_phone: str = "07 82 07 26 02"
     pdf_garage_email: str = ""
-    pdf_garage_logo_path: str = ""  # absolute path to logo file, or empty
-    pdf_vat_number: str = ""
+    # Absolute path, file:// URL, or a path relative to backend/. The default
+    # is the whitespace-trimmed copy of the logo — the square source file is
+    # ~60% empty padding, which renders the mark tiny inside its header box.
+    pdf_garage_logo_path: str = "assets/logo-pdf.png"
+    pdf_garage_siret: str = "94404362900012"
+    pdf_vat_number: str = "FR74944043629"
     pdf_legal_mention: str = "Pénalités de retard : taux annuel de 10 % – Indemnité forfaitaire : 40 € (art. L441-10 C. com.)."
     pdf_bank_iban: str = "FR76 3083 3830 0001 1362 3852 907"
     pdf_bank_bic: str = "FNOMFRP2"

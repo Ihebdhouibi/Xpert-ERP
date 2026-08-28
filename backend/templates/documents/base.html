@@ -3,304 +3,280 @@
 <head>
 <meta charset="UTF-8" />
 <style>
+  /* ==================================================================== */
+  /* Design tokens                                                        */
+  /* WeasyPrint resolves var() fine, but NOT inside @page margin boxes —   */
+  /* those few values are written literally further down.                 */
+  /* ==================================================================== */
+  :root {
+    --ink:      #1A1D21;  /* titles, figures, emphasised values */
+    --body:     #33383D;  /* ordinary text */
+    --muted:    #6B7280;  /* field labels */
+    --faint:    #9CA3AF;  /* legal footnotes, page footer */
+    --rule:     #DFE2E6;  /* section separators */
+    --hairline: #EDEEF0;  /* in-table row separators */
+    --border:   #E3E5E8;  /* card outline */
+    --panel:    #F4F5F7;  /* totals panel fill */
+    --radius:   5pt;
+  }
+
   /* ------------------------------------------------------------------ */
-  /* Page layout — A4, portrait                                          */
+  /* Page — A4 portrait. The legal footer repeats on every page.         */
   /* ------------------------------------------------------------------ */
   @page {
     size: A4 portrait;
-    margin: 15mm 15mm 22mm 15mm;
-    @bottom-left {
-      content: element(footer-legal);
-      vertical-align: top;
-    }
+    margin: 14mm 14mm 20mm 14mm;
+
     @bottom-center {
-      content: "Page " counter(page) " / " counter(pages);
-      font-size: 7.5pt;
-      color: #999;
-      vertical-align: top;
-      padding-top: 3pt;
+      /* Built as one margin-box string so the legal mention and the page
+         counter can stack in a single centred block — margin boxes sit in
+         one row, so they cannot be stacked as two separate boxes. */
+      content: "{{ garage_name }}{% if garage_siret %} - SIRET {{ garage_siret }}{% endif %}{% if vat_number %} - TVA Intracommunautaire {{ vat_number }}{% endif %}"
+               {% if footer_text %}"\A{{ footer_text }}"{% endif %}
+               "\A" counter(page) "/" counter(pages);
+      /* Margin boxes inherit nothing from body — restate the font stack. */
+      font-family: Arial, "Helvetica Neue", Helvetica, "DejaVu Sans", sans-serif;
+      white-space: pre-line;
+      text-align: center;
+      font-size: 7pt;
+      line-height: 1.5;
+      color: #9CA3AF;
+      vertical-align: bottom;
     }
   }
 
   body {
-    font-family: "DejaVu Sans", Arial, sans-serif;
-    font-size: 9pt;
-    color: #222;
+    font-family: Arial, "Helvetica Neue", Helvetica, "DejaVu Sans", sans-serif;
+    font-size: 8.5pt;
+    color: var(--body);
     margin: 0;
     padding: 0;
-    line-height: 1.45;
+    line-height: 1.5;
   }
 
   /* ------------------------------------------------------------------ */
-  /* Running footer — page numbers + optional custom text only.          */
-  /* Payment terms / legal mention / bank details live in the body now,  */
-  /* next to the totals box — see .totals-row / .bank-info-block /       */
-  /* .payment-legal-block below.                                        */
+  /* Header — title left, logo right                                     */
   /* ------------------------------------------------------------------ */
-  #footer-legal {
-    position: running(footer-legal);
-    font-size: 7.5pt;
-    color: #888;
-    border-top: 0.5pt solid #ddd;
-    padding-top: 3pt;
-    max-width: 110mm;
-  }
+  .header { width: 100%; margin-bottom: 10pt; }
+  .header table { width: 100%; border-collapse: collapse; }
+  .header td { vertical-align: top; padding: 0; }
+  .header .title-cell { text-align: left; vertical-align: middle; }
+  .header .logo-cell { text-align: right; width: 38%; vertical-align: middle; }
+  /* Sized for a trimmed, roughly 2:1 mark. max-width is what binds; the
+     height cap is a guard for a squarer logo on another garage. */
+  .header .logo-cell img { max-width: 62mm; max-height: 30mm; }
 
-  /* ------------------------------------------------------------------ */
-  /* Header: logo left, title + meta right                               */
-  /* ------------------------------------------------------------------ */
-  .header {
-    width: 100%;
-    border-bottom: 0.75pt solid #ddd;
-    padding-bottom: 8pt;
-    margin-bottom: 12pt;
-  }
-  .header table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .header td { vertical-align: top; }
-  .header .logo-cell { width: 40%; }
-  .header .logo-cell img {
-    max-height: 30mm;
-    max-width: 55mm;
-  }
-  .header .logo-fallback {
-    font-size: 13pt;
-    font-weight: 700;
-    color: #1a1a1a;
-  }
-  .header .title-cell { text-align: right; }
   .doc-title-text {
-    font-size: 19pt;
+    font-size: 20pt;
     font-weight: 700;
-    color: #1a1a1a;
-    margin-bottom: 3pt;
+    color: var(--ink);
+    letter-spacing: -0.3pt;
   }
   .doc-title-text .status-suffix { font-size: 12pt; font-weight: 700; }
-  .doc-meta-line {
-    font-size: 8.5pt;
-    color: #555;
-  }
 
-  /* Semantic status colours (used inline, no more full-width banners) */
-  .status-red    { color: #c0392b; }
-  .status-green  { color: #27ae60; }
-  .status-blue   { color: #2980b9; }
+  /* Semantic status colours — reserved for exceptional states only
+     (cancelled, overdue). Routine amounts stay neutral by design. */
+  .status-red    { color: #C0392B; }
+  .status-green  { color: #27AE60; }
+  .status-blue   { color: #2980B9; }
   .status-orange { color: #EA580C; }
 
   /* ------------------------------------------------------------------ */
-  /* Issuer / counterpart — plain two-column text, no boxes              */
+  /* Meta strip — inline "label value" pairs under the title             */
   /* ------------------------------------------------------------------ */
-  .parties-plain {
-    margin-bottom: 10pt;
-  }
-  .parties-plain table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .parties-plain td {
-    vertical-align: top;
-    width: 50%;
-    padding: 0 6pt 0 0;
-    font-size: 8.5pt;
-  }
-  .parties-plain td.party-col-right { padding: 0 0 0 6pt; }
-  .parties-plain .party-name {
+  .meta-strip { margin-bottom: 16pt; }
+  .meta-strip .meta-item { margin-right: 16pt; white-space: nowrap; }
+  .meta-strip .meta-item:last-child { margin-right: 0; }
+  .meta-label { font-size: 7.5pt; color: var(--muted); }
+  .meta-value { font-size: 7.5pt; font-weight: 700; color: var(--ink); }
+
+  /* ------------------------------------------------------------------ */
+  /* Parties — issuer left, counterpart right-aligned                    */
+  /* ------------------------------------------------------------------ */
+  .parties { margin-bottom: 12pt; }
+  .parties table { width: 100%; border-collapse: collapse; }
+  .parties td { vertical-align: top; width: 50%; padding: 0; font-size: 8pt; }
+  .parties td.party-col-right { text-align: right; padding-left: 10pt; }
+  .party-name {
     font-weight: 700;
     font-size: 10pt;
-    color: #1a1a1a;
-    margin-bottom: 2pt;
+    color: var(--ink);
+    margin-bottom: 3pt;
   }
-  /* Only the free-text address field needs its embedded newlines to
-     render as line breaks — scoped narrowly so it doesn't turn ordinary
-     template-source whitespace into visible blank lines. */
-  .address-block {
-    white-space: pre-line;
-  }
-  .party-col-title {
-    font-weight: 700;
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.3pt;
-    color: #888;
-    margin-bottom: 2pt;
-  }
+  /* Only the free-text address needs its embedded newlines honoured —
+     scoped narrowly so ordinary template whitespace stays collapsed. */
+  .address-block { white-space: pre-line; }
 
   /* ------------------------------------------------------------------ */
-  /* Vehicle info — inline row, not a boxed card                         */
+  /* Nature of operation + section rules                                 */
   /* ------------------------------------------------------------------ */
-  .vehicle-row {
-    margin-bottom: 10pt;
-    padding: 6pt 0;
-    border-top: 0.5pt solid #eee;
-    border-bottom: 0.5pt solid #eee;
-    font-size: 8.5pt;
-    color: #333;
-  }
-  .vehicle-row span { margin-right: 16pt; }
-  .vehicle-row span:last-child { margin-right: 0; }
+  .nature-line { font-size: 8pt; color: var(--body); margin-bottom: 10pt; }
+  .rule { border-top: 0.5pt solid var(--rule); margin: 0 0 10pt 0; }
+  .rule-tight { border-top: 0.5pt solid var(--rule); margin: 12pt 0 0 0; }
 
   /* ------------------------------------------------------------------ */
-  /* Line items table                                                    */
+  /* Vehicle strip — label row above value row                           */
   /* ------------------------------------------------------------------ */
-  .lines-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 10pt;
-    font-size: 8.5pt;
+  .vehicle-table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; }
+  .vehicle-table td { padding: 0 8pt 0 0; vertical-align: top; }
+  .vehicle-table td:last-child { padding-right: 0; }
+  .vehicle-table .v-label { font-size: 7.5pt; color: var(--muted); padding-bottom: 1pt; }
+  .vehicle-table .v-value { font-size: 8.5pt; font-weight: 700; color: var(--ink); }
+
+  /* ------------------------------------------------------------------ */
+  /* Line items — a rounded card wrapping the table                      */
+  /* ------------------------------------------------------------------ */
+  .lines-card {
+    border: 0.5pt solid var(--border);
+    border-radius: var(--radius);
+    padding: 2pt 10pt 6pt 10pt;
+    margin-bottom: 14pt;
   }
-  .lines-table thead tr {
-    background-color: #f7f7f7;
-    border-bottom: 1pt solid #333;
-  }
+  .lines-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  .lines-table thead { display: table-header-group; }
   .lines-table thead th {
-    padding: 5pt;
+    padding: 8pt 4pt;
     text-align: left;
     font-weight: 700;
-    font-size: 7.5pt;
-    text-transform: uppercase;
-    letter-spacing: 0.3pt;
-    color: #333;
-    border: none;
+    font-size: 8pt;
+    color: var(--ink);
+    border-bottom: 0.5pt solid var(--rule);
+    vertical-align: bottom;
   }
-  .lines-table thead th.num { text-align: center; }
   .lines-table thead th.amount { text-align: right; }
   .lines-table tbody td {
-    padding: 4pt 5pt;
-    border-bottom: 0.5pt solid #e5e5e5;
+    padding: 7pt 4pt;
+    border-bottom: 0.5pt solid var(--hairline);
     vertical-align: top;
+    color: var(--body);
   }
-  .lines-table tbody td.num   { text-align: center; }
-  .lines-table tbody td.amount { text-align: right; font-family: monospace; }
+  .lines-table tbody td.amount { text-align: right; white-space: nowrap; }
+  .lines-table td.designation { text-transform: uppercase; }
+
+  /* In-card subtotal block, right-aligned under the lines.
+     Demoted to an ordinary row group: as a real tfoot the browser/print
+     engine repeats it on every page, which would print the grand total
+     part-way through a long invoice as if it were a page subtotal. */
+  .lines-table tfoot { display: table-row-group; }
+  .lines-table tfoot td {
+    padding: 3pt 4pt;
+    border: none;
+    text-align: right;
+    font-size: 8.5pt;
+  }
+  .lines-table tfoot tr:first-child td { padding-top: 9pt; }
+  .lines-table tfoot td.st-label { color: var(--body); }
+  .lines-table tfoot td.st-value { color: var(--ink); white-space: nowrap; }
+  .lines-table tfoot tr.st-total td { font-weight: 700; }
 
   /* ------------------------------------------------------------------ */
-  /* Totals row — bank details (left) + single gray totals panel (right) */
+  /* Settlement row — terms/bank left, totals panel right.               */
+  /* Kept as one unbreakable table row so the panel can never orphan.    */
   /* ------------------------------------------------------------------ */
-  .totals-wrapper {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 10pt;
+  .settlement { width: 100%; border-collapse: collapse; break-inside: avoid; }
+  .settlement > tbody > tr { break-inside: avoid; }
+  .settlement td.terms-cell { vertical-align: top; padding-right: 12pt; font-size: 7.5pt; }
+  .settlement td.totals-cell { vertical-align: top; width: 46%; }
+
+  .terms-block { color: var(--body); }
+  .terms-block .terms-label { color: var(--muted); }
+  .terms-block .terms-value { font-weight: 700; color: var(--ink); }
+  .terms-block .legal-line { color: var(--body); margin-top: 3pt; }
+  .bank-block { margin-top: 8pt; color: var(--body); }
+  .bank-block div { margin-bottom: 1pt; }
+
+  .totals-panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 10pt 12pt;
   }
-  .bank-info-block {
-    font-size: 8pt;
-    color: #555;
-    padding-top: 2pt;
-  }
-  .bank-info-block div { margin-bottom: 1pt; }
-  .totals-box {
-    display: inline-block;
-    min-width: 65mm;
-    background: #f5f5f5;
-    border: 0.5pt solid #e0e0e0;
-    padding: 8pt 10pt;
-  }
-  .totals-box table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 9pt;
-  }
-  .totals-box td {
-    padding: 2pt 0;
-    border: none;
-  }
-  .totals-box td.t-label { text-align: left; color: #555; }
-  .totals-box td.t-value { text-align: right; font-family: monospace; }
-  .totals-box tr.discount td { color: #c0392b; }
-  .totals-box tr.total td {
-    font-size: 12pt;
-    font-weight: bold;
-    color: #1a1a1a;
-    border-top: 1pt solid #333;
+  .totals-panel table { width: 100%; border-collapse: collapse; }
+  .totals-panel td { padding: 2pt 0; border: none; font-size: 8.5pt; }
+  .totals-panel td.t-label { text-align: right; color: var(--body); padding-right: 10pt; }
+  .totals-panel td.t-value { text-align: right; color: var(--ink); white-space: nowrap; }
+  .totals-panel tr.grand td {
+    font-size: 11pt;
+    font-weight: 700;
+    color: var(--ink);
     padding-top: 5pt;
   }
-  .totals-box tr.balance td {
-    font-weight: bold;
-  }
-  .totals-box .vat-recap {
+  .totals-panel tr.grand td.t-label { color: var(--ink); }
+  .totals-panel .vat-recap {
     margin-top: 6pt;
     font-size: 7.5pt;
-    color: #777;
+    color: var(--muted);
+    text-align: right;
   }
+  .totals-panel .vat-recap div { margin-bottom: 1pt; }
 
   /* ------------------------------------------------------------------ */
-  /* Payment terms + legal mention — below the bank-info/totals row      */
-  /* ------------------------------------------------------------------ */
-  .payment-legal-block {
-    font-size: 7.5pt;
-    color: #777;
-    margin-bottom: 8pt;
-  }
-  .payment-legal-block div { margin-bottom: 1pt; }
-
-  /* ------------------------------------------------------------------ */
-  /* Notes / terms block                                                 */
+  /* Notes                                                               */
   /* ------------------------------------------------------------------ */
   .notes-block {
     font-size: 8pt;
-    color: #555;
-    margin-top: 8pt;
-    padding: 5pt 6pt;
-    border: 0.5pt solid #ddd;
-    background: #fafafa;
+    color: var(--body);
+    margin-top: 12pt;
+    padding: 7pt 9pt;
+    border: 0.5pt solid var(--border);
+    border-radius: var(--radius);
+    break-inside: avoid;
   }
   .notes-block .block-title {
-    font-weight: bold;
-    font-size: 8pt;
-    text-transform: uppercase;
-    color: #333;
-    margin-bottom: 3pt;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 2pt;
   }
 </style>
 </head>
 <body>
 
-<!-- Running footer (page numbers + optional custom text only) -->
-<div id="footer-legal">
-  {% if footer_text %}<div>{{ footer_text }}</div>{% endif %}
-</div>
-
 <!-- ------------------------------------------------------------------- -->
-<!-- HEADER: logo left, title + meta right                                -->
+<!-- HEADER: title left, logo right                                       -->
 <!-- ------------------------------------------------------------------- -->
 <div class="header">
   <table>
     <tr>
+      <td class="title-cell">
+        {% block doc_title %}{% endblock %}
+      </td>
       <td class="logo-cell">
         {% if garage_logo_path %}
           <img src="{{ garage_logo_path }}" alt="Logo" />
-        {% else %}
-          <span class="logo-fallback">{{ garage_name }}</span>
         {% endif %}
-      </td>
-      <td class="title-cell">
-        {% block doc_title %}{% endblock %}
       </td>
     </tr>
   </table>
 </div>
 
+<!-- Meta strip: per-document "label value" pairs -->
+<div class="meta-strip">
+  {% block doc_meta %}{% endblock %}
+</div>
+
 <!-- ------------------------------------------------------------------- -->
-<!-- ISSUER (garage, static) / COUNTERPART (per-document, overridable)    -->
+<!-- PARTIES: issuer left (static), counterpart right (per-document)      -->
 <!-- ------------------------------------------------------------------- -->
-<div class="parties-plain">
+<div class="parties">
   <table>
     <tr>
-      <td class="party-col">
+      <td class="party-col-left">
         <div class="party-name">{{ garage_name }}</div>
         {% if garage_address %}<div class="address-block">{{ garage_address }}</div>{% endif %}
-        {% if garage_phone %}<div>Tél : {{ garage_phone }}</div>{% endif %}
+        {% if garage_phone %}<div>{{ garage_phone }}</div>{% endif %}
         {% if garage_email %}<div>{{ garage_email }}</div>{% endif %}
-        {% if vat_number %}<div>N° TVA : {{ vat_number }}</div>{% endif %}
-        {% if nature_of_operation %}<div>Nature de l'opération : {{ nature_of_operation }}</div>{% endif %}
       </td>
-      <td class="party-col party-col-right">
+      <td class="party-col-right">
         {% block counterpart_info %}{% endblock %}
       </td>
     </tr>
   </table>
 </div>
+
+{% if nature_of_operation %}
+<div class="nature-line">Nature de l'opération: {{ nature_of_operation }}</div>
+{% endif %}
+
+<div class="rule"></div>
 
 {% block content %}{% endblock %}
 

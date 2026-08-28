@@ -1,68 +1,85 @@
 {% extends "base.html" %}
 
+{% block doc_title %}
+<div class="doc-title-text">Journal des achats</div>
+{% endblock %}
+
+{% block doc_meta %}
+<span class="meta-item">
+  <span class="meta-label">Objet</span>
+  <span class="meta-value">Factures fournisseurs payées</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date d'export</span>
+  <span class="meta-value">{{ export_date }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Nombre de factures</span>
+  <span class="meta-value">{{ invoice_count }}</span>
+</span>
+{% endblock %}
+
 {% block content %}
 
-<div class="doc-title">JOURNAL DES ACHATS — FACTURES FOURNISSEURS PAYÉES</div>
-
-<div class="doc-meta">
-  <table>
-    <tr>
-      <td class="label">Date d'export</td>
-      <td><strong>{{ export_date }}</strong></td>
-      <td class="label">Nombre de factures</td>
-      <td><strong>{{ invoice_count }}</strong></td>
-    </tr>
+<div class="lines-card">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:14%">N° Facture</th>
+        <th style="width:10%">Date</th>
+        <th style="width:10%">Échéance</th>
+        <th style="width:18%">Fournisseur</th>
+        <th style="width:8%">Compte</th>
+        <th style="width:18%">Libellé</th>
+        <th class="amount" style="width:11%">Débit</th>
+        <th class="amount" style="width:11%">Crédit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.number }}</td>
+        <td>{{ row.date }}</td>
+        <td>{{ row.due }}</td>
+        <td>{{ row.supplier }}</td>
+        <td>{{ row.account }}</td>
+        <td>{{ row.label }}</td>
+        <td class="amount">{{ row.debit }} €</td>
+        <td class="amount">{{ row.credit }} €</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" style="text-align:center; color:#9CA3AF; padding:10pt;">Aucune facture payée</td>
+      </tr>
+      {% endfor %}
+    </tbody>
   </table>
 </div>
 
-<table class="lines-table">
-  <thead>
-    <tr>
-      <th>N° Facture</th>
-      <th style="width:9%">Date</th>
-      <th style="width:9%">Échéance</th>
-      <th style="width:18%">Fournisseur</th>
-      <th style="width:8%" class="num">Compte</th>
-      <th>Libellé</th>
-      <th class="amount" style="width:11%">Débit (€)</th>
-      <th class="amount" style="width:11%">Crédit (€)</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in rows %}
-    <tr>
-      <td>{{ row.number }}</td>
-      <td>{{ row.date }}</td>
-      <td>{{ row.due }}</td>
-      <td>{{ row.supplier }}</td>
-      <td class="num"><strong>{{ row.account }}</strong></td>
-      <td>{{ row.label }}</td>
-      <td class="amount">{{ row.debit }}</td>
-      <td class="amount">{{ row.credit }}</td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="8" style="text-align:center; color:#888; padding:8pt;">Aucune facture payée</td>
-    </tr>
-    {% endfor %}
-  </tbody>
+<table class="settlement">
+  <tr>
+    <td class="terms-cell"></td>
+    <td class="totals-cell">
+      <div class="totals-panel">
+        <table>
+          <tr>
+            <td class="t-label">Total débits HT (607)</td>
+            <td class="t-value">{{ total_ht }} €</td>
+          </tr>
+          <tr>
+            <td class="t-label">Total TVA (44566)</td>
+            <td class="t-value">{{ total_tva }} €</td>
+          </tr>
+          <tr class="grand">
+            <td class="t-label">Total crédits TTC (401)</td>
+            <td class="t-value">{{ total_ttc }} €</td>
+          </tr>
+        </table>
+      </div>
+    </td>
+  </tr>
 </table>
 
-<div class="totals-wrapper">
-  <table class="totals-table">
-    <tr class="subtotal">
-      <td class="t-label">Total débits HT (607)</td>
-      <td class="t-value">{{ total_ht }} €</td>
-    </tr>
-    <tr class="vat">
-      <td class="t-label">Total TVA (44566)</td>
-      <td class="t-value">{{ total_tva }} €</td>
-    </tr>
-    <tr class="total">
-      <td class="t-label">Total crédits TTC (401)</td>
-      <td class="t-value">{{ total_ttc }} €</td>
-    </tr>
-  </table>
-</div>
+<div class="rule-tight"></div>
 
 {% endblock %}

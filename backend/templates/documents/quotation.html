@@ -1,137 +1,139 @@
 {% extends "base.html" %}
 
 {% block doc_title %}
-<div class="doc-title-text">DEVIS</div>
-<div class="doc-meta-line">
-  N° {{ doc.doc_number or "—" }}
-  &nbsp;·&nbsp; Date {{ doc.created_at.strftime("%d/%m/%Y") if doc.created_at else "—" }}
-  &nbsp;·&nbsp; Validité {{ doc.valid_until.strftime("%d/%m/%Y") if doc.valid_until else "—" }}
-</div>
+<div class="doc-title-text">Devis</div>
 {% endblock %}
 
-{% block counterpart_info %}
-<div class="party-col-title">Client</div>
-{% if customer %}
-  <div class="party-name">{{ customer.full_name }}</div>
-  {% if customer.company_name %}<div>{{ customer.company_name }}</div>{% endif %}
-  {% if customer.address %}
-    {% if customer.address.get("street") %}<div>{{ customer.address.get("street") }}</div>{% endif %}
-    {% if customer.address.get("city") %}
-      <div>
-        {% if customer.address.get("postal_code") %}{{ customer.address.get("postal_code") }} {% endif %}
-        {{ customer.address.get("city") }}
-      </div>
-    {% endif %}
-  {% endif %}
-  {% if customer.phone_e164 %}<div>Tél : {{ customer.phone_e164 }}</div>{% endif %}
-  {% if customer.email %}<div>{{ customer.email }}</div>{% endif %}
-  {% if customer.fiscal_id %}<div>N° fiscal : {{ customer.fiscal_id }}</div>{% endif %}
-{% else %}
-  <div class="status-red">Client introuvable</div>
-{% endif %}
+{% block doc_meta %}
+<span class="meta-item">
+  <span class="meta-label">Numéro de devis</span>
+  <span class="meta-value">{{ doc.doc_number or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date d'émission</span>
+  <span class="meta-value">{{ doc.created_at | date_fr or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Validité</span>
+  <span class="meta-value">{{ doc.valid_until | date_fr or "—" }}</span>
+</span>
 {% endblock %}
+
+{% block counterpart_info %}{% include "_customer_block.html" %}{% endblock %}
 
 {% block content %}
 
-<!-- Vehicle -->
-{% if vehicle %}
-<div class="vehicle-row">
-  <span><strong>{{ vehicle.make }} {{ vehicle.model }}</strong></span>
-  {% if vehicle.registration %}<span>Immatriculation : {{ vehicle.registration }}</span>{% endif %}
-  {% if vehicle.trim %}<span>Version : {{ vehicle.trim }}</span>{% endif %}
-  {% if vehicle.vin %}<span>VIN : {{ vehicle.vin }}</span>{% endif %}
-  {% if vehicle.year %}<span>Année : {{ vehicle.year }}</span>{% endif %}
-  {% if vehicle.mileage_current %}<span>Kilométrage : {{ vehicle.mileage_current | int }} km</span>{% endif %}
-</div>
-{% endif %}
+{% include "_vehicle_strip.html" %}
 
-<!-- Line items -->
-<table class="lines-table">
-  <thead>
-    <tr>
-      <th style="width:4%">#</th>
-      <th>Désignation</th>
-      <th class="num" style="width:8%">Qté</th>
-      <th class="amount" style="width:13%">P.U. HT</th>
-      <th class="num" style="width:8%">Rem. %</th>
-      <th class="num" style="width:8%">TVA %</th>
-      <th class="amount" style="width:14%">Total HT</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for line in doc.lines %}
-    <tr>
-      <td class="num">{{ loop.index }}</td>
-      <td>
-        {{ line.description }}
-        {% if line.kind.value != "labor" %}<span style="font-size:7pt; color:#888;">({{ line.kind.value }})</span>{% endif %}
-      </td>
-      <td class="num">{{ "%.3g" | format(line.quantity | float) }}</td>
-      <td class="amount">{{ line.unit_price_minor | money(currency_symbol) }}</td>
-      <td class="num">{% if line.discount_percent %}{{ "%.2f" | format(line.discount_percent | float) }}%{% else %}—{% endif %}</td>
-      <td class="num">{{ "%.1f" | format(line.vat_rate | float) }}%</td>
-      <td class="amount">{{ line.line_total_minor | money(currency_symbol) }}</td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="7" style="text-align:center; color:#888; padding:8pt;">Aucune ligne</td>
-    </tr>
-    {% endfor %}
-  </tbody>
+{% set vat = namespace(base={}, tax={}) %}
+{% for line in doc.lines %}
+  {% set key = "%.2f" | format(line.vat_rate | float) %}
+  {% set _ = vat.base.update({key: vat.base.get(key, 0) + line.line_total_minor}) %}
+  {% set _ = vat.tax.update({key: vat.tax.get(key, 0) + (line.line_total_minor * line.vat_rate / 100) | round | int}) %}
+{% endfor %}
+{% set vat_total = vat.tax.values() | sum %}
+{% set has_discount = doc.lines | selectattr("discount_percent") | list | length > 0 %}
+
+<div class="lines-card">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:{{ '38%' if has_discount else '46%' }}">Désignation</th>
+        <th class="amount" style="width:11%">Qté /<br />Temps</th>
+        <th class="amount" style="width:13%">PU (HT)</th>
+        {% if has_discount %}<th class="amount" style="width:9%">Rem.<br />(%)</th>{% endif %}
+        <th class="amount" style="width:12%">TVA<br />(%)</th>
+        <th class="amount" style="width:17%">Total<br />(HT)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in doc.lines %}
+      <tr>
+        <td class="designation">{{ line.description }}</td>
+        <td class="amount">{{ line.quantity | qty }}</td>
+        <td class="amount">{{ line.unit_price_minor | money(currency_symbol) }}</td>
+        {% if has_discount %}
+        <td class="amount">{% if line.discount_percent %}{{ line.discount_percent | pct }}{% else %}—{% endif %}</td>
+        {% endif %}
+        <td class="amount">{{ line.vat_rate | pct }}</td>
+        <td class="amount">{{ line.line_total_minor | money(currency_symbol) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="{{ 6 if has_discount else 5 }}" style="text-align:center; color:#9CA3AF; padding:10pt;">
+          Aucune ligne
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if doc.lines %}
+    <tfoot>
+      {% set label_span = 5 if has_discount else 4 %}
+      <tr>
+        <td class="st-label" colspan="{{ label_span }}">Total Prestation HT</td>
+        <td class="st-value">{{ doc.subtotal_minor | money(currency_symbol) }}</td>
+      </tr>
+      <tr>
+        <td class="st-label" colspan="{{ label_span }}">TVA</td>
+        <td class="st-value">{{ vat_total | money(currency_symbol) }}</td>
+      </tr>
+      <tr class="st-total">
+        <td class="st-label" colspan="{{ label_span }}">Total Prestation TTC</td>
+        <td class="st-value">{{ (doc.subtotal_minor + vat_total) | money(currency_symbol) }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<table class="settlement">
+  <tr>
+    <td class="terms-cell">
+      {% include "_settlement_terms.html" %}
+    </td>
+    <td class="totals-cell">
+      <div class="totals-panel">
+        <table>
+          <tr>
+            <td class="t-label">Total estimé HT</td>
+            <td class="t-value">{{ doc.subtotal_minor | money(currency_symbol) }}</td>
+          </tr>
+          {% if doc.discount_minor and doc.discount_minor > 0 %}
+          <tr>
+            <td class="t-label">Remise</td>
+            <td class="t-value">- {{ doc.discount_minor | money(currency_symbol) }}</td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td class="t-label">TVA</td>
+            <td class="t-value">{{ doc.vat_minor | money(currency_symbol) }}</td>
+          </tr>
+          <tr class="grand">
+            <td class="t-label">Total estimé TTC</td>
+            <td class="t-value">{{ doc.total_minor | money(currency_symbol) }}</td>
+          </tr>
+        </table>
+        <div class="vat-recap">
+          {% for rate, tax in vat.tax.items() %}
+          <div>
+            TVA {{ "%g" | format(rate | float) | replace(".", ",") }} % sur base
+            {{ vat.base[rate] | money(currency_symbol) }} : {{ tax | money(currency_symbol) }}
+          </div>
+          {% endfor %}
+          <div>TVA exigible sur les encaissements</div>
+        </div>
+      </div>
+    </td>
+  </tr>
 </table>
 
-<!-- Totals -->
-<div class="totals-wrapper">
-  {% include "_bank_info.html" %}
-  <div class="totals-box">
-  <table>
-    <tr class="subtotal">
-      <td class="t-label">Total HT</td>
-      <td class="t-value">{{ doc.subtotal_minor | money(currency_symbol) }}</td>
-    </tr>
-    {% if doc.discount_minor and doc.discount_minor > 0 %}
-    <tr class="discount">
-      <td class="t-label">Remise</td>
-      <td class="t-value">- {{ doc.discount_minor | money(currency_symbol) }}</td>
-    </tr>
-    {% endif %}
-    {% set vat_by_rate = {} %}
-    {% for line in doc.lines %}
-      {% set rate_key = "%.1f" | format(line.vat_rate | float) %}
-      {% if rate_key in vat_by_rate %}
-        {% set _ = vat_by_rate.update({rate_key: vat_by_rate[rate_key] + (line.line_total_minor * line.vat_rate / 100) | int}) %}
-      {% else %}
-        {% set _ = vat_by_rate.update({rate_key: (line.line_total_minor * line.vat_rate / 100) | int}) %}
-      {% endif %}
-    {% endfor %}
-    {% for rate, amount in vat_by_rate.items() %}
-    <tr class="vat">
-      <td class="t-label">TVA {{ rate }}%</td>
-      <td class="t-value">{{ amount | money(currency_symbol) }}</td>
-    </tr>
-    {% endfor %}
-    {% if not vat_by_rate %}
-    <tr class="vat">
-      <td class="t-label">TVA</td>
-      <td class="t-value">{{ doc.vat_minor | money(currency_symbol) }}</td>
-    </tr>
-    {% endif %}
-    <tr class="total">
-      <td class="t-label">TOTAL TTC</td>
-      <td class="t-value">{{ doc.total_minor | money(currency_symbol) }}</td>
-    </tr>
-  </table>
-  </div>
-</div>
-
-{% include "_payment_legal.html" %}
-
-<!-- Notes -->
 {% if doc.notes %}
 <div class="notes-block">
   <div class="block-title">Remarques</div>
   <div>{{ doc.notes }}</div>
 </div>
 {% endif %}
+
+<div class="rule-tight"></div>
 
 {% endblock %}

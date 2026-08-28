@@ -1,0 +1,23 @@
+{# Vehicle identity: a row of grey labels above a row of bold values.
+   Laid out as a table so long values (VIN, model) size their own column
+   instead of wrapping the whole strip onto a second line. #}
+{% if vehicle %}
+<table class="vehicle-table">
+  <tr>
+    {% if vehicle.registration %}<td class="v-label">Immatriculation</td>{% endif %}
+    <td class="v-label">Modèle</td>
+    {% if vehicle.trim %}<td class="v-label">Version</td>{% endif %}
+    {% if vehicle.year %}<td class="v-label">Année</td>{% endif %}
+    {% if vehicle.vin %}<td class="v-label">VIN</td>{% endif %}
+    {% if vehicle.mileage_current %}<td class="v-label">Kilométrage</td>{% endif %}
+  </tr>
+  <tr>
+    {% if vehicle.registration %}<td class="v-value">{{ vehicle.registration }}</td>{% endif %}
+    <td class="v-value">{{ vehicle.make }} {{ vehicle.model }}</td>
+    {% if vehicle.trim %}<td class="v-value">{{ vehicle.trim }}</td>{% endif %}
+    {% if vehicle.year %}<td class="v-value">{{ vehicle.year }}</td>{% endif %}
+    {% if vehicle.vin %}<td class="v-value">{{ vehicle.vin }}</td>{% endif %}
+    {% if vehicle.mileage_current %}<td class="v-value">{{ vehicle.mileage_current | int }} km</td>{% endif %}
+  </tr>
+</table>
+{% endif %}

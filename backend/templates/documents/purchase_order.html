@@ -2,81 +2,90 @@
 
 {% block doc_title %}
 <div class="doc-title-text">
-  BON DE COMMANDE
-  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulé</span>
-  {% elif doc.status.value == "completed" %}<span class="status-suffix status-green"> — Complété</span>
-  {% endif %}
-</div>
-<div class="doc-meta-line">
-  N° {{ doc.doc_number or "—" }}
-  &nbsp;·&nbsp; Émission {{ doc.created_at.strftime("%d/%m/%Y") if doc.created_at else "—" }}
-  &nbsp;·&nbsp; Livraison prévue {{ doc.expected_delivery_date.strftime("%d/%m/%Y") if doc.expected_delivery_date else "—" }}
+  Bon de commande
+  {% if doc.status.value == "cancelled" %}<span class="status-suffix status-red"> — Annulé</span>{% endif %}
 </div>
 {% endblock %}
 
-{% block counterpart_info %}
-<div class="party-col-title">Fournisseur</div>
-{% if supplier %}
-  <div class="party-name">{{ supplier.name }}</div>
-  {% if supplier.address %}<div>{{ supplier.address }}</div>{% endif %}
-  {% if supplier.phone %}<div>Tél : {{ supplier.phone }}</div>{% endif %}
-  {% if supplier.email %}<div>{{ supplier.email }}</div>{% endif %}
-{% else %}
-  <div class="status-red">Fournisseur introuvable</div>
-{% endif %}
+{% block doc_meta %}
+<span class="meta-item">
+  <span class="meta-label">Numéro de commande</span>
+  <span class="meta-value">{{ doc.doc_number or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Date d'émission</span>
+  <span class="meta-value">{{ doc.created_at | date_fr or "—" }}</span>
+</span>
+<span class="meta-item">
+  <span class="meta-label">Livraison prévue</span>
+  <span class="meta-value">{{ doc.expected_delivery_date | date_fr or "—" }}</span>
+</span>
 {% endblock %}
+
+{% block counterpart_info %}{% include "_supplier_block.html" %}{% endblock %}
 
 {% block content %}
 
-<!-- Line items -->
-<table class="lines-table">
-  <thead>
-    <tr>
-      <th style="width:4%">#</th>
-      <th>Désignation</th>
-      <th class="num" style="width:10%">Qté</th>
-      <th class="amount" style="width:16%">Prix U. HT</th>
-      <th class="amount" style="width:16%">Total HT</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for line in doc.lines %}
-    <tr>
-      <td class="num">{{ loop.index }}</td>
-      <td>{{ parts_map.get(line.part_id, "Pièce #" ~ line.part_id) }}</td>
-      <td class="num">{{ line.quantity_ordered }}</td>
-      <td class="amount">{{ line.unit_price_ht | money(currency_symbol) }}</td>
-      <td class="amount">{{ (line.unit_price_ht * line.quantity_ordered) | money(currency_symbol) }}</td>
-    </tr>
-    {% else %}
-    <tr>
-      <td colspan="5" style="text-align:center; color:#888; padding:8pt;">Aucune ligne</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-
-<!-- Totals -->
-<div class="totals-wrapper">
-  {% include "_bank_info.html" %}
-  <div class="totals-box">
-  <table>
-    <tr class="total">
-      <td class="t-label">TOTAL HT</td>
-      <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
-    </tr>
+<div class="lines-card">
+  <table class="lines-table">
+    <thead>
+      <tr>
+        <th style="width:56%">Désignation</th>
+        <th class="amount" style="width:12%">Qté</th>
+        <th class="amount" style="width:16%">PU (HT)</th>
+        <th class="amount" style="width:16%">Total (HT)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in doc.lines %}
+      <tr>
+        <td class="designation">{{ parts_map.get(line.part_id, "Pièce #" ~ line.part_id) }}</td>
+        <td class="amount">{{ line.quantity_ordered | qty }}</td>
+        <td class="amount">{{ line.unit_price_ht | money(currency_symbol) }}</td>
+        <td class="amount">{{ (line.unit_price_ht * line.quantity_ordered) | money(currency_symbol) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" style="text-align:center; color:#9CA3AF; padding:10pt;">Aucune ligne</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% if doc.lines %}
+    <tfoot>
+      <tr class="st-total">
+        <td class="st-label" colspan="3">Total commande HT</td>
+        <td class="st-value">{{ doc.total_ht | money(currency_symbol) }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
-  </div>
 </div>
 
-{% include "_payment_legal.html" %}
+<table class="settlement">
+  <tr>
+    <td class="terms-cell">
+      {% include "_settlement_terms.html" %}
+    </td>
+    <td class="totals-cell">
+      <div class="totals-panel">
+        <table>
+          <tr class="grand">
+            <td class="t-label">Total commande HT</td>
+            <td class="t-value">{{ doc.total_ht | money(currency_symbol) }}</td>
+          </tr>
+        </table>
+      </div>
+    </td>
+  </tr>
+</table>
 
-<!-- Notes -->
 {% if doc.notes %}
 <div class="notes-block">
   <div class="block-title">Remarques</div>
   <div>{{ doc.notes }}</div>
 </div>
 {% endif %}
+
+<div class="rule-tight"></div>
 
 {% endblock %}

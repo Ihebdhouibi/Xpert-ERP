@@ -1,0 +1,30 @@
+{# Left-hand column of the settlement row: accepted payment methods, the
+   late-payment legal mention, then the bank details stacked underneath. #}
+<div class="terms-block">
+  {% if payment_terms %}
+    {# The seeded value reads "Paiement accepté : Espèces, …" — split on the
+       first colon so the lead-in can be greyed and the methods emphasised,
+       matching the label/value pattern used throughout the document. #}
+    {% if ":" in payment_terms %}
+      {% set _parts = payment_terms.split(":", 1) %}
+      <div>
+        <span class="terms-label">{{ _parts[0] | trim }}</span>
+        <span class="terms-value">{{ _parts[1] | trim }}</span>
+      </div>
+    {% else %}
+      <div class="terms-value">{{ payment_terms }}</div>
+    {% endif %}
+  {% endif %}
+
+  {% if legal_mention %}
+    <div class="legal-line">{{ legal_mention }}</div>
+  {% endif %}
+
+  {% if bank_iban or bank_bic or bank_holder %}
+    <div class="bank-block">
+      {% if bank_iban %}<div><span class="terms-label">IBAN</span> {{ bank_iban }}</div>{% endif %}
+      {% if bank_bic %}<div><span class="terms-label">BIC</span> {{ bank_bic }}</div>{% endif %}
+      {% if bank_holder %}<div><span class="terms-label">Titulaire</span> {{ bank_holder }}</div>{% endif %}
+    </div>
+  {% endif %}
+</div>
