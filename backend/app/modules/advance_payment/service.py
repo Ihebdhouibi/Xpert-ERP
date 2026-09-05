@@ -89,11 +89,18 @@ async def apply_advances_to_invoice(
     invoice_id: int,
     customer_id: int,
     garage_id: int,
+    user_id: Optional[int] = None,
 ) -> int:
     """Apply unapplied advance payments to an invoice.
 
     Must be called BEFORE db.commit() in the issue_invoice flow so all changes
     are committed atomically.  Returns total amount applied (minor units).
+
+    Posts a balance-ledger event per application (reason="advance_applied") —
+    the customer's true remaining obligation just dropped by apply_amount,
+    same as a regular payment. Without this, customer.outstanding_minor (and
+    anything reading the ledger) silently drifts stale-high forever, since it
+    never learns the advance covered part of the invoice.
     """
     logger.info("apply_advances_start", invoice_id=invoice_id, customer_id=customer_id, garage_id=garage_id)
     from app.modules.invoice import repository as invoice_repo
@@ -105,6 +112,9 @@ async def apply_advances_to_invoice(
     advances = await repo.list_unapplied_by_customer(db, customer_id, garage_id)
     if not advances:
         return 0
+
+    from app.core.config import get_settings
+    from app.modules.customer.credit_service import post_balance_event
 
     now = datetime.now(tz=timezone.utc)
     total_applied = 0
@@ -132,6 +142,21 @@ async def apply_advances_to_invoice(
             invoice.status = InvoiceStatus.paid
         else:
             invoice.status = InvoiceStatus.partial
+
+        # Post the ledger event this was missing — mirrors record_payment's
+        # "payment_received" event, since applying an advance is functionally
+        # the same as receiving a payment (money already held by the garage).
+        await post_balance_event(
+            db,
+            customer_id=customer_id,
+            garage_id=garage_id,
+            reason="advance_applied",
+            delta_minor=-apply_amount,
+            currency=get_settings().credit_currency,
+            ref_type="advance_payment",
+            ref_id=advance.id,
+            created_by=user_id,
+        )
 
         total_applied += apply_amount
         logger.info(

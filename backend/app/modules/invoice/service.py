@@ -586,6 +586,7 @@ async def issue_invoice(
         invoice_id=inv.id,
         customer_id=inv.customer_id,
         garage_id=garage_id,
+        user_id=user_id,
     )
 
     # Deduct stock — only for invoices not already handled by a BL or RO
@@ -619,6 +620,10 @@ async def issue_invoice(
                 )
 
     await db.commit()
+
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     fresh = await repo.get_by_id(db, inv.id, garage_id)
     logger.info("invoice_issued", invoice_id=invoice_id, doc_number=fresh.doc_number if fresh else None)
     return InvoiceOut.model_validate(fresh)
@@ -711,6 +716,10 @@ async def cancel_invoice(
                 )
 
     await db.commit()
+
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     fresh = await repo.get_by_id(db, inv.id, garage_id)
     logger.info("invoice_cancelled", invoice_id=invoice_id)
     return InvoiceOut.model_validate(fresh)

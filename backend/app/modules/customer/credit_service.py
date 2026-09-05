@@ -81,11 +81,17 @@ async def post_balance_event(
     ref_type: Optional[str] = None,
     ref_id: Optional[int] = None,
     created_by: Optional[int] = None,
+    occurred_at: Optional[datetime] = None,
 ) -> CustomerBalanceEvent:
     """Append a balance event row and update customer.outstanding_minor.
 
     Also fires threshold notifications when the encours crosses 80 % or 90 %
     of the credit limit for the first time.
+
+    ``occurred_at`` defaults to now — pass it explicitly only when backfilling
+    a historical correction (e.g. a missed event for something that actually
+    happened in the past), so date-scoped queries like outstanding_as_of()
+    place it in the period it truly belongs to instead of today.
 
     The caller is responsible for calling ``await db.commit()`` afterwards.
     """
@@ -96,7 +102,7 @@ async def post_balance_event(
         currency=currency,
         ref_type=ref_type,
         ref_id=ref_id,
-        occurred_at=datetime.now(tz=timezone.utc),
+        occurred_at=occurred_at or datetime.now(tz=timezone.utc),
         created_by_user_id=created_by,
     )
     db.add(event)

@@ -60,6 +60,18 @@ export interface AnalyticsResponse {
   revenue_trend: AnalyticsTrendPoint[]
   repair_count_trend: AnalyticsTrendPoint[]
   mechanic_productivity: MechanicProductivityEntry[]
+  outstanding_trend: AnalyticsTrendPoint[]
+}
+
+export interface RevenueResponse {
+  from_date: string
+  to_date: string
+  value: number
+}
+
+export interface OutstandingResponse {
+  as_of_date: string
+  value: number
 }
 
 export type ExportTable = 'top_customers' | 'top_suppliers' | 'low_stock_alerts'
@@ -81,6 +93,16 @@ export const kpiApi = {
   getAnalytics: (from_date: string, to_date: string): Promise<AnalyticsResponse> =>
     apiClient
       .get('/kpi/analytics', { params: { from_date, to_date } })
+      .then(r => r.data),
+
+  getRevenue: (from_date: string, to_date: string): Promise<RevenueResponse> =>
+    apiClient
+      .get('/kpi/revenue', { params: { from_date, to_date } })
+      .then(r => r.data),
+
+  getOutstanding: (as_of_date: string): Promise<OutstandingResponse> =>
+    apiClient
+      .get('/kpi/outstanding', { params: { as_of_date } })
       .then(r => r.data),
 
   getExportUrl: (table: ExportTable, format: ExportFormat): string => {

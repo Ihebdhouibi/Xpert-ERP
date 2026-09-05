@@ -117,6 +117,9 @@ async def record_payment(
 
     await db.commit()
 
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     # Re-fetch payment to get server-generated fields
     refreshed = await pay_repo.get_by_id(db, payment.id, garage_id)
     assert refreshed is not None

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -8,8 +9,13 @@ import {
   CardContent,
   Divider,
   Grid,
+  IconButton,
+  Menu,
+  MenuItem,
+  Popover,
   Skeleton,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import BuildRoundedIcon from '@mui/icons-material/BuildRounded'
@@ -19,11 +25,21 @@ import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceW
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ViewKanbanRoundedIcon from '@mui/icons-material/ViewKanbanRounded'
-import FindInPageRoundedIcon from '@mui/icons-material/FindInPageRounded'
 import InventoryRoundedIcon from '@mui/icons-material/InventoryRounded'
 import BarChartRoundedIcon from '@mui/icons-material/BarChartRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded'
 import { kpiApi } from '../lib/kpiApi'
+import {
+  AsOfPreset,
+  AS_OF_LABELS,
+  asOfDate,
+  Period,
+  PERIOD_LABELS,
+  periodDates,
+  toLocalDateStr,
+  todayStr,
+} from '../lib/periodHelpers'
 import { useAuth } from '../contexts/AuthContext'
 import { formatMinor } from '../components/ui/CurrencyDisplay'
 
@@ -123,6 +139,292 @@ function MetricCard({
       ) : (
         inner
       )}
+    </Card>
+  )
+}
+
+// ─── Revenue metric card — period-scoped (Aujourd'hui/Semaine/Mois/Année/Perso) ─
+
+const REVENUE_MENU_PERIODS: Period[] = ['today', 'week', 'month', 'year']
+
+function RevenueMetricCard({ onNavigate }: { onNavigate: () => void }) {
+  const [period, setPeriod] = useState<Period>('month')
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 29)
+    return toLocalDateStr(d)
+  })
+  const [customTo, setCustomTo] = useState(todayStr)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const anchorRef = useRef<HTMLButtonElement>(null)
+
+  const { from, to } = periodDates(period, { from: customFrom, to: customTo })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['kpi', 'revenue', from, to],
+    queryFn: () => kpiApi.getRevenue(from, to),
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const selectPeriod = (p: Period) => {
+    setMenuOpen(false)
+    if (p === 'custom') {
+      setCustomOpen(true)
+    } else {
+      setPeriod(p)
+    }
+  }
+
+  return (
+    <Card
+      sx={{
+        height: '100%',
+        transition: 'box-shadow 0.15s, transform 0.15s',
+        '&:hover': {
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+          transform: 'translateY(-2px)',
+        },
+      }}
+    >
+      {/* Header row sits outside the clickable action area so the period
+          icon button is never a <button> nested inside another <button>. */}
+      <CardContent sx={{ p: 2.5, pb: 0 }}>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2}>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: '12px',
+              bgcolor: '#DCFCE7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#059669',
+            }}
+          >
+            <TrendingUpRoundedIcon sx={{ fontSize: 22 }} />
+          </Box>
+          <IconButton
+            ref={anchorRef}
+            size="small"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Choisir la période du chiffre d'affaires"
+            sx={{ mt: -0.5, mr: -0.5, color: 'text.secondary' }}
+          >
+            <CalendarMonthRoundedIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Stack>
+      </CardContent>
+
+      <CardActionArea onClick={onNavigate} sx={{ alignItems: 'flex-start', display: 'block' }}>
+        <CardContent sx={{ p: 2.5, pt: 0 }}>
+          {isLoading ? (
+            <>
+              <Skeleton width="55%" height={32} sx={{ mb: 0.5 }} />
+              <Skeleton width="70%" height={18} />
+            </>
+          ) : (
+            <>
+              <Typography variant="h5" fontWeight={700} lineHeight={1.1} mb={0.5}>
+                {formatMinor(data?.value ?? null)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                Chiffre d'affaires — {PERIOD_LABELS[period]}
+              </Typography>
+            </>
+          )}
+        </CardContent>
+      </CardActionArea>
+
+      <Menu anchorEl={anchorRef.current} open={menuOpen} onClose={() => setMenuOpen(false)}>
+        {REVENUE_MENU_PERIODS.map(p => (
+          <MenuItem key={p} selected={period === p} onClick={() => selectPeriod(p)}>
+            {PERIOD_LABELS[p]}
+          </MenuItem>
+        ))}
+        <MenuItem selected={period === 'custom'} onClick={() => selectPeriod('custom')}>
+          {PERIOD_LABELS.custom}
+        </MenuItem>
+      </Menu>
+
+      <Popover
+        anchorEl={anchorRef.current}
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Stack spacing={1.5} sx={{ p: 2, width: 220 }}>
+          <Typography variant="subtitle2" fontWeight={700}>
+            Période personnalisée
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            label="Du"
+            value={customFrom}
+            onChange={e => setCustomFrom(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <TextField
+            type="date"
+            size="small"
+            label="Au"
+            value={customTo}
+            onChange={e => setCustomTo(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => {
+              setPeriod('custom')
+              setCustomOpen(false)
+            }}
+          >
+            Appliquer
+          </Button>
+        </Stack>
+      </Popover>
+    </Card>
+  )
+}
+
+// ─── Outstanding balance card — "as of" a date, not a period ──────────────────
+// Encours clients is a balance (a snapshot), not a flow — "as of a date" is
+// the meaningful question, not "during a range". See RevenueMetricCard above
+// for the analogous range-based card.
+
+const OUTSTANDING_MENU_PRESETS: AsOfPreset[] = ['today', 'last_month_end', 'year_start']
+
+function OutstandingMetricCard({ onNavigate }: { onNavigate: () => void }) {
+  const [preset, setPreset] = useState<AsOfPreset>('today')
+  const [customDate, setCustomDate] = useState(todayStr)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const anchorRef = useRef<HTMLButtonElement>(null)
+
+  const asOf = asOfDate(preset, customDate)
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['kpi', 'outstanding', asOf],
+    queryFn: () => kpiApi.getOutstanding(asOf),
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  const selectPreset = (p: AsOfPreset) => {
+    setMenuOpen(false)
+    if (p === 'custom') {
+      setCustomOpen(true)
+    } else {
+      setPreset(p)
+    }
+  }
+
+  return (
+    <Card
+      sx={{
+        height: '100%',
+        transition: 'box-shadow 0.15s, transform 0.15s',
+        '&:hover': {
+          boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+          transform: 'translateY(-2px)',
+        },
+      }}
+    >
+      <CardContent sx={{ p: 2.5, pb: 0 }}>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={2}>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: '12px',
+              bgcolor: '#FEE2E2',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#DC2626',
+            }}
+          >
+            <AccountBalanceWalletRoundedIcon sx={{ fontSize: 22 }} />
+          </Box>
+          <IconButton
+            ref={anchorRef}
+            size="small"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Choisir la date de l'encours clients"
+            sx={{ mt: -0.5, mr: -0.5, color: 'text.secondary' }}
+          >
+            <CalendarMonthRoundedIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Stack>
+      </CardContent>
+
+      <CardActionArea onClick={onNavigate} sx={{ alignItems: 'flex-start', display: 'block' }}>
+        <CardContent sx={{ p: 2.5, pt: 0 }}>
+          {isLoading ? (
+            <>
+              <Skeleton width="55%" height={32} sx={{ mb: 0.5 }} />
+              <Skeleton width="70%" height={18} />
+            </>
+          ) : (
+            <>
+              <Typography variant="h5" fontWeight={700} lineHeight={1.1} mb={0.5}>
+                {formatMinor(data?.value ?? null)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" fontWeight={500}>
+                Encours clients — {AS_OF_LABELS[preset]}
+              </Typography>
+            </>
+          )}
+        </CardContent>
+      </CardActionArea>
+
+      <Menu anchorEl={anchorRef.current} open={menuOpen} onClose={() => setMenuOpen(false)}>
+        {OUTSTANDING_MENU_PRESETS.map(p => (
+          <MenuItem key={p} selected={preset === p} onClick={() => selectPreset(p)}>
+            {AS_OF_LABELS[p]}
+          </MenuItem>
+        ))}
+        <MenuItem selected={preset === 'custom'} onClick={() => selectPreset('custom')}>
+          {AS_OF_LABELS.custom}
+        </MenuItem>
+      </Menu>
+
+      <Popover
+        anchorEl={anchorRef.current}
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Stack spacing={1.5} sx={{ p: 2, width: 200 }}>
+          <Typography variant="subtitle2" fontWeight={700}>
+            Date personnalisée
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            label="Encours au"
+            value={customDate}
+            onChange={e => setCustomDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => {
+              setPreset('custom')
+              setCustomOpen(false)
+            }}
+          >
+            Appliquer
+          </Button>
+        </Stack>
+      </Popover>
     </Card>
   )
 }
@@ -322,38 +624,12 @@ export function DashboardPage() {
         </Grid>
         {!isMechanic && (
           <Grid item xs={6} md={3}>
-            <MetricCard
-              label="CA du mois"
-              value={
-                k?.revenue_mtd?.value != null
-                  ? formatMinor(k.revenue_mtd.value)
-                  : '—'
-              }
-              sub="Chiffre d'affaires mois en cours"
-              icon={<TrendingUpRoundedIcon sx={{ fontSize: 22 }} />}
-              iconBg="#DCFCE7"
-              iconColor="#059669"
-              loading={isLoading}
-              onClick={() => navigate('/kpi')}
-            />
+            <RevenueMetricCard onNavigate={() => navigate('/kpi')} />
           </Grid>
         )}
         {!isMechanic && (
           <Grid item xs={6} md={3}>
-            <MetricCard
-              label="Encours clients"
-              value={
-                k?.outstanding_amount_minor?.value != null
-                  ? formatMinor(k.outstanding_amount_minor.value)
-                  : '—'
-              }
-              sub="Créances clients en attente"
-              icon={<AccountBalanceWalletRoundedIcon sx={{ fontSize: 22 }} />}
-              iconBg="#FEE2E2"
-              iconColor="#DC2626"
-              loading={isLoading}
-              onClick={() => navigate('/kpi')}
-            />
+            <OutstandingMetricCard onNavigate={() => navigate('/kpi')} />
           </Grid>
         )}
         {!isMechanic && (
@@ -399,14 +675,6 @@ export function DashboardPage() {
                   iconBg="#F1F5F9"
                   iconColor="#334155"
                   to="/workshop"
-                />
-                <QuickActionCard
-                  label="Inspections"
-                  description="Contrôles véhicules et approbations clients"
-                  icon={<FindInPageRoundedIcon sx={{ fontSize: 22 }} />}
-                  iconBg="#F0FDF4"
-                  iconColor="#059669"
-                  to="/inspections"
                 />
                 {!isMechanic && (
                   <QuickActionCard
@@ -460,7 +728,6 @@ export function DashboardPage() {
                   {[
                     { label: 'Clients', sub: 'Gestion clients', icon: <PeopleRoundedIcon sx={{ fontSize: 18 }} />, to: '/customers' },
                     { label: 'OTs', sub: 'Ordres de réparation', icon: <BuildRoundedIcon sx={{ fontSize: 18 }} />, to: '/repair-orders' },
-                    { label: 'Inspections', sub: 'Contrôles véhicules', icon: <FindInPageRoundedIcon sx={{ fontSize: 18 }} />, to: '/inspections' },
                     { label: 'Suivi Atelier', sub: 'Vue atelier', icon: <ViewKanbanRoundedIcon sx={{ fontSize: 18 }} />, to: '/workshop' },
                   ].filter(m => !isMechanic || m.to !== '/customers').map(m => (
                     <Grid item xs={6} sm={3} key={m.to}>

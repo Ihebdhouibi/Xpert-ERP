@@ -55,3 +55,15 @@ class AnalyticsResponse(BaseModel):
     revenue_trend: list[AnalyticsTrendPoint]
     repair_count_trend: list[AnalyticsTrendPoint]
     mechanic_productivity: list[MechanicProductivityEntry]
+    outstanding_trend: list[AnalyticsTrendPoint]
+
+
+class RevenueResponse(BaseModel):
+    from_date: date
+    to_date: date
+    value: float
+
+
+class OutstandingResponse(BaseModel):
+    as_of_date: date
+    value: float

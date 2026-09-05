@@ -178,6 +178,10 @@ async def issue_credit_note(
         )
 
     await db.commit()
+
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     fresh = await repo.get_credit_note_by_id(db, cn.id, garage_id)
     logger.info("credit_note_issued", cn_id=cn_id, doc_number=fresh.doc_number if fresh else None)
     return _build_cn_out(fresh)
@@ -221,6 +225,10 @@ async def void_credit_note(
         )
 
     await db.commit()
+
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     fresh = await repo.get_credit_note_by_id(db, cn.id, garage_id)
     logger.info("credit_note_voided", cn_id=cn_id)
     return _build_cn_out(fresh)
@@ -348,6 +356,10 @@ async def record_refund(
         )
 
     await db.commit()
+
+    from app.modules.kpi.service import invalidate_cache as invalidate_kpi_cache
+    await invalidate_kpi_cache(garage_id)
+
     fresh = await repo.get_refund_by_id(db, refund.id, garage_id)
     logger.info("refund_recorded", refund_id=refund.id, payment_id=request.payment_id)
     return RefundOut.model_validate(fresh)

@@ -406,6 +406,51 @@ class TestAdvancePaymentService:
         assert inv2 is not None
         assert inv2.outstanding_minor == 8000
 
+    async def test_apply_advances_posts_ledger_event(self, db_session: AsyncSession) -> None:
+        """Regression test: applying an advance must post a balance-ledger
+        event (it silently didn't, before this fix), so customer.outstanding_minor
+        and anything reading the ledger learn about the reduction too — not
+        just the invoice row."""
+        from sqlalchemy import select
+        from app.modules.customer.models import CustomerBalanceEvent
+
+        customer = await _make_customer(db_session)
+        advance = AdvancePayment(
+            garage_id=1,
+            customer_id=customer.id,
+            amount_minor=3000,
+            payment_method=PaymentMethod.cash,
+            paid_at=datetime.now(timezone.utc),
+        )
+        db_session.add(advance)
+        await db_session.flush()
+
+        invoice = await _make_issued_invoice(db_session, customer.id, total=10000)
+
+        await adv_svc.apply_advances_to_invoice(
+            db_session,
+            invoice_id=invoice.id,
+            customer_id=customer.id,
+            garage_id=1,
+            user_id=42,
+        )
+        await db_session.commit()
+
+        event = (
+            await db_session.execute(
+                select(CustomerBalanceEvent).where(
+                    CustomerBalanceEvent.ref_type == "advance_payment",
+                    CustomerBalanceEvent.ref_id == advance.id,
+                )
+            )
+        ).scalar_one()
+        assert event.reason == "advance_applied"
+        assert event.delta_minor == -3000  # customer owes 3000 less
+        assert event.created_by_user_id == 42
+
+        await db_session.refresh(customer)
+        assert customer.outstanding_minor == -3000  # only this event posted in this test
+
     async def test_list_advances_empty(self, db_session: AsyncSession) -> None:
         customer = await _make_customer(db_session)
         result = await adv_svc.list_advances(

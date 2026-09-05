@@ -52,38 +52,80 @@ _CACHE_KEY_PREFIX = "kpi:live:"
 # ---------------------------------------------------------------------------
 
 
-async def _revenue_mtd(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
+async def revenue_for_period(
+    db: AsyncSession, garage_id: int, from_date: date, to_date: date
+) -> Decimal:
+    """
+    Net "chiffre d'affaires" for [from_date, to_date] (inclusive), cash basis:
+
+      + total_minor of invoices that are fully PAID, dated by the moment they
+        actually became paid — i.e. the latest of any payment.paid_at or
+        advance_payment.applied_at that settled them — NOT the invoice's
+        issue date. Revenue is recognised when the cash is actually
+        collected (or already-held advance credit consumed), not when
+        billed. An invoice fully settled by advance credit alone has ZERO
+        rows in `payment` — a plain JOIN to payment would silently drop it
+        (found via a real ~580€ discrepancy while auditing the ledger), so
+        settlement is reconstructed from BOTH tables.
+      - total_minor of credit notes (avoirs) ISSUED in the period, dated by
+        their own issued_at. An avoir reduces the revenue of the period it
+        was granted in, regardless of which period the original invoice's
+        revenue was booked in.
+
+    This is the one true definition of CA used across the app (live KPIs,
+    the KPI dashboard's trend chart, and the Dashboard's period-picker card)
+    — see revenue_mtd/revenue_ytd below and compute_analytics's revenue_trend.
+    """
     row = await db.execute(
         text(
             """
-            SELECT COALESCE(SUM(total_minor), 0)
-            FROM invoice
-            WHERE garage_id = :g
-              AND status IN ('issued', 'partial', 'paid')
-              AND issued_at >= date_trunc('month', now() AT TIME ZONE 'UTC')
-              AND deleted_at IS NULL
+            WITH settlement_events AS (
+                SELECT p.invoice_id AS inv_id, p.paid_at AS event_at
+                FROM payment p
+                UNION ALL
+                SELECT ap.applied_to_invoice_id AS inv_id, ap.applied_at AS event_at
+                FROM advance_payment ap
+                WHERE ap.applied_to_invoice_id IS NOT NULL
+            ),
+            settled AS (
+                SELECT i.id, i.total_minor, MAX(se.event_at) AS settled_at
+                FROM invoice i
+                JOIN settlement_events se ON se.inv_id = i.id
+                WHERE i.garage_id = :g
+                  AND i.status = 'paid'
+                  AND i.deleted_at IS NULL
+                GROUP BY i.id, i.total_minor
+            ),
+            paid_revenue AS (
+                SELECT COALESCE(SUM(total_minor), 0) AS amt
+                FROM settled
+                WHERE (settled_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+            ),
+            avoirs AS (
+                SELECT COALESCE(SUM(total_minor), 0) AS amt
+                FROM credit_note
+                WHERE garage_id = :g
+                  AND status = 'issued'
+                  AND (issued_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+            )
+            SELECT (SELECT amt FROM paid_revenue) - (SELECT amt FROM avoirs)
             """
         ),
-        {"g": garage_id},
+        {"g": garage_id, "from_d": from_date, "to_d": to_date},
     )
-    return Decimal(row.scalar() or 0), None
+    return Decimal(row.scalar() or 0)
+
+
+async def _revenue_mtd(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
+    today = datetime.now(tz=timezone.utc).date()
+    value = await revenue_for_period(db, garage_id, today.replace(day=1), today)
+    return value, None
 
 
 async def _revenue_ytd(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
-    row = await db.execute(
-        text(
-            """
-            SELECT COALESCE(SUM(total_minor), 0)
-            FROM invoice
-            WHERE garage_id = :g
-              AND status IN ('issued', 'partial', 'paid')
-              AND issued_at >= date_trunc('year', now() AT TIME ZONE 'UTC')
-              AND deleted_at IS NULL
-            """
-        ),
-        {"g": garage_id},
-    )
-    return Decimal(row.scalar() or 0), None
+    today = datetime.now(tz=timezone.utc).date()
+    value = await revenue_for_period(db, garage_id, today.replace(month=1, day=1), today)
+    return value, None
 
 
 async def _margin_avg_pct(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
@@ -227,20 +269,58 @@ async def _unpaid_invoices_count(db: AsyncSession, garage_id: int) -> tuple[Opti
 
 
 async def _outstanding_amount_minor(db: AsyncSession, garage_id: int) -> tuple[Optional[Decimal], None]:
-    """Total outstanding amount in minor units."""
+    """Total customer outstanding balance, right now.
+
+    Reads customer.outstanding_minor — the denormalised snapshot that
+    post_balance_event() keeps in lockstep with the customer_balance_event
+    ledger on every write. Previously this summed invoice.outstanding_minor
+    directly, which silently ignored avoirs issued against still-open
+    invoices (issue_credit_note only ever posts to the ledger, by design it
+    never touches the invoice row) — so it overstated what customers
+    actually owe. The ledger-backed snapshot is the same number credit-limit
+    enforcement already trusts (check_credit_limit in credit_service.py);
+    this makes it one consistent source of truth instead of two disagreeing
+    ones. See outstanding_as_of() below for historical ("as of a past date")
+    lookups, which this snapshot can't answer since it has no memory.
+    """
     row = await db.execute(
         text(
             """
             SELECT COALESCE(SUM(outstanding_minor), 0)
-            FROM invoice
+            FROM customer
             WHERE garage_id = :g
-              AND status IN ('issued', 'partial')
-              AND deleted_at IS NULL
             """
         ),
         {"g": garage_id},
     )
     return Decimal(row.scalar() or 0), None
+
+
+async def outstanding_as_of(db: AsyncSession, garage_id: int, as_of_date: date) -> Decimal:
+    """Total customer outstanding balance as of the end of as_of_date (inclusive).
+
+    Reconstructed directly from the append-only customer_balance_event
+    ledger — summing every event up to and including that date — rather
+    than from any batch-computed snapshot (the daily kpi_snapshot table
+    exists but has real gaps in practice, e.g. after a process restart
+    misses its scheduled run). This is always accurate for any date,
+    including today, at the cost of a full ledger scan per call — fine for
+    an on-demand, user-triggered lookup; _outstanding_amount_minor above
+    stays the fast path for the constantly-polled /kpi/live.
+    """
+    row = await db.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(e.delta_minor), 0)
+            FROM customer_balance_event e
+            JOIN customer c ON c.id = e.customer_id
+            WHERE c.garage_id = :g
+              AND (e.occurred_at AT TIME ZONE 'UTC')::date <= :as_of
+            """
+        ),
+        {"g": garage_id, "as_of": as_of_date},
+    )
+    return Decimal(row.scalar() or 0)
 
 
 async def _top_customers(
@@ -511,18 +591,57 @@ async def compute_analytics(
     Compute period-scoped analytics for charts.
     Returns daily revenue trend, daily repair count trend, and per-mechanic productivity.
     """
+    # Net daily revenue = paid invoices settled that day − avoirs issued that day
+    # (same cash-basis, avoir-deducted definition as revenue_for_period — see
+    # its docstring for why settlement is reconstructed from BOTH payment and
+    # advance_payment, not payment alone). A day backbone via generate_series
+    # is required to net both sides correctly even when only one of the two
+    # has activity on a given day.
     revenue_result = await db.execute(
         text(
             """
-            SELECT (issued_at AT TIME ZONE 'UTC')::date AS day,
-                   COALESCE(SUM(total_minor), 0)::bigint AS amount_minor
-            FROM invoice
-            WHERE garage_id = :g
-              AND status IN ('issued', 'partial', 'paid')
-              AND (issued_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
-              AND deleted_at IS NULL
-            GROUP BY day
-            ORDER BY day
+            WITH days AS (
+                SELECT generate_series(:from_d::date, :to_d::date, interval '1 day')::date AS day
+            ),
+            settlement_events AS (
+                SELECT p.invoice_id AS inv_id, p.paid_at AS event_at
+                FROM payment p
+                UNION ALL
+                SELECT ap.applied_to_invoice_id AS inv_id, ap.applied_at AS event_at
+                FROM advance_payment ap
+                WHERE ap.applied_to_invoice_id IS NOT NULL
+            ),
+            settled AS (
+                SELECT i.id, i.total_minor, MAX(se.event_at) AS settled_at
+                FROM invoice i
+                JOIN settlement_events se ON se.inv_id = i.id
+                WHERE i.garage_id = :g
+                  AND i.status = 'paid'
+                  AND i.deleted_at IS NULL
+                GROUP BY i.id, i.total_minor
+            ),
+            paid_by_day AS (
+                SELECT (settled_at AT TIME ZONE 'UTC')::date AS day,
+                       SUM(total_minor) AS amt
+                FROM settled
+                WHERE (settled_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+                GROUP BY day
+            ),
+            avoirs_by_day AS (
+                SELECT (issued_at AT TIME ZONE 'UTC')::date AS day,
+                       SUM(total_minor) AS amt
+                FROM credit_note
+                WHERE garage_id = :g
+                  AND status = 'issued'
+                  AND (issued_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+                GROUP BY day
+            )
+            SELECT d.day AS day,
+                   (COALESCE(pb.amt, 0) - COALESCE(ab.amt, 0))::bigint AS amount_minor
+            FROM days d
+            LEFT JOIN paid_by_day pb ON pb.day = d.day
+            LEFT JOIN avoirs_by_day ab ON ab.day = d.day
+            ORDER BY d.day
             """
         ),
         {"g": garage_id, "from_d": from_date, "to_d": to_date},
@@ -585,12 +704,56 @@ async def compute_analytics(
         for r in mechanic_result.fetchall()
     ]
 
+    # Outstanding balance, day by day — a running total (stock), not a daily
+    # net (flow) like revenue_trend above. "base" is everything that happened
+    # strictly before from_date; the window function then adds each day's own
+    # ledger activity cumulatively on top, so day N = true balance as of N,
+    # not just activity within the visible range. Reconstructed live from the
+    # ledger rather than the daily kpi_snapshot table — see outstanding_as_of.
+    outstanding_result = await db.execute(
+        text(
+            """
+            WITH days AS (
+                SELECT generate_series(:from_d::date, :to_d::date, interval '1 day')::date AS day
+            ),
+            base AS (
+                SELECT COALESCE(SUM(e.delta_minor), 0) AS amt
+                FROM customer_balance_event e
+                JOIN customer c ON c.id = e.customer_id
+                WHERE c.garage_id = :g
+                  AND (e.occurred_at AT TIME ZONE 'UTC')::date < :from_d
+            ),
+            daily_delta AS (
+                SELECT (e.occurred_at AT TIME ZONE 'UTC')::date AS day,
+                       SUM(e.delta_minor) AS delta
+                FROM customer_balance_event e
+                JOIN customer c ON c.id = e.customer_id
+                WHERE c.garage_id = :g
+                  AND (e.occurred_at AT TIME ZONE 'UTC')::date BETWEEN :from_d AND :to_d
+                GROUP BY day
+            )
+            SELECT d.day AS day,
+                   ((SELECT amt FROM base)
+                     + SUM(COALESCE(dd.delta, 0)) OVER (ORDER BY d.day))::bigint AS balance_minor
+            FROM days d
+            LEFT JOIN daily_delta dd ON dd.day = d.day
+            ORDER BY d.day
+            """
+        ),
+        {"g": garage_id, "from_d": from_date, "to_d": to_date},
+    )
+    outstanding_trend = [
+        {"date": str(r.day), "value": int(r.balance_minor)}
+        for r in outstanding_result.fetchall()
+    ]
+
     return {
         "from_date": str(from_date),
         "to_date": str(to_date),
         "revenue_trend": revenue_trend,
         "repair_count_trend": repair_count_trend,
         "mechanic_productivity": mechanic_productivity,
+        "outstanding_trend": outstanding_trend,
     }
 
 

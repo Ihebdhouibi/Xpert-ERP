@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Alert,
@@ -9,6 +9,10 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  IconButton,
+  Menu,
+  MenuItem,
+  Popover,
   Stack,
   Table,
   TableBody,
@@ -29,6 +33,7 @@ import RepeatIcon from '@mui/icons-material/Repeat'
 import DescriptionIcon from '@mui/icons-material/Description'
 import InventoryIcon from '@mui/icons-material/Inventory'
 import DownloadIcon from '@mui/icons-material/Download'
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import {
   AreaChart,
   Area,
@@ -42,51 +47,18 @@ import {
   Cell,
 } from 'recharts'
 import { kpiApi, TopCustomerEntry, TopSupplierEntry, ExportTable } from '../../lib/kpiApi'
+import {
+  AsOfPreset,
+  AS_OF_LABELS,
+  asOfDate,
+  Period,
+  PERIOD_LABELS,
+  periodDates,
+  toLocalDateStr,
+  todayStr,
+} from '../../lib/periodHelpers'
 import { useAuth } from '../../contexts/AuthContext'
 import { PageHeader } from '../../components/ui/PageHeader'
-
-// ---------------------------------------------------------------------------
-// Period helpers
-// ---------------------------------------------------------------------------
-
-type Period = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom'
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function periodDates(period: Period, custom: { from: string; to: string }): { from: string; to: string } {
-  const now = new Date()
-  const to = todayStr()
-  if (period === 'today') return { from: to, to }
-  if (period === 'week') {
-    const d = new Date(now)
-    const day = d.getDay() === 0 ? 6 : d.getDay() - 1 // Monday = 0
-    d.setDate(d.getDate() - day)
-    return { from: d.toISOString().slice(0, 10), to }
-  }
-  if (period === 'month') {
-    return { from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`, to }
-  }
-  if (period === 'quarter') {
-    const q = Math.floor(now.getMonth() / 3)
-    const fromMonth = String(q * 3 + 1).padStart(2, '0')
-    return { from: `${now.getFullYear()}-${fromMonth}-01`, to }
-  }
-  if (period === 'year') {
-    return { from: `${now.getFullYear()}-01-01`, to }
-  }
-  return custom
-}
-
-const PERIOD_LABELS: Record<Period, string> = {
-  today: "Aujourd'hui",
-  week: 'Cette semaine',
-  month: 'Ce mois',
-  quarter: 'Ce trimestre',
-  year: 'Cette année',
-  custom: 'Personnalisé',
-}
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -147,6 +119,120 @@ function KpiCard({ label, value, icon, color = 'primary.main' }: KpiCardProps) {
           </Box>
         </Stack>
       </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Outstanding balance card — "as of" a date, not a period.
+// Encours is a balance (a snapshot), not a flow — the page's from/to period
+// switcher above doesn't apply to it the way it does to CA; this card gets
+// its own small date-scoped menu instead.
+// ---------------------------------------------------------------------------
+
+const OUTSTANDING_MENU_PRESETS: AsOfPreset[] = ['today', 'last_month_end', 'year_start']
+
+function OutstandingKpiCard() {
+  const [preset, setPreset] = useState<AsOfPreset>('today')
+  const [customDate, setCustomDate] = useState(todayStr)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const anchorRef = useRef<HTMLButtonElement>(null)
+
+  const asOf = asOfDate(preset, customDate)
+
+  const { data } = useQuery({
+    queryKey: ['kpi', 'outstanding', asOf],
+    queryFn: () => kpiApi.getOutstanding(asOf),
+    staleTime: 60_000,
+  })
+
+  const selectPreset = (p: AsOfPreset) => {
+    setMenuOpen(false)
+    if (p === 'custom') {
+      setCustomOpen(true)
+    } else {
+      setPreset(p)
+    }
+  }
+
+  return (
+    <Card sx={{ minWidth: 180, flex: '1 1 180px', borderRadius: 2 }}>
+      <CardContent sx={{ p: 2.5 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+          <Typography variant="caption" color="text.secondary" fontWeight={500}>
+            {`Encours — ${AS_OF_LABELS[preset]}`}
+          </Typography>
+          <IconButton
+            ref={anchorRef}
+            size="small"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Choisir la date de l'encours clients"
+            sx={{ p: 0.25, color: 'text.secondary' }}
+          >
+            <CalendarMonthIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Stack>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography variant="h5" fontWeight={700} color="text.primary" lineHeight={1}>
+            {fmtMinor(data?.value)}
+          </Typography>
+          <Box
+            sx={{
+              width: 36, height: 36,
+              borderRadius: '9px',
+              bgcolor: '#FEF2F2',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'error.main',
+            }}
+          >
+            <AccountBalanceWalletIcon />
+          </Box>
+        </Stack>
+      </CardContent>
+
+      <Menu anchorEl={anchorRef.current} open={menuOpen} onClose={() => setMenuOpen(false)}>
+        {OUTSTANDING_MENU_PRESETS.map(p => (
+          <MenuItem key={p} selected={preset === p} onClick={() => selectPreset(p)}>
+            {AS_OF_LABELS[p]}
+          </MenuItem>
+        ))}
+        <MenuItem selected={preset === 'custom'} onClick={() => selectPreset('custom')}>
+          {AS_OF_LABELS.custom}
+        </MenuItem>
+      </Menu>
+
+      <Popover
+        anchorEl={anchorRef.current}
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Stack spacing={1.5} sx={{ p: 2, width: 200 }}>
+          <Typography variant="subtitle2" fontWeight={700}>
+            Date personnalisée
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            label="Encours au"
+            value={customDate}
+            onChange={e => setCustomDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+          />
+          <Button
+            size="small"
+            variant="contained"
+            onClick={() => {
+              setPreset('custom')
+              setCustomOpen(false)
+            }}
+          >
+            Appliquer
+          </Button>
+        </Stack>
+      </Popover>
     </Card>
   )
 }
@@ -235,7 +321,7 @@ export function KpiDashboardPage() {
   const { user } = useAuth()
   const [period, setPeriod] = useState<Period>('month')
   const [customFrom, setCustomFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10)
+    const d = new Date(); d.setDate(d.getDate() - 29); return toLocalDateStr(d)
   })
   const [customTo, setCustomTo] = useState(todayStr)
 
@@ -265,9 +351,12 @@ export function KpiDashboardPage() {
     staleTime: 60_000,
   })
 
-  const { data: outstandingTrend, isLoading: outstandingLoading } = useQuery({
-    queryKey: ['kpi', 'snapshots', 'outstanding', from, to],
-    queryFn: () => kpiApi.getTrend('outstanding_amount_minor', from, to),
+  // "CA mois en cours" card follows the period switcher above — same
+  // /kpi/revenue endpoint and period state the Dashboard's revenue card uses,
+  // so both pages agree on what "chiffre d'affaires" means for a given period.
+  const { data: revenue } = useQuery({
+    queryKey: ['kpi', 'revenue', from, to],
+    queryFn: () => kpiApi.getRevenue(from, to),
     enabled: !!live,
     staleTime: 60_000,
   })
@@ -300,9 +389,9 @@ export function KpiDashboardPage() {
     date: p.date,
     value: p.value,
   }))
-  const outstandingPoints = (outstandingTrend?.points ?? []).map(p => ({
-    date: p.snapshot_date,
-    value: p.value != null ? Number(p.value) : null,
+  const outstandingPoints = (analytics?.outstanding_trend ?? []).map(p => ({
+    date: p.date,
+    value: p.value,
   }))
   const mechanicData = analytics?.mechanic_productivity ?? []
 
@@ -355,8 +444,8 @@ export function KpiDashboardPage() {
       {/* Finance KPI cards — visible to all */}
       <Stack direction="row" flexWrap="wrap" gap={2} mb={3}>
         <KpiCard
-          label="CA mois en cours"
-          value={fmtMinor(k.revenue_mtd?.value)}
+          label={`Chiffre d'affaires — ${PERIOD_LABELS[period]}`}
+          value={fmtMinor(revenue?.value)}
           icon={<TrendingUpIcon />}
         />
         <KpiCard
@@ -365,12 +454,7 @@ export function KpiDashboardPage() {
           icon={<TrendingUpIcon />}
           color="success.main"
         />
-        <KpiCard
-          label="Encours total"
-          value={fmtMinor(k.outstanding_amount_minor?.value)}
-          icon={<AccountBalanceWalletIcon />}
-          color="error.main"
-        />
+        <OutstandingKpiCard />
         <KpiCard
           label="Factures impayées"
           value={fmtCount(k.unpaid_invoices_count?.value)}
@@ -482,8 +566,8 @@ export function KpiDashboardPage() {
 
         <ChartCard
           title="Évolution de l'encours clients"
-          loading={outstandingLoading}
-          empty={!outstandingLoading && outstandingPoints.length === 0}
+          loading={analyticsLoading}
+          empty={!analyticsLoading && outstandingPoints.length === 0}
         >
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={outstandingPoints} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>

@@ -17,8 +17,15 @@ from app.modules.kpi.schemas import (
     KpiSnapshotOut,
     KpiTrendResponse,
     KpiValueOut,
+    OutstandingResponse,
+    RevenueResponse,
 )
-from app.modules.kpi.service import compute_analytics, get_live_kpis
+from app.modules.kpi.service import (
+    compute_analytics,
+    get_live_kpis,
+    outstanding_as_of,
+    revenue_for_period,
+)
 from app.core.logging import get_logger
 
 router = APIRouter(prefix="/kpi", tags=["kpi"])
@@ -108,7 +115,41 @@ async def get_analytics(
         revenue_trend=[{"date": p["date"], "value": p["value"]} for p in data["revenue_trend"]],
         repair_count_trend=[{"date": p["date"], "value": p["value"]} for p in data["repair_count_trend"]],
         mechanic_productivity=data["mechanic_productivity"],
+        outstanding_trend=[{"date": p["date"], "value": p["value"]} for p in data["outstanding_trend"]],
     )
+
+
+@router.get(
+    "/revenue",
+    response_model=RevenueResponse,
+    dependencies=[require_permission("reporting.dashboard.read")],
+)
+async def get_revenue(
+    user: AuthUser,
+    from_date: date = Query(..., description="Start date (inclusive)"),
+    to_date: date = Query(..., description="End date (inclusive)"),
+    db: AsyncSession = Depends(get_db),
+) -> RevenueResponse:
+    """Net chiffre d'affaires (paid invoices minus issued avoirs) for an arbitrary date range."""
+    if from_date > to_date:
+        raise HTTPException(status_code=422, detail="from_date must be <= to_date")
+    value = await revenue_for_period(db, user.garage_id, from_date, to_date)
+    return RevenueResponse(from_date=from_date, to_date=to_date, value=float(value))
+
+
+@router.get(
+    "/outstanding",
+    response_model=OutstandingResponse,
+    dependencies=[require_permission("reporting.dashboard.read")],
+)
+async def get_outstanding(
+    user: AuthUser,
+    as_of_date: date = Query(..., description="Balance as of this date (inclusive)"),
+    db: AsyncSession = Depends(get_db),
+) -> OutstandingResponse:
+    """Customer outstanding balance as of a given date, reconstructed from the ledger."""
+    value = await outstanding_as_of(db, user.garage_id, as_of_date)
+    return OutstandingResponse(as_of_date=as_of_date, value=float(value))
 
 
 _EXPORT_TABLES = {"top_customers", "top_suppliers", "low_stock_alerts"}
