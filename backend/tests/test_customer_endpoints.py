@@ -351,6 +351,88 @@ class TestDeleteRestore:
 
 
 # ---------------------------------------------------------------------------
+# Bulk archive
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestBulkArchiveEndpoint:
+    async def _create(self, client: AsyncClient, token: str, name: str) -> str:
+        slug = name.replace(" ", "-").upper()
+        resp = await client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={
+                "type": "individual",
+                "full_name": name,
+                "fiscal_id": f"FID-{slug}",
+                "phone_e164": f"+336{abs(hash(slug)) % 10**8:08d}",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()["id"]
+
+    async def test_archives_each_selected_customer(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        id_a = await self._create(customer_client, token, "Bulk A")
+        id_b = await self._create(customer_client, token, "Bulk B")
+
+        resp = await customer_client.post(
+            "/api/v1/customers/bulk-archive",
+            headers=_auth(token),
+            json={"customer_ids": [id_a, id_b]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert set(body["archived"]) == {id_a, id_b}
+        assert body["skipped"] == []
+
+        for pid in (id_a, id_b):
+            gone = await customer_client.get(
+                f"/api/v1/customers/{pid}", headers=_auth(token)
+            )
+            assert gone.status_code == 404
+
+    async def test_unknown_id_is_skipped_not_fatal(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        id_a = await self._create(customer_client, token, "Bulk C")
+        fake_id = "00000000-0000-0000-0000-000000000000"
+
+        resp = await customer_client.post(
+            "/api/v1/customers/bulk-archive",
+            headers=_auth(token),
+            json={"customer_ids": [id_a, fake_id]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["archived"] == [id_a]
+        assert len(body["skipped"]) == 1
+        assert body["skipped"][0]["id"] == fake_id
+
+    async def test_requires_auth(self, customer_client: AsyncClient) -> None:
+        resp = await customer_client.post(
+            "/api/v1/customers/bulk-archive",
+            json={"customer_ids": ["x"]},
+        )
+        assert resp.status_code == 401
+
+    async def test_empty_selection_rejected(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers/bulk-archive",
+            headers=_auth(token),
+            json={"customer_ids": []},
+        )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
 

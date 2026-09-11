@@ -38,7 +38,7 @@ export function TableLoadingSkeleton({ cols, rows = 5 }: { cols: number; rows?: 
                 sx={{
                   height: 14,
                   borderRadius: 2,
-                  bgcolor: '#F1F5F9',
+                  bgcolor: 'action.hover',
                   width: ci === 0 ? '60%' : ci % 3 === 0 ? '40%' : '80%',
                   animation: 'pulse 1.5s ease-in-out infinite',
                   '@keyframes pulse': {

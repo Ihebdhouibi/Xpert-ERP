@@ -445,15 +445,14 @@ function QuickActionCard({ label, description, icon, iconBg, iconColor, to }: Qu
   return (
     <Card
       sx={{
-        cursor: 'pointer',
         transition: 'box-shadow 0.15s, transform 0.15s',
         '&:hover': {
           boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
           transform: 'translateY(-2px)',
         },
       }}
-      onClick={() => navigate(to)}
     >
+      <CardActionArea onClick={() => navigate(to)} sx={{ alignItems: 'flex-start', display: 'block' }}>
       <CardContent sx={{ p: 2.5 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
           <Box
@@ -482,6 +481,7 @@ function QuickActionCard({ label, description, icon, iconBg, iconColor, to }: Qu
           <ArrowForwardRoundedIcon sx={{ color: 'text.disabled', fontSize: 18, flexShrink: 0 }} />
         </Stack>
       </CardContent>
+      </CardActionArea>
     </Card>
   )
 }
@@ -501,27 +501,26 @@ function ModuleTile({ label, sub, icon, to }: ModuleTileProps) {
   return (
     <Card
       sx={{
-        cursor: 'pointer',
         transition: 'box-shadow 0.15s, transform 0.15s, border-color 0.15s',
         '&:hover': {
           boxShadow: '0 8px 24px rgba(15,23,42,0.12)',
-          borderColor: '#CBD5E1',
+          borderColor: 'text.disabled',
           transform: 'translateY(-2px)',
         },
       }}
-      onClick={() => navigate(to)}
     >
+      <CardActionArea onClick={() => navigate(to)} sx={{ alignItems: 'flex-start', display: 'block' }}>
       <CardContent sx={{ p: 2 }}>
         <Box
           sx={{
             width: 36,
             height: 36,
             borderRadius: '10px',
-            bgcolor: '#F1F5F9',
+            bgcolor: 'action.hover',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#334155',
+            color: 'text.primary',
             mb: 1.5,
           }}
         >
@@ -534,6 +533,7 @@ function ModuleTile({ label, sub, icon, to }: ModuleTileProps) {
           {sub}
         </Typography>
       </CardContent>
+      </CardActionArea>
     </Card>
   )
 }

@@ -207,6 +207,9 @@ export const repairOrderApi = {
     customer_id?: number
     vehicle_id?: number
     assigned_user_id?: number
+    // Matches the linked customer's name/company or the vehicle's registration —
+    // repair orders have no doc number of their own.
+    search?: string
     include_deleted?: boolean
     page?: number
     page_size?: number

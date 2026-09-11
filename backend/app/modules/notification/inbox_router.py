@@ -1,6 +1,7 @@
 """In-app notification inbox — /notifications endpoints (bell)."""
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from typing import Literal, Optional
@@ -11,10 +12,20 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.logging import get_logger
+from app.core.redis import get_redis
 from app.modules.notification.models import AppNotification
 from app.modules.rbac.dependencies import AuthUser
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+logger = get_logger("notification.inbox_router")
+
+
+def notification_channel(garage_id: int, recipient_id: int) -> str:
+    """Redis pub/sub channel a single user's notifications are published to —
+    shared by create_app_notification() (publisher) and ws_router.py
+    (subscriber) so the two stay in lockstep."""
+    return f"notif:{garage_id}:{recipient_id}"
 
 _LINK_PATTERN = re.compile(r"^/(invoices|customers)/([^/]+)$")
 
@@ -52,7 +63,12 @@ async def create_app_notification(
     body: Optional[str] = None,
     link: Optional[str] = None,
 ) -> AppNotification:
-    """Create an in-app notification for a user (caller commits)."""
+    """Create an in-app notification for a user (caller commits).
+
+    Also pushes it over Redis pub/sub for real-time delivery (see
+    ws_router.py) — best-effort: a Redis hiccup never blocks the DB write,
+    the bell's own polling still catches it eventually as a fallback.
+    """
     notif = AppNotification(
         garage_id=garage_id,
         recipient_id=recipient_id,
@@ -62,6 +78,14 @@ async def create_app_notification(
     )
     db.add(notif)
     await db.flush()
+
+    try:
+        redis = get_redis()
+        payload = AppNotificationOut.model_validate(notif).model_dump(mode="json")
+        await redis.publish(notification_channel(garage_id, recipient_id), json.dumps(payload))
+    except Exception as exc:  # noqa: BLE001 — never let a push failure break the write
+        logger.warning("notification_publish_failed", error=str(exc), recipient_id=recipient_id)
+
     return notif
 
 

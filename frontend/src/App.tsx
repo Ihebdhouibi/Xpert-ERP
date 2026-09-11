@@ -1,12 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
-import { CssBaseline, ThemeProvider } from '@mui/material'
 import { IntlProvider } from 'react-intl'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { ThemeModeProvider } from './contexts/ThemeModeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { router } from './router'
-import { theme } from './theme'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,8 +19,7 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <IntlProvider locale="fr" defaultLocale="fr">
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+      <ThemeModeProvider>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
@@ -31,7 +29,7 @@ export default function App() {
             </AuthProvider>
           </QueryClientProvider>
         </ErrorBoundary>
-      </ThemeProvider>
+      </ThemeModeProvider>
     </IntlProvider>
   )
 }

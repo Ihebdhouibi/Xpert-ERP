@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, patch
 
@@ -43,11 +44,12 @@ _ALL_PERMS = (
     "invoice.issue",
     "invoice.pay",
     "invoice.cancel",
+    "payment.record",
     "credit_note.create",
     "credit_note.read",
     "credit_note.issue",
     "credit_note.void",
-    "refund.create",
+    "refund.execute",
     "refund.read",
     "customer.read",
     "customer.create",
@@ -153,6 +155,10 @@ async def _create_and_issue_invoice(
         json={
             "customer_id": customer_id,
             "currency": "EUR",
+            # issue_invoice() requires a due date to be set — see
+            # app/modules/invoice/service.py's "Une date d'échéance est
+            # requise pour émettre la facture." check.
+            "due_at": (datetime.now(tz=timezone.utc) + timedelta(days=30)).isoformat(),
             "lines": [
                 {
                     "kind": "service",
@@ -170,7 +176,7 @@ async def _create_and_issue_invoice(
     inv = resp.json()
 
     resp = await client.post(
-        f"/api/v1/invoices/{inv['id']}/issue",
+        f"/api/v1/invoices/{inv['public_id']}/issue",
         headers={**auth(token), "If-Match": str(inv["version"])},
     )
     assert resp.status_code == 200, resp.text
@@ -388,7 +394,7 @@ async def test_create_export_marks_invoices_as_exported(
     assert export["record_counts"]["invoices"] >= 1
 
     # Re-fetch invoice — is_exported should be True
-    resp = await ae_client.get(f"/api/v1/invoices/{inv['id']}", headers=auth(token))
+    resp = await ae_client.get(f"/api/v1/invoices/{inv['public_id']}", headers=auth(token))
     assert resp.status_code == 200
     assert resp.json()["is_exported"] is True
 
@@ -512,17 +518,17 @@ async def test_exported_invoice_cannot_be_cancelled(
     token = await _login(ae_client)
     customer_id = await _get_customer_id(ae_seeded_db)
     inv = await _create_and_issue_invoice(ae_client, token, customer_id)
-    inv_id = inv["id"]
+    inv_public_id = inv["public_id"]
 
     await _run_export(ae_client, token)
 
     # Re-fetch to get current version after export updated the invoice
-    fetch = await ae_client.get(f"/api/v1/invoices/{inv_id}", headers=auth(token))
+    fetch = await ae_client.get(f"/api/v1/invoices/{inv_public_id}", headers=auth(token))
     assert fetch.status_code == 200
     version = fetch.json()["version"]
 
     cancel_resp = await ae_client.post(
-        f"/api/v1/invoices/{inv_id}/cancel",
+        f"/api/v1/invoices/{inv_public_id}/cancel",
         headers={**auth(token), "If-Match": str(version)},
     )
     # Service raises InvoiceStateError → router returns 409

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.customer.models import Customer
 from app.modules.repair_order.models import (
     RepairOrder,
     ROLaborLine,
@@ -12,6 +13,7 @@ from app.modules.repair_order.models import (
     ROStatus,
     ROStatusEvent,
 )
+from app.modules.vehicles.models import Vehicle
 
 
 class RepairOrderRepository:
@@ -66,48 +68,62 @@ class RepairOrderRepository:
         customer_id: int | None = None,
         vehicle_id: int | None = None,
         assigned_user_id: int | None = None,
+        search: str | None = None,
         include_deleted: bool = False,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[RepairOrder], int]:
-        """List repair orders with optional filters and pagination."""
-        def _apply_filters(s):
-            if not include_deleted:
-                s = s.where(RepairOrder.deleted_at.is_(None))
-            if status:
-                s = s.where(RepairOrder.status == status)
-            if customer_id:
-                s = s.where(RepairOrder.customer_id == customer_id)
-            if vehicle_id:
-                s = s.where(RepairOrder.vehicle_id == vehicle_id)
-            if assigned_user_id is not None:
-                s = s.where(RepairOrder.assigned_user_id == assigned_user_id)
-            return s
+        """List repair orders with optional filters and pagination.
 
-        stmt = _apply_filters(select(RepairOrder).where(RepairOrder.garage_id == garage_id))
-        count_stmt = _apply_filters(select(RepairOrder).where(RepairOrder.garage_id == garage_id))
+        `search` matches the linked customer's name/company or the vehicle's
+        registration plate — repair orders have no human-readable doc number
+        of their own (only the internal id / public UUID), so this is the
+        closest equivalent to the doc_number search other document modules
+        (invoice, quotation) support.
+        """
+        base = select(RepairOrder).where(RepairOrder.garage_id == garage_id)
+        if not include_deleted:
+            base = base.where(RepairOrder.deleted_at.is_(None))
+        if status:
+            base = base.where(RepairOrder.status == status)
+        if customer_id:
+            base = base.where(RepairOrder.customer_id == customer_id)
+        if vehicle_id:
+            base = base.where(RepairOrder.vehicle_id == vehicle_id)
+        if assigned_user_id is not None:
+            base = base.where(RepairOrder.assigned_user_id == assigned_user_id)
 
-        from sqlalchemy import func
+        if search:
+            pattern = f"%{search.strip()}%"
+            base = (
+                base.outerjoin(Customer, Customer.id == RepairOrder.customer_id)
+                .outerjoin(Vehicle, Vehicle.id == RepairOrder.vehicle_id)
+                .where(
+                    or_(
+                        Customer.full_name.ilike(pattern),
+                        func.coalesce(Customer.company_name, "").ilike(pattern),
+                        Vehicle.registration.ilike(pattern),
+                    )
+                )
+            )
 
         total = (
-            await db.execute(select(func.count()).select_from(count_stmt.subquery()))
-        ).scalar()
+            await db.execute(select(func.count()).select_from(base.subquery()))
+        ).scalar_one()
 
         # Pagination
-        stmt = stmt.order_by(RepairOrder.created_at.desc()).offset(
+        stmt = base.order_by(RepairOrder.created_at.desc()).offset(
             (page - 1) * page_size
         ).limit(page_size)
 
         rows = (await db.execute(stmt)).scalars().unique().all()
-        return rows, total or 0
+        return list(rows), total or 0
 
     @staticmethod
     async def count_by_status(
         db: AsyncSession, garage_id: int, status: ROStatus
     ) -> int:
         """Count active repair orders by status."""
-        from sqlalchemy import func
-
         stmt = (
             select(func.count(RepairOrder.id))
             .where(RepairOrder.garage_id == garage_id)

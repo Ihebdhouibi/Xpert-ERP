@@ -152,6 +152,7 @@ def create_app() -> FastAPI:
     from app.modules.supplier_invoice.router import router as supplier_invoice_router
     from app.modules.notification.router import router as notification_router
     from app.modules.notification.inbox_router import router as notification_inbox_router
+    from app.modules.notification.ws_router import router as notification_ws_router
     from app.modules.inspection.router import router as inspection_router
     from app.modules.media.router import router as media_router
     from app.modules.kpi.router import router as kpi_router
@@ -189,6 +190,7 @@ def create_app() -> FastAPI:
     app.include_router(supplier_invoice_router, prefix="/api/v1")
     app.include_router(notification_router, prefix="/api/v1")
     app.include_router(notification_inbox_router, prefix="/api/v1")
+    app.include_router(notification_ws_router, prefix="/api/v1")
     app.include_router(inspection_router, prefix="/api/v1")
     app.include_router(media_router, prefix="/api/v1")
     app.include_router(kpi_router, prefix="/api/v1")

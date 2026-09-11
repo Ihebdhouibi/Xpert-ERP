@@ -25,7 +25,9 @@ export function NotificationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['notifications', 'history', page, unreadOnly],
     queryFn: () => inboxApi.history({ page, page_size: PAGE_SIZE, unread_only: unreadOnly }),
-    refetchInterval: 30_000,
+    // useNotificationSocket (mounted in AppShell) invalidates this on every
+    // push — this interval is just a fallback for a socket that dropped.
+    refetchInterval: 5 * 60_000,
   })
 
   const items = data?.items ?? []
@@ -69,7 +71,17 @@ export function NotificationsPage() {
             <Box key={n.id}>
               {i > 0 && <Divider />}
               <Box
+                role="button"
+                tabIndex={0}
                 onClick={() => openNotification(n)}
+                onKeyDown={e => {
+                  // Nested "Email client/admin" buttons handle their own
+                  // Enter/Space — only react here when the row itself is focused.
+                  if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                    e.preventDefault()
+                    openNotification(n)
+                  }
+                }}
                 sx={{
                   px: 2.5,
                   py: 1.5,

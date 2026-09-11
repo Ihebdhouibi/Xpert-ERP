@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar, DRAWER_WIDTH, COLLAPSED_WIDTH } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useCommandPalette } from '../useCommandPalette'
+import { useLocalStoragePref } from '../../hooks/useLocalStoragePref'
+import { useNotificationSocket } from '../../hooks/useNotificationSocket'
 
 // 130ms ease-out fade — masks React re-render flash, adds perceived polish.
 // Deliberately subtle: users should feel snappy, not notice the animation.
@@ -24,10 +26,14 @@ export function AppShell() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const location = useLocation()
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Persisted so the sidebar doesn't snap back to expanded on every reload.
+  const [sidebarOpen, setSidebarOpen] = useLocalStoragePref('sidebar_open', true)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const { palette, setOpen: openPalette } = useCommandPalette()
+  // Mounted once here (not per-page) so the socket survives route changes —
+  // pushes update the bell's react-query cache directly (see the hook).
+  useNotificationSocket()
 
   const handleMenuClick = () => {
     if (isMobile) {

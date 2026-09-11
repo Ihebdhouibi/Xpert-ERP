@@ -36,6 +36,9 @@ from app.modules.customer.models import (
 )
 from app.modules.customer.schemas import (
     AddressSchema,
+    BulkArchiveCustomersInput,
+    BulkArchiveCustomersResult,
+    BulkArchiveSkip,
     CreditLimitUpdateRequest,
     CustomerBalanceEventListResponse,
     CustomerBalanceEventSummary,
@@ -354,6 +357,46 @@ async def import_customers(
 
     await db.commit()
     return result
+
+
+@router.post(
+    "/bulk-archive",
+    response_model=BulkArchiveCustomersResult,
+    dependencies=[require_permission("customer.delete")],
+    summary="Archive multiple customers at once",
+)
+async def bulk_archive_customers(
+    payload: BulkArchiveCustomersInput,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> BulkArchiveCustomersResult:
+    """Archives each id independently — one missing/already-gone id (e.g.
+    from a stale page the user had open) doesn't abort the rest of the
+    selection, it's just reported back as skipped."""
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    request_id = _request_id(request)
+    ip_address = _client_ip(request)
+
+    archived: list[str] = []
+    skipped: list[BulkArchiveSkip] = []
+    for public_id in payload.customer_ids:
+        try:
+            await svc.soft_delete_customer(
+                db,
+                garage_id=user.garage_id,
+                actor_user_id=actor_id,
+                public_id=public_id,
+                reason="Archivage groupé",
+                request_id=request_id,
+                ip_address=ip_address,
+            )
+            archived.append(public_id)
+        except svc.CustomerNotFoundError:
+            skipped.append(BulkArchiveSkip(id=public_id, reason="Client introuvable"))
+
+    await db.commit()
+    return BulkArchiveCustomersResult(archived=archived, skipped=skipped)
 
 
 @router.patch(

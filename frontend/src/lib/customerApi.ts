@@ -115,6 +115,16 @@ export interface CustomerImportResult {
   errors: CustomerImportRowError[]
 }
 
+export interface BulkArchiveSkip {
+  id: string
+  reason: string
+}
+
+export interface BulkArchiveCustomersResult {
+  archived: string[]
+  skipped: BulkArchiveSkip[]
+}
+
 export const customerApi = {
   list: async (params: ListParams = {}): Promise<CustomerListResponse> => {
     const { data } = await apiClient.get<CustomerListResponse>('/customers', {
@@ -175,6 +185,14 @@ export const customerApi = {
   restore: async (publicId: string): Promise<CustomerDetail> => {
     const { data } = await apiClient.post<CustomerDetail>(
       `/customers/${publicId}/restore`,
+    )
+    return data
+  },
+
+  bulkArchive: async (customerIds: string[]): Promise<BulkArchiveCustomersResult> => {
+    const { data } = await apiClient.post<BulkArchiveCustomersResult>(
+      '/customers/bulk-archive',
+      { customer_ids: customerIds },
     )
     return data
   },

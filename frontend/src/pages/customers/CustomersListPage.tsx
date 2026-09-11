@@ -28,9 +28,17 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { DataTable, type Column } from '../../components/ui/DataTable'
 import { StatusChip } from '../../components/ui/StatusChip'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { SavedViewsBar } from '../../components/ui/SavedViewsBar'
 import { CustomerImportDialog } from '../../components/customer/CustomerImportDialog'
 import { formatMinor } from '../../components/ui/CurrencyDisplay'
 import { useToast } from '../../contexts/ToastContext'
+
+interface CustomersViewState {
+  q: string
+  statusFilter: 'active' | 'inactive' | 'blocked' | ''
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+}
 
 const BASE_COLUMNS: Column<CustomerSummary>[] = [
   {
@@ -134,6 +142,7 @@ export function CustomersListPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [toArchive, setToArchive] = useState<CustomerSummary | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const handleSort = (col: string) => {
     if (col === sortBy) {
@@ -175,6 +184,20 @@ export function CustomersListPage() {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
     },
     onError: () => toastError("Impossible de restaurer ce client."),
+  })
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (ids: string[]) => customerApi.bulkArchive(ids),
+    onSuccess: result => {
+      if (result.skipped.length === 0) {
+        success(`${result.archived.length} client${result.archived.length > 1 ? 's' : ''} archivé${result.archived.length > 1 ? 's' : ''}`)
+      } else {
+        toastError(`${result.archived.length} archivé(s), ${result.skipped.length} ignoré(s) (introuvable(s)).`)
+      }
+      setSelected(new Set())
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
+    },
+    onError: () => toastError("Impossible d'archiver la sélection."),
   })
 
   const columns: Column<CustomerSummary>[] = [
@@ -281,6 +304,18 @@ export function CustomersListPage() {
         </ToggleButtonGroup>
       </Stack>
 
+      <SavedViewsBar<CustomersViewState>
+        storageKey="customers_list"
+        currentState={{ q, statusFilter, sortBy, sortOrder }}
+        onApply={view => {
+          setQ(view.q)
+          setStatusFilter(view.statusFilter)
+          setSortBy(view.sortBy)
+          setSortOrder(view.sortOrder)
+          setPage(0)
+        }}
+      />
+
       <DataTable
         columns={columns}
         rows={sortedRows}
@@ -299,6 +334,27 @@ export function CustomersListPage() {
         onSort={handleSort}
         emptyTitle={q ? 'Aucun résultat' : 'Aucun client'}
         emptyDescription={q ? `Aucun client ne correspond à "${q}".` : 'Créez votre premier client pour commencer.'}
+        selectable
+        selected={selected}
+        onSelectionChange={setSelected}
+        bulkActionsSlot={(selectedIds, clearSelection) => (
+          <PermissionGate permission="customer.delete">
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              startIcon={<ArchiveRoundedIcon />}
+              disabled={bulkArchiveMutation.isPending}
+              onClick={() => bulkArchiveMutation.mutate(Array.from(selectedIds))}
+              sx={{ textTransform: 'none', bgcolor: 'background.paper' }}
+            >
+              Archiver la sélection
+            </Button>
+            <Button size="small" onClick={clearSelection} sx={{ textTransform: 'none' }}>
+              Annuler
+            </Button>
+          </PermissionGate>
+        )}
       />
 
       <ConfirmDialog

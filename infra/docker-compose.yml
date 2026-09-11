@@ -107,12 +107,17 @@ services:
       S3_ENDPOINT_URL: "http://minio:9000"
       # ...but presigned URLs are opened by the browser, which must use the host-mapped port
       S3_PUBLIC_ENDPOINT_URL: "http://localhost:9000"
-      # SMTP → Mailpit (local email catcher, no TLS on port 1025)
-      SMTP_HOST: "mailpit"
-      SMTP_PORT: "1025"
-      SMTP_USE_TLS: "false"
-      SMTP_USERNAME: ""
-      SMTP_PASSWORD: ""
+      # SMTP → defaults to Mailpit (local email catcher, no real delivery) so no
+      # dev/test run ever emails a real address by accident. To send for real
+      # (e.g. testing the password-reset email end to end), set SMTP_HOST/PORT/
+      # USE_TLS/USERNAME/PASSWORD in infra/.env (see the commented template
+      # there) and recreate the api container — those values override these
+      # defaults via ${VAR:-default} substitution.
+      SMTP_HOST: "${SMTP_HOST:-mailpit}"
+      SMTP_PORT: "${SMTP_PORT:-1025}"
+      SMTP_USE_TLS: "${SMTP_USE_TLS:-false}"
+      SMTP_USERNAME: "${SMTP_USERNAME:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
       # Logo is inside the backend volume mounted at /app
       PDF_GARAGE_LOGO_PATH: "/app/assets/logo.png"
     ports:

@@ -1,4 +1,4 @@
-import { Box, Stack, Typography } from '@mui/material'
+import { Box, Stack, Typography, useTheme } from '@mui/material'
 
 export type StatusKey =
   | 'active' | 'inactive' | 'blocked'
@@ -63,57 +63,50 @@ type StatusStyle = {
   bg: string
 }
 
-const styleMap: Record<StatusKey, StatusStyle> = {
-  // Green — positive / completed
-  active:    { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  paid:      { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  ready:     { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  delivered: { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  done:      { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  approved:  { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  received:  { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  matched:   { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  posted:    { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  invoiced:  { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  completed: { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  confirmed: { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
-  finished:  { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
+// Five semantic groups, one light/dark pair each — every status key below
+// just points at a group name, so the two palettes can't drift out of sync
+// with each other the way 30 fully-duplicated per-key entries would.
+type StatusGroup = 'success' | 'error' | 'warning' | 'info' | 'neutral'
 
-  // Red — error / blocked / rejected
-  blocked:   { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  cancelled: { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  overdue:   { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  disputed:  { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  rejected:  { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  paused_parts:    { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-  scrapped:  { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
-
-  // Amber — in-progress / waiting / attention
-  pending:       { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  in_progress:   { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  waiting_parts: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  partial:       { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  open:          { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  processing:    { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  in_repair:     { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-  partially_received: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
-
-  // Slate — informational / sent / active states
-  sent:       { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
-  diagnosis:  { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
-
-  // Grey — neutral / default / closed
-  inactive:  { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  draft:     { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  closed:    { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  credited:  { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  created:   { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  expired:   { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  converted: { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
-  issued:    { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
+const GROUP_STYLES: Record<'light' | 'dark', Record<StatusGroup, StatusStyle>> = {
+  light: {
+    success: { dot: '#16A34A', text: '#15803D', bg: '#F0FDF4' },
+    error:   { dot: '#DC2626', text: '#B91C1C', bg: '#FEF2F2' },
+    warning: { dot: '#D97706', text: '#92400E', bg: '#FFFBEB' },
+    info:    { dot: '#334155', text: '#1E293B', bg: '#E2E8F0' },
+    neutral: { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' },
+  },
+  dark: {
+    success: { dot: '#34D399', text: '#6EE7B7', bg: 'rgba(16,185,129,0.14)' },
+    error:   { dot: '#F87171', text: '#FCA5A5', bg: 'rgba(239,68,68,0.14)' },
+    warning: { dot: '#FBBF24', text: '#FDE68A', bg: 'rgba(245,158,11,0.14)' },
+    info:    { dot: '#94A3B8', text: '#CBD5E1', bg: 'rgba(148,163,184,0.14)' },
+    neutral: { dot: '#64748B', text: '#94A3B8', bg: 'rgba(148,163,184,0.08)' },
+  },
 }
 
-const fallbackStyle: StatusStyle = { dot: '#94A3B8', text: '#64748B', bg: '#F8FAFC' }
+const GROUP_FOR_KEY: Record<StatusKey, StatusGroup> = {
+  // Green — positive / completed
+  active: 'success', paid: 'success', ready: 'success', delivered: 'success',
+  done: 'success', approved: 'success', received: 'success', matched: 'success',
+  posted: 'success', invoiced: 'success', completed: 'success', confirmed: 'success',
+  finished: 'success',
+
+  // Red — error / blocked / rejected
+  blocked: 'error', cancelled: 'error', overdue: 'error', disputed: 'error',
+  rejected: 'error', paused_parts: 'error', scrapped: 'error',
+
+  // Amber — in-progress / waiting / attention
+  pending: 'warning', in_progress: 'warning', waiting_parts: 'warning', partial: 'warning',
+  open: 'warning', processing: 'warning', in_repair: 'warning', partially_received: 'warning',
+
+  // Slate — informational / sent / active states
+  sent: 'info', diagnosis: 'info', issued: 'info',
+
+  // Grey — neutral / default / closed
+  inactive: 'neutral', draft: 'neutral', closed: 'neutral', credited: 'neutral',
+  created: 'neutral', expired: 'neutral', converted: 'neutral',
+}
 
 interface StatusChipProps {
   status: string
@@ -122,8 +115,10 @@ interface StatusChipProps {
 }
 
 export function StatusChip({ status, size = 'small', label }: StatusChipProps) {
+  const mode = useTheme().palette.mode
   const key = status as StatusKey
-  const style = styleMap[key] ?? fallbackStyle
+  const group = GROUP_FOR_KEY[key] ?? 'neutral'
+  const style = GROUP_STYLES[mode][group]
   const displayLabel = label ?? labels[key] ?? status
 
   const dotSize = size === 'small' ? 6 : 8

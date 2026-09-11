@@ -228,6 +228,82 @@ class TestListRepairOrders:
 
 
 # ---------------------------------------------------------------------------
+# GET /repair-orders?search= — search by customer name / vehicle registration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+class TestSearchRepairOrders:
+    async def test_search_by_customer_name(
+        self, ro_client: AsyncClient, ro_seeded_db: AsyncSession
+    ):
+        from app.modules.customer.models import Customer, CustomerStatus, CustomerType
+
+        customer = Customer(
+            garage_id=1,
+            type=CustomerType.individual,
+            full_name="Amine Trabelsi",
+            status=CustomerStatus.active,
+        )
+        ro_seeded_db.add(customer)
+        await ro_seeded_db.commit()
+
+        token = await _login(ro_client)
+        await ro_client.post(
+            "/api/v1/repair-orders",
+            json={"customer_id": customer.id, "description": "Vidange"},
+            headers=_auth(token),
+        )
+        await ro_client.post(
+            "/api/v1/repair-orders",
+            json={"customer_id": 999999, "description": "Autre client"},
+            headers=_auth(token),
+        )
+
+        resp = await ro_client.get(
+            "/api/v1/repair-orders?search=Trabelsi", headers=_auth(token)
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["customer_name"] == "Amine Trabelsi"
+
+    async def test_search_by_vehicle_registration(
+        self, ro_client: AsyncClient, ro_seeded_db: AsyncSession
+    ):
+        from app.modules.vehicles.models import Vehicle
+
+        vehicle = Vehicle(garage_id=1, make="Peugeot", model="208", registration="123 TUN 4567")
+        ro_seeded_db.add(vehicle)
+        await ro_seeded_db.commit()
+
+        token = await _login(ro_client)
+        await ro_client.post(
+            "/api/v1/repair-orders",
+            json={"customer_id": 1, "vehicle_id": vehicle.id, "description": "Freins"},
+            headers=_auth(token),
+        )
+
+        resp = await ro_client.get(
+            "/api/v1/repair-orders?search=123 TUN", headers=_auth(token)
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
+
+    async def test_search_no_match_returns_empty(self, ro_client: AsyncClient):
+        token = await _login(ro_client)
+        await ro_client.post(
+            "/api/v1/repair-orders",
+            json={"customer_id": 1, "description": "RO"},
+            headers=_auth(token),
+        )
+        resp = await ro_client.get(
+            "/api/v1/repair-orders?search=Nonexistent", headers=_auth(token)
+        )
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
 # GET /repair-orders/{id} — detail
 # ---------------------------------------------------------------------------
 

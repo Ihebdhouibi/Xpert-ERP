@@ -298,3 +298,25 @@ class CustomerImportResult(BaseModel):
     created: int
     skipped: int  # rows skipped as duplicates of an existing customer
     errors: list[CustomerImportRowError] = Field(default_factory=list)
+
+
+class BulkArchiveCustomersInput(BaseModel):
+    """Selection payload for the bulk-archive endpoint — a page-sized batch
+    from the list page, not the whole customer base."""
+
+    customer_ids: list[str] = Field(..., min_length=1, max_length=200)
+
+
+class BulkArchiveSkip(BaseModel):
+    """One selected customer that couldn't be archived, and why."""
+
+    id: str
+    reason: str
+
+
+class BulkArchiveCustomersResult(BaseModel):
+    """Per-item outcome — archiving continues past individual failures
+    (e.g. an id from a stale page) rather than aborting the whole batch."""
+
+    archived: list[str] = Field(default_factory=list)
+    skipped: list[BulkArchiveSkip] = Field(default_factory=list)

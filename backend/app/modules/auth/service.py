@@ -62,6 +62,20 @@ def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+def _ensure_aware(dt: datetime) -> datetime:
+    """Treat a naive datetime read back from the DB as UTC.
+
+    Columns are declared DateTime(timezone=True) and Postgres/asyncpg returns
+    tz-aware values in production, but some drivers/dialects (e.g. SQLite,
+    used in tests) silently drop tzinfo on round-trip, which would otherwise
+    crash this comparison with 'can't compare offset-naive and offset-aware
+    datetimes' instead of a controlled expired/invalid response.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def create_access_token(
     subject: str,
     garage_id: int,
@@ -179,7 +193,7 @@ async def login(
         raise ValueError("Invalid credentials")
 
     if user.status == "locked":
-        if user.locked_until and user.locked_until > _utcnow():
+        if user.locked_until and _ensure_aware(user.locked_until) > _utcnow():
             logger.warning("login_blocked_locked", user_id=user.id, garage_id=garage_id)
             raise ValueError("Account is locked. Try again later.")
         # Lockout expired — auto-unlock
@@ -367,7 +381,7 @@ async def confirm_password_reset(
     if not secrets.compare_digest(expected_hash, user.password_reset_token_hash):
         raise ValueError("Invalid reset token")
 
-    if user.password_reset_expires_at < _utcnow():
+    if _ensure_aware(user.password_reset_expires_at) < _utcnow():
         raise ValueError("Reset token has expired")
 
     new_hash = hash_password(new_password)

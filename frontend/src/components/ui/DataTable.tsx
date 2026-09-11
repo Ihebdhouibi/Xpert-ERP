@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import {
   Box,
+  Checkbox,
   Paper,
   Table,
   TableBody,
@@ -10,6 +11,7 @@ import {
   TablePagination,
   TableRow,
   TableSortLabel,
+  Toolbar,
   Typography,
 } from '@mui/material'
 import { EmptyState } from './EmptyState'
@@ -48,6 +50,15 @@ interface DataTableProps<T> {
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
   onSort?: (columnId: string) => void
+  // Row selection (checkboxes) — additive, existing consumers are unaffected
+  // unless they opt in. `selected` holds the keys from getRowKey().
+  selectable?: boolean
+  selected?: Set<string>
+  onSelectionChange?: (selected: Set<string>) => void
+  /** Rendered as a toolbar replacing the default header row while
+   * `selected` is non-empty — the table doesn't know what the actions do,
+   * the page supplies them. */
+  bulkActionsSlot?: (selectedIds: Set<string>, clearSelection: () => void) => ReactNode
 }
 
 export function DataTable<T>({
@@ -70,19 +81,80 @@ export function DataTable<T>({
   sortBy,
   sortOrder = 'asc',
   onSort,
+  selectable = false,
+  selected,
+  onSelectionChange,
+  bulkActionsSlot,
 }: DataTableProps<T>) {
   const showPagination = total != null && page != null && onPageChange != null
   const hasActionCol = columns.some(c => c.actions)
+  const selectedIds = selected ?? new Set<string>()
+  const pageRowKeys = rows.map(getRowKey)
+  const selectedOnPageCount = pageRowKeys.filter(k => selectedIds.has(k)).length
+  const allOnPageSelected = rows.length > 0 && selectedOnPageCount === rows.length
+  const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected
+
+  const toggleRow = (key: string) => {
+    if (!onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    onSelectionChange(next)
+  }
+
+  const toggleAllOnPage = () => {
+    if (!onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (allOnPageSelected) {
+      pageRowKeys.forEach(k => next.delete(k))
+    } else {
+      pageRowKeys.forEach(k => next.add(k))
+    }
+    onSelectionChange(next)
+  }
 
   return (
     <Paper
       variant="outlined"
-      sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid #E2E8F0' }}
+      sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}
     >
+      {selectable && selectedIds.size > 0 && bulkActionsSlot && (
+        <Toolbar
+          variant="dense"
+          sx={{
+            bgcolor: 'action.selected',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            gap: 1.5,
+            minHeight: 48,
+          }}
+        >
+          <Checkbox
+            size="small"
+            checked={allOnPageSelected}
+            indeterminate={someOnPageSelected}
+            onChange={toggleAllOnPage}
+          />
+          <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+            {selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''}
+          </Typography>
+          {bulkActionsSlot(selectedIds, () => onSelectionChange?.(new Set()))}
+        </Toolbar>
+      )}
       <TableContainer>
         <Table stickyHeader={stickyHeader} size="medium">
           <TableHead>
             <TableRow>
+              {selectable && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    size="small"
+                    checked={allOnPageSelected}
+                    indeterminate={someOnPageSelected}
+                    onChange={toggleAllOnPage}
+                  />
+                </TableCell>
+              )}
               {columns.map(col => (
                 <TableCell
                   key={col.id}
@@ -113,12 +185,15 @@ export function DataTable<T>({
 
           <TableBody>
             {loading && (
-              <TableLoadingSkeleton cols={columns.length} rows={pageSize > 10 ? 8 : 4} />
+              <TableLoadingSkeleton
+                cols={columns.length + (selectable ? 1 : 0)}
+                rows={pageSize > 10 ? 8 : 4}
+              />
             )}
 
             {!loading && error && (
               <TableRow>
-                <TableCell colSpan={columns.length} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={columns.length + (selectable ? 1 : 0)} align="center" sx={{ py: 4 }}>
                   <Typography color="error.main" variant="body2" fontWeight={500}>
                     {errorMessage}
                   </Typography>
@@ -128,7 +203,7 @@ export function DataTable<T>({
 
             {!loading && !error && rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={columns.length} sx={{ border: 0 }}>
+                <TableCell colSpan={columns.length + (selectable ? 1 : 0)} sx={{ border: 0 }}>
                   <EmptyState
                     title={emptyTitle}
                     description={emptyDescription}
@@ -140,10 +215,14 @@ export function DataTable<T>({
 
             {!loading &&
               !error &&
-              rows.map(row => (
+              rows.map(row => {
+                const rowKey = getRowKey(row)
+                const isSelected = selectedIds.has(rowKey)
+                return (
                 <TableRow
-                  key={getRowKey(row)}
+                  key={rowKey}
                   hover={!!onRowClick}
+                  selected={isSelected}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   sx={{
                     cursor: onRowClick ? 'pointer' : 'default',
@@ -159,6 +238,18 @@ export function DataTable<T>({
                     }),
                   }}
                 >
+                  {selectable && (
+                    <TableCell
+                      padding="checkbox"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        size="small"
+                        checked={isSelected}
+                        onChange={() => toggleRow(rowKey)}
+                      />
+                    </TableCell>
+                  )}
                   {columns.map(col => (
                     <TableCell
                       key={col.id}
@@ -177,13 +268,14 @@ export function DataTable<T>({
                     </TableCell>
                   ))}
                 </TableRow>
-              ))}
+                )
+              })}
           </TableBody>
         </Table>
       </TableContainer>
 
       {showPagination && !loading && (
-        <Box sx={{ borderTop: '1px solid #F1F5F9' }}>
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
           <TablePagination
             component="div"
             count={total!}

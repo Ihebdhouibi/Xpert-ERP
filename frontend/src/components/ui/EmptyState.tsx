@@ -27,14 +27,14 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
           width: 64,
           height: 64,
           borderRadius: '50%',
-          bgcolor: '#F1F5F9',
+          bgcolor: 'action.hover',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           mb: 2.5,
         }}
       >
-        {icon ?? <InboxRoundedIcon sx={{ color: '#94A3B8', fontSize: 30 }} />}
+        {icon ?? <InboxRoundedIcon sx={{ color: 'text.disabled', fontSize: 30 }} />}
       </Box>
       <Typography variant="h6" fontWeight={600} color="text.primary" gutterBottom>
         {title}

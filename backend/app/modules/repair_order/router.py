@@ -158,6 +158,7 @@ async def list_repair_orders(
     customer_id: Optional[int] = None,
     vehicle_id: Optional[int] = None,
     assigned_user_id: Optional[int] = None,
+    search: Optional[str] = None,
     include_deleted: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -165,6 +166,8 @@ async def list_repair_orders(
     """List repair orders with optional filters and pagination.
 
     Mechanics only see the repair orders assigned to them; reception/admin see all.
+    `search` matches the linked customer's name/company or the vehicle's
+    registration plate (repair orders have no doc number of their own).
     """
     _PRIVILEGED = {"admin", "super_admin", "secretary"}
     if "mechanic" in user.roles and not (_PRIVILEGED & set(user.roles)):
@@ -177,6 +180,7 @@ async def list_repair_orders(
         customer_id=customer_id,
         vehicle_id=vehicle_id,
         assigned_user_id=assigned_user_id,
+        search=search,
         include_deleted=include_deleted,
         page=page,
         page_size=page_size,

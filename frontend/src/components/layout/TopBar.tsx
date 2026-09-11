@@ -7,9 +7,9 @@ import {
   Badge,
   Box,
   Button,
+  ButtonBase,
   Divider,
   IconButton,
-  InputBase,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -28,8 +28,24 @@ import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneR
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded'
 import MailRoundedIcon from '@mui/icons-material/MailRounded'
+import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded'
+import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
+import BrightnessAutoRoundedIcon from '@mui/icons-material/BrightnessAutoRounded'
 import { useAuth } from '../../contexts/AuthContext'
+import { useThemeMode } from '../../contexts/ThemeModeContext'
 import { navSections } from './navConfig'
+
+const THEME_MODE_ICON = {
+  light: LightModeRoundedIcon,
+  dark: DarkModeRoundedIcon,
+  system: BrightnessAutoRoundedIcon,
+} as const
+
+const THEME_MODE_LABEL = {
+  light: 'Thème clair — cliquer pour passer au thème sombre',
+  dark: 'Thème sombre — cliquer pour suivre le système',
+  system: 'Thème automatique (système) — cliquer pour le thème clair',
+} as const
 
 function getPageTitle(pathname: string): string {
   for (const section of navSections) {
@@ -54,6 +70,7 @@ interface TopBarProps {
 
 export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps) {
   const { user, logout } = useAuth()
+  const { preference, cyclePreference } = useThemeMode()
   const location = useLocation()
   const navigate = useNavigate()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
@@ -63,7 +80,10 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
   const { data: inbox } = useQuery({
     queryKey: ['notifications', 'inbox'],
     queryFn: () => inboxApi.list(),
-    refetchInterval: 30_000,
+    // Real-time delivery comes from useNotificationSocket (mounted in
+    // AppShell) — this is now just a safety net for a socket that never
+    // connected or silently dropped.
+    refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   })
 
@@ -101,8 +121,8 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
       position="sticky"
       elevation={0}
       sx={{
-        bgcolor: '#FFFFFF',
-        borderBottom: '1px solid #E2E8F0',
+        bgcolor: 'background.paper',
+        borderBottom: theme => `1px solid ${theme.palette.divider}`,
         color: 'text.primary',
         zIndex: theme => theme.zIndex.appBar,
       }}
@@ -139,8 +159,11 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
           {pageTitle}
         </Typography>
 
-        {/* Cmd+K search trigger — desktop only */}
-        <Box
+        {/* Cmd+K search trigger — desktop only. A real button (not a bare
+            Box with onClick) so it's reachable and operable by keyboard;
+            the placeholder text is decorative, not a live input. */}
+        <ButtonBase
+          aria-label="Rechercher — Ctrl/⌘+K"
           onClick={onSearchClick}
           sx={{
             display: { xs: 'none', md: 'flex' },
@@ -150,30 +173,19 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
             px: 1.5,
             py: 0.625,
             borderRadius: 1.5,
-            border: '1px solid #E2E8F0',
-            bgcolor: '#F8FAFC',
-            cursor: 'pointer',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'action.hover',
             minWidth: 200,
+            justifyContent: 'flex-start',
             transition: 'border-color 0.15s, background-color 0.15s',
-            '&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' },
+            '&:hover': { borderColor: 'text.disabled', bgcolor: 'action.selected' },
           }}
         >
-          <SearchRoundedIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
-          <InputBase
-            placeholder="Rechercher…"
-            readOnly
-            onClick={onSearchClick}
-            sx={{
-              flex: 1,
-              pointerEvents: 'none',
-              '& input': {
-                p: 0,
-                fontSize: '0.8125rem',
-                color: '#94A3B8',
-                cursor: 'pointer',
-              },
-            }}
-          />
+          <SearchRoundedIcon sx={{ fontSize: 15, color: 'text.disabled', flexShrink: 0 }} />
+          <Typography variant="body2" sx={{ flex: 1, textAlign: 'left', fontSize: '0.8125rem', color: 'text.disabled' }}>
+            Rechercher…
+          </Typography>
           <Box
             sx={{
               display: 'flex',
@@ -186,12 +198,13 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
               component="kbd"
               sx={{
                 px: 0.5, py: 0.25,
-                bgcolor: 'white',
-                border: '1px solid #E2E8F0',
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
                 borderRadius: '4px',
                 fontSize: '0.6875rem',
                 fontFamily: 'inherit',
-                color: '#94A3B8',
+                color: 'text.disabled',
                 lineHeight: 1.4,
               }}
             >
@@ -201,19 +214,20 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
               component="kbd"
               sx={{
                 px: 0.5, py: 0.25,
-                bgcolor: 'white',
-                border: '1px solid #E2E8F0',
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
                 borderRadius: '4px',
                 fontSize: '0.6875rem',
                 fontFamily: 'inherit',
-                color: '#94A3B8',
+                color: 'text.disabled',
                 lineHeight: 1.4,
               }}
             >
               K
             </Box>
           </Box>
-        </Box>
+        </ButtonBase>
 
         {/* Mobile search icon */}
         <IconButton
@@ -225,6 +239,16 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
         </IconButton>
 
         <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }} />
+
+        {/* Theme mode toggle — cycles light → dark → system */}
+        <Tooltip title={THEME_MODE_LABEL[preference]} placement="bottom">
+          <IconButton size="small" onClick={cyclePreference} sx={{ color: 'text.secondary' }}>
+            {(() => {
+              const Icon = THEME_MODE_ICON[preference]
+              return <Icon sx={{ fontSize: 20 }} />
+            })()}
+          </IconButton>
+        </Tooltip>
 
         {/* Notifications */}
         <Tooltip title="Notifications" placement="bottom">
@@ -325,10 +349,11 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
               sx={{
                 width: 32,
                 height: 32,
-                bgcolor: 'primary.main',
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                background: 'linear-gradient(135deg, #1E293B, #0F172A)',
+                color: 'primary.contrastText',
+                background: theme =>
+                  `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
               }}
             >
               {initials}
@@ -346,7 +371,8 @@ export function TopBar({ onMenuClick, sidebarOpen, onSearchClick }: TopBarProps)
               borderRadius: 2,
               minWidth: 220,
               mt: 1,
-              border: '1px solid #E2E8F0',
+              border: '1px solid',
+              borderColor: 'divider',
               '& .MuiMenuItem-root': {
                 borderRadius: 1,
                 mx: 0.5,

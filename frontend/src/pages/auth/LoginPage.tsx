@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +11,7 @@ import {
   Collapse,
   IconButton,
   InputAdornment,
+  Link,
   TextField,
   Typography,
 } from '@mui/material'
@@ -230,6 +231,11 @@ export function LoginPage() {
                 ),
               }}
             />
+            <Box textAlign="right" mt={-1.5}>
+              <Link component={RouterLink} to="/forgot-password" underline="hover" variant="body2">
+                Mot de passe oublié ?
+              </Link>
+            </Box>
             <Button
               type="submit"
               variant="contained"

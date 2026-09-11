@@ -45,8 +45,10 @@ npm run build         # tsc -b && vite build
 ### Infrastructure
 
 ```bash
-cd infra && docker-compose up -d   # PostgreSQL 5433, Redis 6379, MinIO 9000/9001
+cd infra && docker-compose up -d   # PostgreSQL 5433, Redis 6379, MinIO 9000/9001, Mailpit 1025/8025
 ```
+
+> **Known quirk:** the dockerized `api` service's SMTP is hardcoded to Mailpit (local email catcher, UI at `http://localhost:8025`) so no dev/test run ever emails a real address by accident — this silently overrides any real SMTP creds in the root `.env` for containers started this way. To test real delivery (e.g. password-reset emails), set `SMTP_*` in `infra/.env` (template already there, commented out) and run `docker-compose up -d --force-recreate api`. Running the backend via bare `uvicorn` instead of docker is unaffected and always uses the root `.env` SMTP settings directly.
 
 ## Architecture
 
