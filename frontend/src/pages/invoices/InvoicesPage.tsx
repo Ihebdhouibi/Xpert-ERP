@@ -324,6 +324,7 @@ function CreateInvoiceDialog({ open, onClose, onCreated }: {
             value={customerId}
             onChange={handleCustomerChange}
             required
+            allowCreate
             error={customerError}
             helperText={customerError ? 'Sélectionnez un client' : undefined}
           />

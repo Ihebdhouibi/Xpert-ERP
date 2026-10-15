@@ -187,6 +187,7 @@ function CreateQuotationDialog({ open, onClose, onCreated }: {
             value={customerId}
             onChange={id => { setCustomerId(id); setCustomerError(false) }}
             required
+            allowCreate
             error={customerError}
             helperText={customerError ? 'Sélectionnez un client' : undefined}
           />

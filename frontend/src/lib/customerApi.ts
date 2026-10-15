@@ -69,6 +69,11 @@ export interface CustomerCreateInput {
   contacts?: CustomerContact[]
 }
 
+/** Walk-in customer ("client passager"): the name is the only input. */
+export interface CustomerQuickCreateInput {
+  full_name: string
+}
+
 export interface CustomerUpdateInput {
   version: number
   full_name?: string
@@ -137,6 +142,12 @@ export const customerApi = {
 
   create: async (input: CustomerCreateInput): Promise<CustomerDetail> => {
     const { data } = await apiClient.post<CustomerDetail>('/customers', input)
+    return data
+  },
+
+  /** Create a walk-in from just a name — no CIN/SIRET required (see CustomerAutocomplete). */
+  quickCreate: async (input: CustomerQuickCreateInput): Promise<CustomerDetail> => {
+    const { data } = await apiClient.post<CustomerDetail>('/customers/quick', input)
     return data
   },
 

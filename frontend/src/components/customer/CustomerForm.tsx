@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,50 +26,79 @@ const optionalString = z
   .transform((s) => (s === '' ? null : s))
   .nullable()
 
+// Segment given to walk-in clients created from the facture / devis popups
+// (see CustomerAutocomplete). Their only mandatory field is the name.
+const WALK_IN_SEGMENT = 'passager'
+const isWalkInSegment = (segment: string | null | undefined) =>
+  segment?.trim().toLowerCase() === WALK_IN_SEGMENT
+
+/**
+ * `storedWalkIn`: the customer being edited is already a walk-in. Only then may
+ * the CIN be left empty, and only while its segment is still "passager"; change
+ * the segment and the usual CIN/SIRET rules apply again. Creating a customer
+ * here is always strict, so typing "passager" cannot be used to skip the CIN.
+ */
+function buildCustomerFormSchema(storedWalkIn: boolean) {
+  return z
+    .object({
+      type: z.enum(['individual', 'company']),
+      full_name: z.string().trim().min(1, 'Nom requis').max(255),
+      company_name: optionalString,
+      // Presence (CIN / SIRET) is enforced by the first refine below.
+      fiscal_id: z.string().trim(),
+      email: z
+        .string()
+        .trim()
+        .email('Email invalide')
+        .or(z.literal(''))
+        .transform((s) => (s === '' ? null : s))
+        .nullable(),
+      phone_e164: z
+        .string()
+        .trim()
+        .refine((s) => s === '' || e164Regex.test(s), {
+          message: 'Format requis : +33 suivi de 9 chiffres (ex : +33612345678)',
+        })
+        .transform((s) => (s === '' ? null : s))
+        .nullable(),
+      address_street: optionalString,
+      address_city: optionalString,
+      address_postal_code: optionalString,
+      address_country: optionalString,
+      segment: optionalString,
+      status: z.enum(['active', 'inactive', 'blocked']).optional(),
+      credit_limit_eur: z
+        .union([z.number(), z.string()])
+        .transform((v) => (v === '' || v === undefined ? 0 : Number(v)))
+        .refine((v) => Number.isFinite(v) && v >= 0, 'Doit être un nombre positif'),
+      notes: optionalString,
+    })
+    .refine(
+      (data) => !!data.fiscal_id || (storedWalkIn && isWalkInSegment(data.segment)),
+      {
+        message: 'Identifiant fiscal requis',
+        path: ['fiscal_id'],
+      },
+    )
+    .refine(
+      (data) => data.type !== 'company' || !!data.company_name,
+      {
+        message: 'Le nom de société est requis pour un client société',
+        path: ['company_name'],
+      },
+    )
+    .refine(
+      (data) => data.type !== 'company' || /^\d{14}$/.test(data.fiscal_id),
+      {
+        message: 'Le numéro SIRET doit contenir exactement 14 chiffres',
+        path: ['fiscal_id'],
+      },
+    )
+}
+
+// Strict rules (CIN / SIRET always required); what the "create" form uses.
 // eslint-disable-next-line react-refresh/only-export-components
-export const customerFormSchema = z
-  .object({
-    type: z.enum(['individual', 'company']),
-    full_name: z.string().trim().min(1, 'Nom requis').max(255),
-    company_name: optionalString,
-    fiscal_id: z.string().trim().min(1, 'Identifiant fiscal requis'),
-    email: z
-      .string()
-      .trim()
-      .email('Email invalide')
-      .or(z.literal(''))
-      .transform((s) => (s === '' ? null : s))
-      .nullable(),
-    phone_e164: z
-      .string()
-      .trim()
-      .regex(e164Regex, 'Format requis : +33 suivi de 9 chiffres (ex : +33612345678)'),
-    address_street: optionalString,
-    address_city: optionalString,
-    address_postal_code: optionalString,
-    address_country: optionalString,
-    segment: optionalString,
-    status: z.enum(['active', 'inactive', 'blocked']).optional(),
-    credit_limit_eur: z
-      .union([z.number(), z.string()])
-      .transform((v) => (v === '' || v === undefined ? 0 : Number(v)))
-      .refine((v) => Number.isFinite(v) && v >= 0, 'Doit être un nombre positif'),
-    notes: optionalString,
-  })
-  .refine(
-    (data) => data.type !== 'company' || !!data.company_name,
-    {
-      message: 'Le nom de société est requis pour un client société',
-      path: ['company_name'],
-    },
-  )
-  .refine(
-    (data) => data.type !== 'company' || /^\d{14}$/.test(data.fiscal_id),
-    {
-      message: 'Le numéro SIRET doit contenir exactement 14 chiffres',
-      path: ['fiscal_id'],
-    },
-  )
+export const customerFormSchema = buildCustomerFormSchema(false)
 
 export type CustomerFormValues = z.infer<typeof customerFormSchema>
 
@@ -89,7 +119,7 @@ const defaults = (initial?: CustomerDetail): CustomerFormValues => ({
   company_name: initial?.company_name ?? null,
   fiscal_id: initial?.fiscal_id ?? '',
   email: initial?.email ?? null,
-  phone_e164: initial?.phone_e164 ?? '',
+  phone_e164: initial?.phone_e164 ?? null,
   address_street: initial?.address?.street ?? null,
   address_city: initial?.address?.city ?? null,
   address_postal_code: initial?.address?.postal_code ?? null,
@@ -108,6 +138,10 @@ export function CustomerForm({
   onSubmit,
   onCancel,
 }: CustomerFormProps) {
+  const storedWalkIn =
+    mode === 'edit' && initial?.type === 'individual' && isWalkInSegment(initial.segment)
+  const schema = useMemo(() => buildCustomerFormSchema(storedWalkIn), [storedWalkIn])
+
   const {
     register,
     handleSubmit,
@@ -115,11 +149,13 @@ export function CustomerForm({
     watch,
     formState: { errors },
   } = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: defaults(initial),
   })
 
   const type = watch('type')
+  // A stored walk-in needs no CIN, for as long as its segment stays "passager".
+  const walkIn = storedWalkIn && isWalkInSegment(watch('segment'))
 
   const submit = handleSubmit(async (values) => {
     const address =
@@ -139,7 +175,7 @@ export function CustomerForm({
       type: values.type,
       full_name: values.full_name,
       company_name: values.company_name,
-      fiscal_id: values.fiscal_id,
+      fiscal_id: values.fiscal_id || null, // only a walk-in can get here without one
       email: values.email,
       phone_e164: values.phone_e164,
       address,
@@ -175,6 +211,7 @@ export function CustomerForm({
         <Grid item xs={12} sm={8}>
           <TextField
             label={type === 'company' ? 'Nom du contact principal' : 'Nom complet'}
+            required
             fullWidth
             autoFocus
             {...register('full_name')}
@@ -187,6 +224,7 @@ export function CustomerForm({
           <Grid item xs={12}>
             <TextField
               label="Raison sociale"
+              required
               fullWidth
               {...register('company_name')}
               error={!!errors.company_name}
@@ -219,11 +257,14 @@ export function CustomerForm({
         <Grid item xs={12} sm={6}>
           <TextField
             label={type === 'company' ? 'Numéro SIRET' : 'CIN'}
+            required={!walkIn}
             fullWidth
             placeholder={type === 'company' ? '14 chiffres' : undefined}
             {...register('fiscal_id')}
             error={!!errors.fiscal_id}
-            helperText={errors.fiscal_id?.message}
+            helperText={
+              errors.fiscal_id?.message ?? (walkIn ? 'Optionnel pour un client passager' : undefined)
+            }
           />
         </Grid>
         <Grid item xs={12} sm={6}>

@@ -44,6 +44,7 @@ from app.modules.customer.schemas import (
     CustomerDetail,
     CustomerImportResult,
     CustomerListResponse,
+    CustomerQuickCreateRequest,
     CustomerSummary,
     CustomerUpdateRequest,
     MergePromptResponse,
@@ -297,6 +298,36 @@ async def create_customer(
     # Reload with contacts for the response.
     fresh = await repo.get_by_public_id(
         db, user.garage_id, str(result.public_id), with_contacts=True
+    )
+    assert fresh is not None
+    return _to_detail(fresh)
+
+
+@router.post(
+    "/quick",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CustomerDetail,
+    dependencies=[require_permission("customer.create")],
+    summary="Create a walk-in customer from just a name (no CIN/SIRET required)",
+)
+async def quick_create_customer(
+    body: CustomerQuickCreateRequest,
+    user: AuthUser,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> CustomerDetail:
+    actor_id = await _resolve_actor_user_id(db, user.public_id)
+    created = await svc.create_quick_customer(
+        db,
+        garage_id=user.garage_id,
+        actor_user_id=actor_id,
+        payload=body,
+        request_id=_request_id(request),
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+    fresh = await repo.get_by_public_id(
+        db, user.garage_id, str(created.public_id), with_contacts=True
     )
     assert fresh is not None
     return _to_detail(fresh)

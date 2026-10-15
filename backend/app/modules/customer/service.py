@@ -44,6 +44,7 @@ from app.modules.customer.schemas import (
     CustomerBalanceEventCreateRequest,
     CustomerContactCreate,
     CustomerCreateRequest,
+    CustomerQuickCreateRequest,
     CustomerUpdateRequest,
     MergeMatchReason,
 )
@@ -51,6 +52,10 @@ from app.modules.customer.schemas import (
 logger = get_logger("customer")
 
 _SIRET_PATTERN = re.compile(r"^\d{14}$")
+
+# Segment stamped on walk-in customers created from just a name, so they can be
+# told apart from fully registered ones (shown as a chip on the customer page).
+WALK_IN_SEGMENT = "passager"
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +234,51 @@ async def create_customer(
         ip_address=ip_address,
     )
     logger.info("create_customer_success", customer_id=new_customer.id, garage_id=garage_id)
+    return new_customer
+
+
+async def create_quick_customer(
+    db: AsyncSession,
+    *,
+    garage_id: int,
+    actor_user_id: Optional[int],
+    payload: CustomerQuickCreateRequest,
+    request_id: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> Customer:
+    """Create a walk-in customer from just a name (no CIN/SIRET, phone or email).
+
+    Skips the duplicate check on purpose: it is anchored on `fiscal_id`, which a
+    walk-in does not have, and two different walk-ins can share a name. Callers
+    are expected to let the user pick an existing customer first.
+    """
+    logger.info("create_quick_customer_start", garage_id=garage_id)
+    new_customer = Customer(
+        garage_id=garage_id,
+        type=CustomerType.individual,
+        full_name=payload.full_name,
+        segment=WALK_IN_SEGMENT,
+        created_by_user_id=actor_user_id,
+        updated_by_user_id=actor_user_id,
+    )
+    db.add(new_customer)
+    await db.flush()  # populate id / public_id
+
+    await audit(
+        db=db,
+        garage_id=garage_id,
+        user_id=actor_user_id,
+        component="customer",
+        action="create",
+        entity_type="customer",
+        entity_id=new_customer.id,
+        new_value=_to_audit_dict(new_customer),
+        request_id=request_id,
+        ip_address=ip_address,
+    )
+    logger.info(
+        "create_quick_customer_success", customer_id=new_customer.id, garage_id=garage_id
+    )
     return new_customer
 
 

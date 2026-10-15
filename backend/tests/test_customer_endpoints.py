@@ -20,7 +20,8 @@ from app.core.database import get_db
 from app.core.redis import get_redis
 from app.main import create_app
 from app.modules.audit.models import AuditLog
-from app.modules.auth.models import Permission, Role, RolePermission
+from app.modules.auth.models import AppUser, Permission, Role, RolePermission, UserRole
+from app.modules.auth.service import hash_password
 
 CUSTOMER_PERMISSIONS = (
     "customer.read",
@@ -179,6 +180,64 @@ class TestCreateEndpoint:
         data = resp.json()
         assert len(data["contacts"]) == 2
 
+    async def test_individual_with_only_name_and_cin_returns_201(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={"type": "individual", "full_name": "Alice", "fiscal_id": "AB123456"},
+        )
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["fiscal_id"] == "AB123456"
+        assert data["phone_e164"] is None
+        assert data["email"] is None
+        assert data["address"] is None
+        assert data["credit_limit_minor"] == 0
+
+    async def test_company_with_only_contact_company_and_siret_returns_201(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={
+                "type": "company",
+                "full_name": "Karim Benali",
+                "company_name": "Garage Atlas SARL",
+                "fiscal_id": "12345678901234",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["company_name"] == "Garage Atlas SARL"
+        assert data["phone_e164"] is None
+
+    async def test_individual_without_cin_rejected(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={"type": "individual", "full_name": "Alice", "phone_e164": "+33611111111"},
+        )
+        assert resp.status_code == 422
+
+    async def test_company_without_siret_rejected(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={"type": "company", "full_name": "Karim", "company_name": "Atlas SARL"},
+        )
+        assert resp.status_code == 422
+
     async def test_invalid_phone_format_rejected(
         self, customer_client: AsyncClient
     ) -> None:
@@ -186,7 +245,10 @@ class TestCreateEndpoint:
         resp = await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "individual", "full_name": "X", "phone_e164": "0612345678"},
+            json={
+                "type": "individual", "full_name": "X",
+                "fiscal_id": "FID-BADPHONE", "phone_e164": "0612345678",
+            },
         )
         assert resp.status_code == 422
 
@@ -197,7 +259,7 @@ class TestCreateEndpoint:
         resp = await customer_client.post(
             "/api/v1/customers",
             headers=_auth(token),
-            json={"type": "company", "full_name": "X"},
+            json={"type": "company", "full_name": "X", "fiscal_id": "12345678901234"},
         )
         assert resp.status_code == 422
 
@@ -226,6 +288,203 @@ class TestCreateEndpoint:
         assert body["code"] == "duplicate_customer"
         assert body["match_reason"] == "phone_and_fiscal_id"
         assert body["existing"]["full_name"] == "Original"
+
+
+# ---------------------------------------------------------------------------
+# Quick create (walk-in customer from just a name)
+# ---------------------------------------------------------------------------
+
+
+async def _login_as_read_only(client: AsyncClient, db: AsyncSession) -> str:
+    """Log in as a user whose role only holds `customer.read`."""
+    role = Role(code="customer_reader", display_name="Customer reader", is_system=False)
+    db.add(role)
+    await db.flush()
+    read_perm = (await db.execute(
+        select(Permission).where(Permission.code == "customer.read")
+    )).scalar_one()
+    db.add(RolePermission(role_id=role.id, permission_id=read_perm.id))
+    user = AppUser(
+        garage_id=1,
+        email="reader@test.com",
+        full_name="Reader",
+        password_hash=hash_password("Test1234!"),
+    )
+    db.add(user)
+    await db.flush()
+    db.add(UserRole(user_id=user.id, role_id=role.id))
+    await db.commit()
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "reader@test.com", "password": "Test1234!"},
+        headers={"X-Garage-ID": "1"},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["access_token"]
+
+
+@pytest.mark.asyncio
+class TestQuickCreateEndpoint:
+    async def test_name_only_returns_201_with_a_usable_customer(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers/quick",
+            headers=_auth(token),
+            json={"full_name": "Mohamed"},
+        )
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["full_name"] == "Mohamed"
+        assert data["type"] == "individual"
+        assert data["segment"] == "passager"
+        assert data["status"] == "active"
+        assert data["fiscal_id"] is None
+        assert data["phone_e164"] is None
+        assert data["email"] is None
+        assert data["company_name"] is None
+        assert data["credit_limit_minor"] == 0
+        assert data["version"] == 1
+        # The facture / devis popups use int_id as the document's customer_id.
+        assert isinstance(data["int_id"], int)
+
+    async def test_new_customer_shows_up_in_the_picker_search(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        created = (await customer_client.post(
+            "/api/v1/customers/quick",
+            headers=_auth(token),
+            json={"full_name": "Mohamed Benali"},
+        )).json()
+
+        # Same query the client picker runs while typing.
+        resp = await customer_client.get(
+            "/api/v1/customers",
+            headers=_auth(token),
+            params={"q": "Mohamed", "status": "active", "page_size": 20},
+        )
+        assert resp.status_code == 200
+        assert created["int_id"] in [c["int_id"] for c in resp.json()["items"]]
+
+    async def test_name_is_trimmed(self, customer_client: AsyncClient) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers/quick",
+            headers=_auth(token),
+            json={"full_name": "  Mohamed  "},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["full_name"] == "Mohamed"
+
+    @pytest.mark.parametrize("body", [{}, {"full_name": ""}, {"full_name": "   "}])
+    async def test_missing_or_blank_name_rejected(
+        self, customer_client: AsyncClient, body: dict
+    ) -> None:
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers/quick", headers=_auth(token), json=body
+        )
+        assert resp.status_code == 422
+
+    async def test_requires_auth(self, customer_client: AsyncClient) -> None:
+        resp = await customer_client.post(
+            "/api/v1/customers/quick", json={"full_name": "Mohamed"}
+        )
+        assert resp.status_code == 401
+
+    async def test_requires_customer_create_permission(
+        self, customer_client: AsyncClient, customer_seeded_db: AsyncSession
+    ) -> None:
+        token = await _login_as_read_only(customer_client, customer_seeded_db)
+
+        # The token is valid (reading works) but creating is forbidden.
+        listing = await customer_client.get("/api/v1/customers", headers=_auth(token))
+        assert listing.status_code == 200
+        resp = await customer_client.post(
+            "/api/v1/customers/quick",
+            headers=_auth(token),
+            json={"full_name": "Mohamed"},
+        )
+        assert resp.status_code == 403
+
+    async def test_walk_in_can_be_completed_later_without_a_cin(
+        self, customer_client: AsyncClient
+    ) -> None:
+        """The edit form sends the whole record, with the CIN as null for a walk-in."""
+        token = await _login(customer_client)
+        created = (await customer_client.post(
+            "/api/v1/customers/quick",
+            headers=_auth(token),
+            json={"full_name": "Mohamed"},
+        )).json()
+
+        resp = await customer_client.patch(
+            f"/api/v1/customers/{created['id']}",
+            headers=_auth(token),
+            json={
+                "version": created["version"],
+                "full_name": "Mohamed",
+                "company_name": None,
+                "fiscal_id": None,
+                "email": None,
+                "phone_e164": "+33611111111",
+                "address": None,
+                "segment": "passager",
+                "status": "active",
+                "notes": None,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["phone_e164"] == "+33611111111"
+        assert data["fiscal_id"] is None
+        assert data["segment"] == "passager"
+        assert data["version"] == 2
+
+    async def test_names_never_identify_a_client_but_the_cin_does(
+        self, customer_client: AsyncClient
+    ) -> None:
+        """Two walk-ins may share a name; once one gets a CIN, no one else can have it."""
+        token = await _login(customer_client)
+
+        async def new_walk_in() -> dict:
+            resp = await customer_client.post(
+                "/api/v1/customers/quick",
+                headers=_auth(token),
+                json={"full_name": "Mohamed"},
+            )
+            assert resp.status_code == 201, resp.text
+            return resp.json()
+
+        first, second = await new_walk_in(), await new_walk_in()
+        assert first["id"] != second["id"]  # same name, still two clients
+
+        async def set_cin(customer: dict, cin: str):
+            return await customer_client.patch(
+                f"/api/v1/customers/{customer['id']}",
+                headers=_auth(token),
+                json={"version": customer["version"], "fiscal_id": cin},
+            )
+
+        assert (await set_cin(first, "AB123456")).status_code == 200
+        clash = await set_cin(second, "AB123456")
+        assert clash.status_code == 409
+        assert clash.json()["detail"]["code"] == "fiscal_id_taken"
+
+    async def test_regular_create_still_demands_a_cin(
+        self, customer_client: AsyncClient
+    ) -> None:
+        """The quick path must not have loosened POST /customers."""
+        token = await _login(customer_client)
+        resp = await customer_client.post(
+            "/api/v1/customers",
+            headers=_auth(token),
+            json={"type": "individual", "full_name": "Mohamed"},
+        )
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +519,22 @@ class TestUpdateEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["full_name"] == "Updated"
+        assert resp.json()["version"] == 2
+
+    async def test_update_can_clear_phone(
+        self, customer_client: AsyncClient
+    ) -> None:
+        token = await _login(customer_client)
+        created = await self._create(customer_client, token)
+        assert created["phone_e164"] == "+33611111111"
+
+        resp = await customer_client.patch(
+            f"/api/v1/customers/{created['id']}",
+            headers=_auth(token),
+            json={"version": 1, "phone_e164": None},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["phone_e164"] is None
         assert resp.json()["version"] == 2
 
     async def test_stale_version_returns_409(

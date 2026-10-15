@@ -63,12 +63,17 @@ class CustomerContactSummary(BaseModel):
 
 
 class CustomerCreateRequest(BaseModel):
+    """Mandatory: `type`, `full_name` (contact name) and `fiscal_id` (CIN for an
+    individual, 14-digit SIRET for a company); a company also needs
+    `company_name`. Every other field is optional.
+    """
+
     type: CustomerType
     full_name: str = Field(min_length=1, max_length=255)
     company_name: Optional[str] = Field(None, min_length=1, max_length=255)
     fiscal_id: str = Field(min_length=1, max_length=50)
     email: Optional[EmailStr] = None
-    phone_e164: str = Field(pattern=_E164_PATTERN, max_length=20)
+    phone_e164: Optional[str] = Field(None, pattern=_E164_PATTERN, max_length=20)
     address: Optional[AddressSchema] = None
     segment: Optional[str] = Field(None, max_length=50)
     credit_limit_minor: int = Field(0, ge=0)
@@ -97,6 +102,18 @@ class CustomerCreateRequest(BaseModel):
         if self.credit_limit_minor > 0 and not self.credit_currency:
             raise ValueError("credit_currency is required when credit_limit_minor > 0")
         return self
+
+
+class CustomerQuickCreateRequest(BaseModel):
+    """Walk-in customer ("client passager") created on the spot from a facture
+    or devis popup: the name is the only input. Unlike `CustomerCreateRequest`
+    there is no CIN/SIRET requirement; the record is a bare individual that can
+    be completed later from the customer page.
+    """
+
+    model_config = {"str_strip_whitespace": True}
+
+    full_name: str = Field(min_length=1, max_length=255)
 
 
 class CustomerUpdateRequest(BaseModel):
